@@ -1,0 +1,68 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-radreise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-on-rpi}
+      POSTGRES_DB: ${POSTGRES_DB:-radreiseplaner}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radreise} -d ${POSTGRES_DB:-radreiseplaner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: radtour-planer-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:-change-me-on-rpi}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: radtour-planer-app:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.rpi
+    restart: unless-stopped
+    command: npm run worker
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:-change-me-on-rpi}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:

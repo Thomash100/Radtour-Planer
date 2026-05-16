@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 48 33% 98%;
+  --foreground: 222 47% 11%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --primary: 163 88% 23%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 205 74% 29%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 210 30% 94%;
+  --muted-foreground: 215 16% 40%;
+  --accent: 38 89% 54%;
+  --accent-foreground: 222 47% 11%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 163 88% 23%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(235, 249, 244, 0.84)),
+    radial-gradient(circle at top left, rgba(14, 116, 144, 0.16), transparent 32rem),
+    hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.maplibregl-ctrl-attrib {
+  font-size: 11px;
+}
+
+.map-marker {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid white;
+  border-radius: 999px;
+  color: white;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+}
+
+.route-stage-line {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
