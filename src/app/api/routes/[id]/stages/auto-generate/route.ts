@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: "Route not found" }, { status: 404 });
     }
 
-    const geometry = route.geometryGeoJson as LineStringGeoJson;
+    const geometry = route.geometryGeoJson as unknown as LineStringGeoJson;
     const splitStages = splitRouteIntoStages(geometry, targetKm);
     const generatedStages = splitStages.map((stage, index) => ({
       ...stage,

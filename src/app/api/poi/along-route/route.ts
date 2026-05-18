@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Route not found" }, { status: 404 });
     }
 
-    const geometry = route.geometryGeoJson as LineStringGeoJson;
+    const geometry = route.geometryGeoJson as unknown as LineStringGeoJson;
     const pois = await prisma.poi.findMany({
       where: {
         category: categories ? { in: categories } : undefined,

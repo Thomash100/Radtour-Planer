@@ -30,7 +30,13 @@ export default async function RouteDetailPage({ params }: { params: { id: string
           <h1 className="mt-3 text-3xl font-bold">{route.name}</h1>
           <p className="mt-2 text-muted-foreground">{route.description ?? "Arbeitsroute aus dem Planer."}</p>
         </div>
-        <RouteMap route={route.geometryGeoJson as LineStringGeoJson} stages={route.stages.map((stage) => ({ ...stage, geometryGeoJson: stage.geometryGeoJson as LineStringGeoJson }))} />
+        <RouteMap
+          route={route.geometryGeoJson as unknown as LineStringGeoJson}
+          stages={route.stages.map((stage) => ({
+            ...stage,
+            geometryGeoJson: stage.geometryGeoJson as unknown as LineStringGeoJson
+          }))}
+        />
       </section>
       <aside className="space-y-4">
         <Card>
