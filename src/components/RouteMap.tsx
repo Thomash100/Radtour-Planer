@@ -2,9 +2,10 @@
 
 import { Bed, Bike, Briefcase, Coffee, Landmark, ShoppingBasket, Utensils, Wrench } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { LineStringGeoJson } from "@/lib/geo";
+import { cn } from "@/lib/utils";
 
 export type MapPoi = {
   id: string;
@@ -73,6 +74,7 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -88,7 +90,17 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
             type: "raster",
             tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
             tileSize: 256,
-            attribution: "© OpenStreetMap contributors"
+            attribution: "&copy; OpenStreetMap contributors"
+          },
+          cyclosm: {
+            type: "raster",
+            tiles: [
+              "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+              "https://b.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png",
+              "https://c.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
+            ],
+            tileSize: 256,
+            attribution: "&copy; OpenStreetMap contributors, CyclOSM"
           }
         },
         layers: [
@@ -96,6 +108,14 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
             id: "osm",
             type: "raster",
             source: "osm"
+          },
+          {
+            id: "cyclosm",
+            type: "raster",
+            source: "cyclosm",
+            layout: {
+              visibility: "none"
+            }
           }
         ]
       },
@@ -147,6 +167,27 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
       mapRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const updateBaseLayer = () => {
+      if (!map.getLayer("osm") || !map.getLayer("cyclosm")) {
+        return;
+      }
+      map.setLayoutProperty("osm", "visibility", baseLayer === "standard" ? "visible" : "none");
+      map.setLayoutProperty("cyclosm", "visibility", baseLayer === "cycle" ? "visible" : "none");
+    };
+
+    if (map.loaded()) {
+      updateBaseLayer();
+    } else {
+      map.once("load", updateBaseLayer);
+    }
+  }, [baseLayer]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -203,6 +244,25 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
   return (
     <div className="relative h-full min-h-[520px] overflow-hidden rounded-lg border bg-slate-100">
       <div ref={containerRef} className="absolute inset-0" />
+      <div className="absolute left-4 top-4 z-10 inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
+        {[
+          { value: "standard", label: "Standardkarte" },
+          { value: "cycle", label: "Radkarte" }
+        ].map((option) => (
+          <button
+            key={option.value}
+            aria-pressed={baseLayer === option.value}
+            className={cn(
+              "rounded px-3 py-2 text-sm font-medium transition",
+              baseLayer === option.value ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+            )}
+            type="button"
+            onClick={() => setBaseLayer(option.value as "standard" | "cycle")}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
       {stages.length > 0 && (
         <div className="absolute bottom-4 left-4 right-4 flex max-w-2xl gap-2 overflow-x-auto rounded-md border bg-white/92 p-2 shadow-panel backdrop-blur">
           {stages.map((stage) => (
