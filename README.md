@@ -48,6 +48,8 @@ docker compose -f docker-compose.rpi.yml up --build -d
 
 Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
 
+Hinweis: Auf Raspberry Pi/ARM64 verwendet die Compose-Datei `imresamu/postgis:16-3.4-alpine3.21`, weil das offizielle `postgis/postgis`-Image nur fuer `amd64` gebaut ist.
+
 GitHub-Zielrepository:
 
 ```text

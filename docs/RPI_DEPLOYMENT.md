@@ -104,5 +104,6 @@ docker compose -f docker-compose.rpi.yml down -v
 ## Hinweise
 
 - Die RPI-Datei nutzt `Dockerfile.rpi` und startet Next.js im Produktionsmodus.
+- Fuer PostGIS nutzt die RPI-Datei ein ARM64-kompatibles Image: `imresamu/postgis:16-3.4-alpine3.21`.
 - Beim App-Start werden Prisma-Client, Schema-Push und Seed-Daten ausgefuehrt.
 - Das ist fuer eine Testversion bequem. Fuer Produktion sollten Migrationen, Secrets, Backups, Auth und HTTPS sauber getrennt werden.
