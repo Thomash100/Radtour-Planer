@@ -6,15 +6,27 @@ import { useEffect, useRef } from "react";
 
 import type { LineStringGeoJson } from "@/lib/geo";
 
-type Poi = {
+export type MapPoi = {
   id: string;
   name: string;
   category: string;
   lat: number;
   lon: number;
+  address?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  tagsJson: Record<string, unknown>;
   distanceToRouteKm?: number;
+  partnerId?: string | null;
   partner?: {
+    id?: string;
+    companyName?: string;
+    category?: string;
+    status?: string;
+    subscriptionPlan?: string;
     isFeatured?: boolean;
+    email?: string;
+    website?: string | null;
   } | null;
 };
 
@@ -26,10 +38,10 @@ type Stage = {
 
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
-  pois?: Poi[];
+  pois?: MapPoi[];
   stages?: Stage[];
   selectedPoiId?: string | null;
-  onSelectPoi?: (poi: Poi) => void;
+  onSelectPoi?: (poi: MapPoi) => void;
 };
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
