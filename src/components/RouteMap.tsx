@@ -19,13 +19,13 @@ export type MapPoi = {
   distanceToRouteKm?: number;
   partnerId?: string | null;
   partner?: {
-    id?: string;
-    companyName?: string;
-    category?: string;
-    status?: string;
-    subscriptionPlan?: string;
-    isFeatured?: boolean;
-    email?: string;
+    id: string;
+    companyName: string;
+    category: string;
+    status: string;
+    subscriptionPlan: string;
+    isFeatured: boolean;
+    email: string;
     website?: string | null;
   } | null;
 };
