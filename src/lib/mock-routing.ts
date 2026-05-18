@@ -40,8 +40,18 @@ const knownPlaces: Record<string, Position> = {
   riesa: [13.2877, 51.3077],
   torgau: [12.9961, 51.5602],
   wittenberg: [12.6499, 51.8661],
+  lutherstadtwittenberg: [12.6499, 51.8661],
   dessau: [12.2421, 51.834],
+  dessaurosslau: [12.2421, 51.834],
   magdeburg: [11.6276, 52.1205],
+  tangermunde: [11.9768, 52.5447],
+  tangermuende: [11.9768, 52.5447],
+  havelberg: [12.0753, 52.8306],
+  wittenberge: [11.7505, 53.0059],
+  hitzacker: [11.0443, 53.1486],
+  hitzackerelbe: [11.0443, 53.1486],
+  lauenburg: [10.5566, 53.3716],
+  lauenburgelbe: [10.5566, 53.3716],
   haldensleben: [11.4095, 52.2894],
   wolfsburg: [10.7865, 52.4227],
   gifhorn: [10.545, 52.486],
@@ -78,8 +88,32 @@ const knownPlaces: Record<string, Position> = {
 };
 
 const demoCorridors: Record<string, string[]> = {
-  dresdenhamburg: ["Meissen", "Riesa", "Torgau", "Wittenberg", "Magdeburg", "Haldensleben", "Uelzen", "Lueneburg"],
-  hamburgdresden: ["Lueneburg", "Uelzen", "Haldensleben", "Magdeburg", "Wittenberg", "Torgau", "Riesa", "Meissen"]
+  dresdenhamburg: [
+    "Meissen",
+    "Riesa",
+    "Torgau",
+    "Lutherstadt Wittenberg",
+    "Dessau-Rosslau",
+    "Magdeburg",
+    "Tangermuende",
+    "Havelberg",
+    "Wittenberge",
+    "Hitzacker",
+    "Lauenburg/Elbe"
+  ],
+  hamburgdresden: [
+    "Lauenburg/Elbe",
+    "Hitzacker",
+    "Wittenberge",
+    "Havelberg",
+    "Tangermuende",
+    "Magdeburg",
+    "Dessau-Rosslau",
+    "Lutherstadt Wittenberg",
+    "Torgau",
+    "Riesa",
+    "Meissen"
+  ]
 };
 
 const profileSettings: Record<RoutingProfile, { speed: number; curve: number; elevation: number }> = {
