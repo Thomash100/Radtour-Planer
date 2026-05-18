@@ -146,7 +146,7 @@ export function PlannerClient({
   initialStart?: string;
   initialEnd?: string;
 }) {
-  const [waypoints, setWaypoints] = useState<string[]>(["Rosenheim"]);
+  const [waypoints, setWaypoints] = useState<string[]>([]);
   const [draggedWaypointIndex, setDraggedWaypointIndex] = useState<number | null>(null);
   const [newWaypoint, setNewWaypoint] = useState("");
   const [calculation, setCalculation] = useState<RouteCalculation | null>(null);

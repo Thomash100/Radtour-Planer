@@ -35,6 +35,19 @@ const knownPlaces: Record<string, Position> = {
   rosenheim: [12.1264, 47.8561],
   traunstein: [12.6421, 47.8685],
   salzburg: [13.0457, 47.8095],
+  dresden: [13.7373, 51.0504],
+  meissen: [13.4775, 51.1616],
+  riesa: [13.2877, 51.3077],
+  torgau: [12.9961, 51.5602],
+  wittenberg: [12.6499, 51.8661],
+  dessau: [12.2421, 51.834],
+  magdeburg: [11.6276, 52.1205],
+  haldensleben: [11.4095, 52.2894],
+  wolfsburg: [10.7865, 52.4227],
+  gifhorn: [10.545, 52.486],
+  uelzen: [10.5589, 52.9657],
+  luneburg: [10.4073, 53.2464],
+  lueneburg: [10.4073, 53.2464],
   passau: [13.4319, 48.5667],
   regensburg: [12.1016, 49.0134],
   nurnberg: [11.0767, 49.4521],
@@ -44,11 +57,29 @@ const knownPlaces: Record<string, Position> = {
   konstanz: [9.1751, 47.6603],
   hamburg: [9.9937, 53.5511],
   berlin: [13.405, 52.52],
+  potsdam: [13.0645, 52.3906],
+  leipzig: [12.3731, 51.3397],
+  halle: [11.9697, 51.4828],
+  erfurt: [11.0299, 50.9848],
+  weimar: [11.329, 50.9795],
+  kassel: [9.4797, 51.3127],
+  gottingen: [9.9352, 51.5413],
+  goettingen: [9.9352, 51.5413],
+  hannover: [9.732, 52.3759],
+  bremen: [8.8017, 53.0793],
+  schwerin: [11.4075, 53.6355],
+  lubeck: [10.6866, 53.8655],
+  luebeck: [10.6866, 53.8655],
   koln: [6.9603, 50.9375],
   koeln: [6.9603, 50.9375],
   frankfurt: [8.6821, 50.1109],
   freiburg: [7.8421, 47.999],
   innsbruck: [11.4041, 47.2692]
+};
+
+const demoCorridors: Record<string, string[]> = {
+  dresdenhamburg: ["Meissen", "Riesa", "Torgau", "Wittenberg", "Magdeburg", "Haldensleben", "Uelzen", "Lueneburg"],
+  hamburgdresden: ["Lueneburg", "Uelzen", "Haldensleben", "Magdeburg", "Wittenberg", "Torgau", "Riesa", "Meissen"]
 };
 
 const profileSettings: Record<RoutingProfile, { speed: number; curve: number; elevation: number }> = {
@@ -65,7 +96,7 @@ function normalizePlace(place: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ß/g, "ss")
+    .replace(/\u00df/g, "ss")
     .replace(/[^a-z0-9]+/g, "");
 }
 
@@ -81,6 +112,15 @@ export function geocodeMock(place: string): Position {
   return knownPlaces[normalizePlace(place)] ?? fallbackCoordinate(place);
 }
 
+function enrichDemoWaypoints(start: string, end: string, waypoints: string[]) {
+  if (waypoints.length > 0) {
+    return waypoints;
+  }
+
+  const corridorKey = `${normalizePlace(start)}${normalizePlace(end)}`;
+  return demoCorridors[corridorKey] ?? [];
+}
+
 function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmentIndex: number) {
   const settings = profileSettings[profile];
   const distance = haversineKm(a, b);
@@ -90,10 +130,12 @@ function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmen
   const dy = b[1] - a[1];
   const length = Math.sqrt(dx * dx + dy * dy) || 1;
   const normal: Position = [-dy / length, dx / length];
+  const longDistanceCurve = Math.min(0.075, distance / 5500);
+  const curve = settings.curve + longDistanceCurve;
 
   for (let index = 0; index <= steps; index += 1) {
     const ratio = index / steps;
-    const wave = Math.sin(ratio * Math.PI) * settings.curve * (segmentIndex % 2 === 0 ? 1 : -1);
+    const wave = Math.sin(ratio * Math.PI) * curve * (segmentIndex % 2 === 0 ? 1 : -1);
     points.push([
       Number((a[0] + dx * ratio + normal[0] * wave).toFixed(6)),
       Number((a[1] + dy * ratio + normal[1] * wave).toFixed(6))
@@ -105,7 +147,9 @@ function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmen
 
 export function calculateMockRoute(input: RouteCalculationInput): RouteCalculation {
   const profile = input.profile ?? "balanced";
-  const orderedNames = [input.start, ...(input.waypoints ?? []).filter(Boolean), input.end];
+  const inputWaypoints = (input.waypoints ?? []).filter(Boolean);
+  const demoWaypoints = enrichDemoWaypoints(input.start, input.end, inputWaypoints);
+  const orderedNames = [input.start, ...demoWaypoints, input.end];
   const controlPoints = orderedNames.map(geocodeMock);
   const coordinates: Position[] = [];
 
