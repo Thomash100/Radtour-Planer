@@ -29,7 +29,13 @@ POSTGRES_PASSWORD=dein-sicheres-testpasswort
 NEXT_PUBLIC_APP_URL=http://<rpi-ip>:3000
 ```
 
-Die IP bekommst du mit:
+Wenn du nur direkt auf dem Raspberry Pi testest, geht auch:
+
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Die IP fuer den Aufruf aus dem Heimnetz bekommst du mit:
 
 ```bash
 hostname -I
@@ -73,7 +79,9 @@ curl http://localhost:3000/api/health
 App im Browser:
 
 ```text
+http://localhost:3000
 http://<rpi-ip>:3000
+http://raspberrypi.local:3000
 ```
 
 ## 5. Wichtige Testseiten
@@ -92,6 +100,12 @@ Empfohlen:
 
 ```bash
 ./scripts/rpi-update.sh
+```
+
+Optional kann ein Branch angegeben werden:
+
+```bash
+./scripts/rpi-update.sh main
 ```
 
 Manuelles Update:
