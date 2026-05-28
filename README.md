@@ -37,13 +37,51 @@ npm run dev -- --hostname 0.0.0.0
 
 Die Seed-Daten enthalten eine Demo-Route `Muenchen nach Salzburg`, POI, zwei Partnerbetriebe, einen Lead und eine Anzeige.
 
-## Raspberry Pi Testversion
+## Raspberry Pi Testversion im Container
 
-Fuer den Raspberry Pi gibt es eine produktionsnaehere Compose-Datei:
+Fuer den Raspberry Pi gibt es eine produktionsnaehere Compose-Datei mit PostgreSQL/PostGIS, Redis, App und Worker im Container.
 
 ```bash
+sudo apt update
+sudo apt install -y git docker.io docker-compose-plugin
+sudo usermod -aG docker $USER
+sudo reboot
+```
+
+Nach dem Neustart:
+
+```bash
+git clone https://github.com/Thomash100/Radtour-Planer.git
+cd Radtour-Planer
 cp .env.rpi.example .env
-docker compose -f docker-compose.rpi.yml up --build -d
+chmod +x scripts/rpi-install.sh scripts/rpi-update.sh
+./scripts/rpi-install.sh
+```
+
+Aufruf:
+
+- Direkt auf dem Raspberry Pi: http://localhost:3000
+- Aus dem Heimnetz: `http://<rpi-ip>:3000`
+- Wenn mDNS aktiv ist: http://raspberrypi.local:3000
+
+Update spaeter:
+
+```bash
+cd Radtour-Planer
+./scripts/rpi-update.sh
+```
+
+Manuelles Update:
+
+```bash
+git pull --ff-only
+docker compose -f docker-compose.rpi.yml up --build -d --remove-orphans
+```
+
+Healthcheck:
+
+```bash
+curl http://localhost:3000/api/health
 ```
 
 Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
@@ -68,6 +106,11 @@ npx prisma db push
 npx prisma db seed
 npm run dev
 ```
+
+Danach lokal oeffnen:
+
+- http://localhost:3000
+- im LAN: `http://<rechner-ip>:3000`
 
 Falls PostgreSQL/Redis lokal laufen, setze in `.env.local` zum Beispiel:
 

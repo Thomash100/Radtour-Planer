@@ -4,7 +4,7 @@
   "private": true,
   "description": "BikeTripHub MVP for planning multi-day bike trips with stages, POI, partners and leads.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
