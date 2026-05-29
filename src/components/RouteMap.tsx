@@ -1,6 +1,6 @@
 "use client";
 
-import { Bed, Bike, Briefcase, Coffee, Landmark, ShoppingBasket, Utensils, Wrench } from "lucide-react";
+import { AlertTriangle, Bed, Bike, Briefcase, Coffee, Landmark, ShoppingBasket, Utensils, Wrench } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 
@@ -37,10 +37,18 @@ type Stage = {
   geometryGeoJson: LineStringGeoJson;
 };
 
+export type MapWaypoint = {
+  order: number;
+  name: string;
+  lat: number;
+  lon: number;
+};
+
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
   pois?: MapPoi[];
   stages?: Stage[];
+  waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poi: MapPoi) => void;
 };
@@ -207,19 +215,29 @@ function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
   };
 }
 
-function createEndpointMarker(map: maplibregl.Map, coordinate: [number, number], label: string, title: string) {
+function createRouteMarker(map: maplibregl.Map, coordinate: [number, number], label: string, title: string, markerType: "start" | "end" | "waypoint") {
   const element = document.createElement("div");
-  element.className = label === "Z" ? "route-endpoint-marker is-end" : "route-endpoint-marker";
+  element.className =
+    markerType === "waypoint"
+      ? "route-waypoint-marker"
+      : markerType === "end"
+        ? "route-endpoint-marker is-end"
+        : "route-endpoint-marker";
   element.textContent = label;
   element.title = title;
   return new maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinate).addTo(map);
 }
 
-export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
+function validWaypoint(waypoint: MapWaypoint) {
+  return Number.isFinite(waypoint.lon) && Number.isFinite(waypoint.lat) && Math.abs(waypoint.lon) <= 180 && Math.abs(waypoint.lat) <= 90;
+}
+
+export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const endpointMarkersRef = useRef<Marker[]>([]);
+  const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
 
   useEffect(() => {
@@ -273,7 +291,14 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
     mapRef.current = map;
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
-    map.on("load", () => ensureRouteLayers(map));
+    map.on("load", () => {
+      ensureRouteLayers(map);
+      setMapError("");
+    });
+    const handleMapError = () => {
+      setMapError("Die Karte konnte nicht vollstaendig geladen werden. Route und Marker bleiben sichtbar, sobald die Basiskarte wieder erreichbar ist.");
+    };
+    map.on("error", handleMapError);
 
     const resizeMap = () => map.resize();
     const resizeTimer = window.setTimeout(resizeMap, 0);
@@ -292,6 +317,7 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
       endpointMarkersRef.current = [];
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
+      map.off("error", handleMapError);
       map.remove();
       mapRef.current = null;
     };
@@ -338,10 +364,21 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
 
       const bounds = new maplibregl.LngLatBounds();
       line.coordinates.forEach((coordinate) => bounds.extend(coordinate));
-      endpointMarkersRef.current = [
-        createEndpointMarker(map, line.coordinates[0], "S", "Start"),
-        createEndpointMarker(map, line.coordinates[line.coordinates.length - 1], "Z", "Ziel")
-      ];
+      const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
+      if (sortedWaypoints.length >= 2) {
+        endpointMarkersRef.current = sortedWaypoints.map((waypoint, index) => {
+          const isStart = index === 0;
+          const isEnd = index === sortedWaypoints.length - 1;
+          const markerType = isStart ? "start" : isEnd ? "end" : "waypoint";
+          const label = isStart ? "S" : isEnd ? "Z" : String(index);
+          return createRouteMarker(map, [waypoint.lon, waypoint.lat], label, waypoint.name, markerType);
+        });
+      } else {
+        endpointMarkersRef.current = [
+          createRouteMarker(map, line.coordinates[0], "S", "Start", "start"),
+          createRouteMarker(map, line.coordinates[line.coordinates.length - 1], "Z", "Ziel", "end")
+        ];
+      }
       map.fitBounds(bounds, {
         padding: { top: 88, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
         maxZoom: 12,
@@ -351,7 +388,7 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
     };
 
     return runWhenMapReady(map, update);
-  }, [route, stages.length]);
+  }, [route, stages.length, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -419,6 +456,14 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
           </button>
         ))}
       </div>
+      {mapError && (
+        <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{mapError}</span>
+          </div>
+        </div>
+      )}
       {stages.length > 0 && (
         <div className="absolute bottom-4 left-4 right-4 flex max-w-2xl gap-2 overflow-x-auto rounded-md border bg-white/92 p-2 shadow-panel backdrop-blur">
           {stages.map((stage, index) => (
