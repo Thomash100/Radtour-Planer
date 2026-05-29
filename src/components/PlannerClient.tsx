@@ -46,6 +46,9 @@ type RouteCalculation = {
   geometryGeoJson: LineStringGeoJson;
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
+  pointCount?: number;
+  gpxPointType?: string;
+  elevationSource?: "gpx" | "estimated";
 };
 
 type SavedRoute = RouteCalculation & {
@@ -254,6 +257,10 @@ export function PlannerClient({
   async function planRoute(values: PlannerForm) {
     setIsBusy(true);
     setLeadStatus("");
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
     try {
       setStatus("Route wird berechnet.");
       const calculateResponse = await fetch("/api/routes/calculate", {
@@ -296,6 +303,11 @@ export function PlannerClient({
     if (!file) return;
     setIsBusy(true);
     setLeadStatus("");
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
+    let importedRouteVisible = false;
     try {
       setStatus("GPX-Datei wird importiert.");
       const formData = new FormData();
@@ -310,6 +322,11 @@ export function PlannerClient({
       if (!importResponse.ok) throw new Error(imported.error ?? "GPX-Import fehlgeschlagen.");
 
       setCalculation(imported);
+      importedRouteVisible = true;
+      const pointSummary = imported.pointCount ? ` mit ${imported.pointCount} Punkten` : "";
+      const elevationSummary = imported.elevationSource === "gpx" ? " und GPX-Hoehendaten" : "";
+      setStatus(`GPX-Route${pointSummary}${elevationSummary} wird angezeigt.`);
+
       const saveResponse = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -324,7 +341,8 @@ export function PlannerClient({
       await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
       setStatus("GPX-Route importiert, gespeichert und ausgewertet.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+      setStatus(importedRouteVisible ? `GPX-Route wird angezeigt. Speichern/Auswertung nicht abgeschlossen: ${message}` : message);
     } finally {
       setIsBusy(false);
     }

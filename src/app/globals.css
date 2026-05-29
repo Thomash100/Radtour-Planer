@@ -65,6 +65,24 @@ textarea {
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
 }
 
+.route-endpoint-marker {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 3px solid white;
+  border-radius: 999px;
+  background: #0f172a;
+  color: white;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28);
+}
+
+.route-endpoint-marker.is-end {
+  background: #0f766e;
+}
+
 .route-stage-line {
   stroke-linecap: round;
   stroke-linejoin: round;

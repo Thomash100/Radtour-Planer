@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { apiError, readJson } from "@/lib/api";
-import { createElevationProfile, routeDistanceKm, type LineStringGeoJson, type Position } from "@/lib/geo";
-
-function parseGpx(gpx: string): Position[] {
-  const matches = [...gpx.matchAll(/<trkpt[^>]*lat=["']([^"']+)["'][^>]*lon=["']([^"']+)["'][^>]*>/gi)];
-  return matches
-    .map((match) => [Number(match[2]), Number(match[1])] as Position)
-    .filter(([lon, lat]) => Number.isFinite(lon) && Number.isFinite(lat));
-}
+import { parseGpx } from "@/lib/gpx";
+import { createElevationProfile, routeDistanceKm, type LineStringGeoJson } from "@/lib/geo";
 
 export async function POST(request: Request) {
   try {
@@ -29,9 +23,13 @@ export async function POST(request: Request) {
       name = String(body.name ?? name);
     }
 
-    const coordinates = parseGpx(gpx);
+    const parsedGpx = parseGpx(gpx);
+    const coordinates = parsedGpx.coordinates;
     if (coordinates.length < 2) {
-      return NextResponse.json({ error: "GPX-Datei enthaelt keine gueltige Track-Geometrie." }, { status: 400 });
+      return NextResponse.json(
+        { error: "GPX-Datei enthaelt keine gueltige Track- oder Routen-Geometrie." },
+        { status: 400 }
+      );
     }
 
     const geometryGeoJson: LineStringGeoJson = {
@@ -39,17 +37,24 @@ export async function POST(request: Request) {
       coordinates
     };
     const distanceKm = routeDistanceKm(coordinates);
+    const elevationProfile = parsedGpx.hasElevation ? parsedGpx.elevationProfile : createElevationProfile(coordinates);
+    const elevationUp = parsedGpx.hasElevation ? parsedGpx.elevationUp : Math.round(distanceKm * 4.8);
+    const elevationDown = parsedGpx.hasElevation ? parsedGpx.elevationDown : Math.round(distanceKm * 4.1);
+    const routeName = name === "Importierte GPX-Route" && parsedGpx.name ? parsedGpx.name : name;
 
     return NextResponse.json({
-      name,
+      name: routeName,
       startName: "GPX Start",
       endName: "GPX Ziel",
       distanceKm: Number(distanceKm.toFixed(1)),
-      elevationUp: Math.round(distanceKm * 4.8),
-      elevationDown: Math.round(distanceKm * 4.1),
+      elevationUp,
+      elevationDown,
       durationHours: Number((distanceKm / 17).toFixed(2)),
       geometryGeoJson,
-      elevationProfile: createElevationProfile(coordinates),
+      elevationProfile,
+      pointCount: coordinates.length,
+      gpxPointType: parsedGpx.pointType,
+      elevationSource: parsedGpx.hasElevation ? "gpx" : "estimated",
       waypoints: [
         { order: 0, name: "GPX Start", lat: coordinates[0][1], lon: coordinates[0][0] },
         {
