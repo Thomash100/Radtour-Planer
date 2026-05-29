@@ -14,6 +14,16 @@ Die Anwendung soll perspektivisch folgende Kernfunktionen stabil abdecken:
 - Lead-Anfragen an Partnerbetriebe
 - spaeter echte Routing-, Geocoding- und OSM-Daten
 
+## Arbeitsregel: GitHub zuerst
+
+Alle Aenderungen und Aktualisierungen am Projekt sollen grundsaetzlich auf GitHub nachvollziehbar abgelegt werden.
+
+- Keine Projektanpassung nur lokal oder nur im Chat belassen, wenn sie den Code, die Dokumentation oder Aufgabenplanung betrifft.
+- Aenderungen erfolgen bevorzugt ueber eigenen Branch und Pull Request.
+- Kleine Sofortkorrekturen koennen direkt committed werden, wenn dies ausdruecklich gewuenscht ist.
+- Neue Aufgaben fuer Codex werden als GitHub-Issue formuliert.
+- Nach Abschluss einer Aufgabe wird eine kurze Projektzusammenfassung ergaenzt.
+
 ## Phase 1: Basis stabilisieren
 
 Ziel: Die Anwendung muss zuverlaessig starten, aktualisierbar sein und nach Neustart sauber laufen.
