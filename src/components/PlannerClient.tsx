@@ -46,6 +46,9 @@ type RouteCalculation = {
   geometryGeoJson: LineStringGeoJson;
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
+  pointCount?: number;
+  gpxPointType?: string;
+  elevationSource?: "gpx" | "estimated";
 };
 
 type SavedRoute = RouteCalculation & {
@@ -131,6 +134,48 @@ const profileLabels: Record<string, string> = {
   sportive: "sportlich"
 };
 
+const demoRoutes = [
+  {
+    label: "Muenchen - Salzburg",
+    start: "Muenchen",
+    end: "Salzburg",
+    waypoints: ["Rosenheim", "Traunstein"],
+    profile: "balanced" as const,
+    targetKm: 55,
+    corridorKm: 5
+  },
+  {
+    label: "Dresden - Hamburg",
+    start: "Dresden",
+    end: "Hamburg",
+    waypoints: [
+      "Meissen",
+      "Riesa",
+      "Torgau",
+      "Lutherstadt Wittenberg",
+      "Dessau-Rosslau",
+      "Magdeburg",
+      "Tangermuende",
+      "Havelberg",
+      "Wittenberge",
+      "Hitzacker",
+      "Lauenburg/Elbe"
+    ],
+    profile: "cycleways" as const,
+    targetKm: 95,
+    corridorKm: 8
+  },
+  {
+    label: "Rosenheim - Traunstein",
+    start: "Rosenheim",
+    end: "Traunstein",
+    waypoints: ["Bad Endorf", "Prien am Chiemsee", "Bernau am Chiemsee"],
+    profile: "touristic" as const,
+    targetKm: 32,
+    corridorKm: 6
+  }
+];
+
 function leadTypeForPoi(category: string) {
   if (category === "ACCOMMODATION") return "ACCOMMODATION";
   if (category === "LUGGAGE_TRANSFER") return "LUGGAGE_TRANSFER";
@@ -202,6 +247,16 @@ export function PlannerClient({
     () => (selectedCategories.length > 0 ? selectedCategories.join(",") : ""),
     [selectedCategories]
   );
+  const poiCountsByCategory = useMemo(
+    () =>
+      categoryOptions
+        .map((category) => ({
+          ...category,
+          count: pois.filter((poi) => poi.category === category.value).length
+        }))
+        .filter((category) => category.count > 0),
+    [pois]
+  );
 
   const loadPois = useCallback(
     async (routeId = savedRoute?.id, corridorKm = plannerForm.getValues("corridorKm")) => {
@@ -226,9 +281,14 @@ export function PlannerClient({
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "POI konnten nicht geladen werden.");
 
-      setPois(payload.pois);
-      setSelectedPoi(payload.pois[0] ?? null);
-      setStatus(`${payload.pois.length} POI im ${corridorKm} km Routenkorridor gefunden.`);
+      const nextPois: Poi[] = payload.pois;
+      setPois(nextPois);
+      setSelectedPoi(nextPois[0] ?? null);
+      setStatus(
+        nextPois.length > 0
+          ? `${nextPois.length} POI im ${corridorKm} km Routenkorridor gefunden.`
+          : `Keine POIs im ${corridorKm} km Routenkorridor gefunden. Filter erweitern oder Korridor vergroessern.`
+      );
     },
     [bikeGarage, ebikeFriendly, luggageAccepted, partnerOnly, plannerForm, savedRoute?.id, selectedCategoryQuery]
   );
@@ -254,6 +314,10 @@ export function PlannerClient({
   async function planRoute(values: PlannerForm) {
     setIsBusy(true);
     setLeadStatus("");
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
     try {
       setStatus("Route wird berechnet.");
       const calculateResponse = await fetch("/api/routes/calculate", {
@@ -296,6 +360,11 @@ export function PlannerClient({
     if (!file) return;
     setIsBusy(true);
     setLeadStatus("");
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
+    let importedRouteVisible = false;
     try {
       setStatus("GPX-Datei wird importiert.");
       const formData = new FormData();
@@ -310,6 +379,11 @@ export function PlannerClient({
       if (!importResponse.ok) throw new Error(imported.error ?? "GPX-Import fehlgeschlagen.");
 
       setCalculation(imported);
+      importedRouteVisible = true;
+      const pointSummary = imported.pointCount ? ` mit ${imported.pointCount} Punkten` : "";
+      const elevationSummary = imported.elevationSource === "gpx" ? " und GPX-Hoehendaten" : "";
+      setStatus(`GPX-Route${pointSummary}${elevationSummary} wird angezeigt.`);
+
       const saveResponse = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -324,7 +398,8 @@ export function PlannerClient({
       await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
       setStatus("GPX-Route importiert, gespeichert und ausgewertet.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+      setStatus(importedRouteVisible ? `GPX-Route wird angezeigt. Speichern/Auswertung nicht abgeschlossen: ${message}` : message);
     } finally {
       setIsBusy(false);
     }
@@ -356,6 +431,21 @@ export function PlannerClient({
     setSelectedCategories((current) =>
       current.includes(category) ? current.filter((item) => item !== category) : [...current, category]
     );
+  }
+
+  function loadDemoRoute(demoRoute: (typeof demoRoutes)[number]) {
+    plannerForm.setValue("start", demoRoute.start);
+    plannerForm.setValue("end", demoRoute.end);
+    plannerForm.setValue("profile", demoRoute.profile);
+    plannerForm.setValue("targetKm", demoRoute.targetKm);
+    plannerForm.setValue("corridorKm", demoRoute.corridorKm);
+    setWaypoints(demoRoute.waypoints);
+    setSavedRoute(null);
+    setCalculation(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
+    setStatus(`${demoRoute.label} geladen. Mit Route planen berechnest du die Demo.`);
   }
 
   function exportGpx() {
@@ -499,6 +589,23 @@ export function PlannerClient({
                   {isBusy ? "Plant..." : "Route planen"}
                 </Button>
                 <div className="grid gap-2">
+                  <Label>Demo-Route laden</Label>
+                  <div className="grid gap-2">
+                    {demoRoutes.map((demoRoute) => (
+                      <Button
+                        key={demoRoute.label}
+                        className="justify-start"
+                        type="button"
+                        variant="outline"
+                        onClick={() => loadDemoRoute(demoRoute)}
+                      >
+                        <MapPinned className="h-4 w-4" />
+                        {demoRoute.label}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <div className="grid gap-2">
                   <Label htmlFor="gpx">GPX-Datei hochladen</Label>
                   <Input
                     accept=".gpx,application/gpx+xml,text/xml"
@@ -567,6 +674,7 @@ export function PlannerClient({
             route={route?.geometryGeoJson}
             selectedPoiId={selectedPoi?.id}
             stages={stages}
+            waypoints={route?.waypoints}
             onSelectPoi={setSelectedPoi}
           />
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -621,9 +729,24 @@ export function PlannerClient({
           <Card>
             <CardHeader>
               <CardTitle>POI und Angebote</CardTitle>
-              <CardDescription>{pois.length} Treffer entlang der aktuellen Route.</CardDescription>
+              <CardDescription>
+                {pois.length > 0
+                  ? `${pois.length} Treffer entlang der aktuellen Route.`
+                  : route
+                    ? "Keine Treffer mit den aktuellen Filtern."
+                    : "Noch keine Route fuer die POI-Suche."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="max-h-[430px] space-y-3 overflow-y-auto">
+              {poiCountsByCategory.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {poiCountsByCategory.map((category) => (
+                    <Badge key={category.value} variant="outline">
+                      {category.label}: {category.count}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               {pois.map((poi) => (
                 <button
                   key={poi.id}
@@ -648,7 +771,9 @@ export function PlannerClient({
               ))}
               {pois.length === 0 && (
                 <div className="rounded-md border bg-white p-5 text-sm text-muted-foreground">
-                  Plane eine Route oder passe die Filter an.
+                  {route
+                    ? "Keine POIs im aktuellen Routenkorridor. Erhoehe den Korridor, deaktiviere Filter oder lade eine Demo-Route."
+                    : "Plane eine Route oder lade eine Demo-Route."}
                 </div>
               )}
             </CardContent>

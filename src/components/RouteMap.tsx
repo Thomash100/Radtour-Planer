@@ -1,6 +1,6 @@
 "use client";
 
-import { Bed, Bike, Briefcase, Coffee, Landmark, ShoppingBasket, Utensils, Wrench } from "lucide-react";
+import { AlertTriangle, Bed, Bike, Briefcase, Coffee, Landmark, ShoppingBasket, Utensils, Wrench } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 
@@ -37,13 +37,23 @@ type Stage = {
   geometryGeoJson: LineStringGeoJson;
 };
 
+export type MapWaypoint = {
+  order: number;
+  name: string;
+  lat: number;
+  lon: number;
+};
+
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
   pois?: MapPoi[];
   stages?: Stage[];
+  waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poi: MapPoi) => void;
 };
+
+const stageColors = ["#0f766e", "#2563eb", "#d97706", "#7c3aed", "#dc2626", "#0891b2"];
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
   ACCOMMODATION: { color: "#0f766e", label: "B" },
@@ -70,19 +80,174 @@ export function categoryIcon(category: string) {
   return <Bike className={className} />;
 }
 
-export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
+function validLineString(line?: LineStringGeoJson | null) {
+  const coordinates = (line?.coordinates ?? []).filter(
+    (coordinate): coordinate is [number, number] =>
+      Array.isArray(coordinate) &&
+      coordinate.length === 2 &&
+      Number.isFinite(coordinate[0]) &&
+      Number.isFinite(coordinate[1]) &&
+      Math.abs(coordinate[0]) <= 180 &&
+      Math.abs(coordinate[1]) <= 90
+  );
+
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  return {
+    type: "LineString",
+    coordinates
+  } satisfies LineStringGeoJson;
+}
+
+function emptyFeatureCollection() {
+  return {
+    type: "FeatureCollection" as const,
+    features: []
+  };
+}
+
+function routeFeature(line: LineStringGeoJson) {
+  return {
+    type: "Feature" as const,
+    properties: {},
+    geometry: line
+  };
+}
+
+function stageFeatureCollection(stages: Stage[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: stages.flatMap((stage, index) => {
+      const line = validLineString(stage.geometryGeoJson);
+      if (!line) {
+        return [];
+      }
+
+      return [
+        {
+          type: "Feature" as const,
+          properties: {
+            color: stageColors[index % stageColors.length],
+            dayNumber: stage.dayNumber
+          },
+          geometry: line
+        }
+      ];
+    })
+  };
+}
+
+function ensureRouteLayers(map: maplibregl.Map) {
+  if (!map.getSource("route")) {
+    map.addSource("route", {
+      type: "geojson",
+      data: emptyFeatureCollection()
+    });
+  }
+
+  if (!map.getSource("stages")) {
+    map.addSource("stages", {
+      type: "geojson",
+      data: emptyFeatureCollection()
+    });
+  }
+
+  if (!map.getLayer("route-shadow")) {
+    map.addLayer({
+      id: "route-shadow",
+      type: "line",
+      source: "route",
+      paint: {
+        "line-color": "#0f172a",
+        "line-opacity": 0.22,
+        "line-width": 10
+      }
+    });
+  }
+
+  if (!map.getLayer("route-line")) {
+    map.addLayer({
+      id: "route-line",
+      type: "line",
+      source: "route",
+      paint: {
+        "line-color": "#0f766e",
+        "line-width": 5
+      }
+    });
+  }
+
+  if (!map.getLayer("stage-lines")) {
+    map.addLayer({
+      id: "stage-lines",
+      type: "line",
+      source: "stages",
+      paint: {
+        "line-color": ["get", "color"],
+        "line-opacity": 0.94,
+        "line-width": 4
+      }
+    });
+  }
+}
+
+function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
+  if (map.loaded()) {
+    ensureRouteLayers(map);
+    callback();
+    return () => {};
+  }
+
+  let cancelled = false;
+  const onLoad = () => {
+    if (cancelled) {
+      return;
+    }
+    ensureRouteLayers(map);
+    callback();
+  };
+
+  map.once("load", onLoad);
+  return () => {
+    cancelled = true;
+  };
+}
+
+function createRouteMarker(map: maplibregl.Map, coordinate: [number, number], label: string, title: string, markerType: "start" | "end" | "waypoint") {
+  const element = document.createElement("div");
+  element.className =
+    markerType === "waypoint"
+      ? "route-waypoint-marker"
+      : markerType === "end"
+        ? "route-endpoint-marker is-end"
+        : "route-endpoint-marker";
+  element.textContent = label;
+  element.title = title;
+  return new maplibregl.Marker({ element, anchor: "center" }).setLngLat(coordinate).addTo(map);
+}
+
+function validWaypoint(waypoint: MapWaypoint) {
+  return Number.isFinite(waypoint.lon) && Number.isFinite(waypoint.lat) && Math.abs(waypoint.lon) <= 180 && Math.abs(waypoint.lat) <= 90;
+}
+
+export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const endpointMarkersRef = useRef<Marker[]>([]);
+  const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) {
+    const container = containerRef.current;
+    if (!container || mapRef.current) {
       return;
     }
 
-    mapRef.current = new maplibregl.Map({
-      container: containerRef.current,
+    const map = new maplibregl.Map({
+      container,
       style: {
         version: 8,
         sources: {
@@ -123,47 +288,37 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
       zoom: 8
     });
 
-    mapRef.current.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-    mapRef.current.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
-
-    mapRef.current.on("load", () => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      map.addSource("route", {
-        type: "geojson",
-        data: {
-          type: "FeatureCollection",
-          features: []
-        }
-      });
-
-      map.addLayer({
-        id: "route-shadow",
-        type: "line",
-        source: "route",
-        paint: {
-          "line-color": "#0f172a",
-          "line-opacity": 0.2,
-          "line-width": 9
-        }
-      });
-
-      map.addLayer({
-        id: "route-line",
-        type: "line",
-        source: "route",
-        paint: {
-          "line-color": "#0f766e",
-          "line-width": 5
-        }
-      });
+    mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+    map.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
+    map.on("load", () => {
+      ensureRouteLayers(map);
+      setMapError("");
     });
+    const handleMapError = () => {
+      setMapError("Die Karte konnte nicht vollstaendig geladen werden. Route und Marker bleiben sichtbar, sobald die Basiskarte wieder erreichbar ist.");
+    };
+    map.on("error", handleMapError);
+
+    const resizeMap = () => map.resize();
+    const resizeTimer = window.setTimeout(resizeMap, 0);
+    let resizeObserver: ResizeObserver | null = null;
+    if ("ResizeObserver" in window) {
+      resizeObserver = new ResizeObserver(resizeMap);
+      resizeObserver.observe(container);
+    }
+    window.addEventListener("resize", resizeMap);
 
     return () => {
+      window.clearTimeout(resizeTimer);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", resizeMap);
+      endpointMarkersRef.current.forEach((marker) => marker.remove());
+      endpointMarkersRef.current = [];
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
-      mapRef.current?.remove();
+      map.off("error", handleMapError);
+      map.remove();
       mapRef.current = null;
     };
   }, []);
@@ -191,29 +346,63 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !route || route.coordinates.length < 2) {
+    if (!map) {
       return;
     }
 
     const update = () => {
+      const line = validLineString(route);
       const source = map.getSource("route") as GeoJSONSource | undefined;
-      source?.setData({
-        type: "Feature",
-        properties: {},
-        geometry: route
-      });
+      source?.setData(line ? routeFeature(line) : emptyFeatureCollection());
+
+      endpointMarkersRef.current.forEach((marker) => marker.remove());
+      endpointMarkersRef.current = [];
+
+      if (!line) {
+        return;
+      }
 
       const bounds = new maplibregl.LngLatBounds();
-      route.coordinates.forEach((coordinate) => bounds.extend(coordinate));
-      map.fitBounds(bounds, { padding: 72, maxZoom: 12, duration: 600 });
+      line.coordinates.forEach((coordinate) => bounds.extend(coordinate));
+      const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
+      if (sortedWaypoints.length >= 2) {
+        endpointMarkersRef.current = sortedWaypoints.map((waypoint, index) => {
+          const isStart = index === 0;
+          const isEnd = index === sortedWaypoints.length - 1;
+          const markerType = isStart ? "start" : isEnd ? "end" : "waypoint";
+          const label = isStart ? "S" : isEnd ? "Z" : String(index);
+          return createRouteMarker(map, [waypoint.lon, waypoint.lat], label, waypoint.name, markerType);
+        });
+      } else {
+        endpointMarkersRef.current = [
+          createRouteMarker(map, line.coordinates[0], "S", "Start", "start"),
+          createRouteMarker(map, line.coordinates[line.coordinates.length - 1], "Z", "Ziel", "end")
+        ];
+      }
+      map.fitBounds(bounds, {
+        padding: { top: 88, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
+        maxZoom: 12,
+        duration: 600
+      });
+      map.resize();
     };
 
-    if (map.loaded()) {
-      update();
-    } else {
-      map.once("load", update);
+    return runWhenMapReady(map, update);
+  }, [route, stages.length, waypoints]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) {
+      return;
     }
-  }, [route]);
+
+    const update = () => {
+      const source = map.getSource("stages") as GeoJSONSource | undefined;
+      source?.setData(stageFeatureCollection(stages));
+    };
+
+    return runWhenMapReady(map, update);
+  }, [stages]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -225,6 +414,10 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
     markersRef.current = [];
 
     pois.forEach((poi) => {
+      if (!Number.isFinite(poi.lon) || !Number.isFinite(poi.lat) || Math.abs(poi.lon) > 180 || Math.abs(poi.lat) > 90) {
+        return;
+      }
+
       const style = categoryStyles[poi.category] ?? { color: "#475569", label: "P" };
       const element = document.createElement("button");
       element.type = "button";
@@ -263,11 +456,26 @@ export function RouteMap({ route, pois = [], stages = [], selectedPoiId, onSelec
           </button>
         ))}
       </div>
+      {mapError && (
+        <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{mapError}</span>
+          </div>
+        </div>
+      )}
       {stages.length > 0 && (
         <div className="absolute bottom-4 left-4 right-4 flex max-w-2xl gap-2 overflow-x-auto rounded-md border bg-white/92 p-2 shadow-panel backdrop-blur">
-          {stages.map((stage) => (
+          {stages.map((stage, index) => (
             <div key={stage.id ?? stage.dayNumber} className="min-w-28 rounded-md bg-muted px-3 py-2 text-sm">
-              <div className="font-semibold">Tag {stage.dayNumber}</div>
+              <div className="flex items-center gap-2 font-semibold">
+                <span
+                  aria-hidden="true"
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: stageColors[index % stageColors.length] }}
+                />
+                Tag {stage.dayNumber}
+              </div>
               <div className="text-xs text-muted-foreground">{stage.geometryGeoJson.coordinates.length} Punkte</div>
             </div>
           ))}
