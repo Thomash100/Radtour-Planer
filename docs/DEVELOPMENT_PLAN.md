@@ -22,6 +22,8 @@ Alle Aenderungen und Aktualisierungen am Projekt sollen grundsaetzlich auf GitHu
 - Aenderungen erfolgen bevorzugt ueber eigenen Branch und Pull Request.
 - Kleine Sofortkorrekturen koennen direkt committed werden, wenn dies ausdruecklich gewuenscht ist.
 - Neue Aufgaben fuer Codex werden als GitHub-Issue formuliert.
+- Folgeauftraege werden standardmaessig als Codex-Auftrag erstellt, sofern sie das Projekt betreffen.
+- Jeder Codex-Auftrag muss Ziel, Ausgangslage, Umfang, Akzeptanzkriterien und geforderte Tests enthalten.
 - Nach Abschluss einer Aufgabe wird eine kurze Projektzusammenfassung ergaenzt.
 
 ## Phase 1: Basis stabilisieren
