@@ -21,7 +21,8 @@ Alle Aenderungen und Aktualisierungen am Projekt sollen grundsaetzlich auf GitHu
 - Keine Projektanpassung nur lokal oder nur im Chat belassen, wenn sie den Code, die Dokumentation oder Aufgabenplanung betrifft.
 - Aenderungen erfolgen bevorzugt ueber eigenen Branch und Pull Request.
 - Kleine Sofortkorrekturen koennen direkt committed werden, wenn dies ausdruecklich gewuenscht ist.
-- Neue Aufgaben fuer Codex werden als GitHub-Issue formuliert.
+- Neue Aufgaben fuer Codex werden immer als GitHub-Issue formuliert.
+- Projektauftraege werden immer als Issue und immer in Markdown erstellt.
 - Folgeauftraege werden standardmaessig als Codex-Auftrag erstellt, sofern sie das Projekt betreffen.
 - Jeder Codex-Auftrag muss Ziel, Ausgangslage, Umfang, Akzeptanzkriterien und geforderte Tests enthalten.
 - Nach Abschluss einer Aufgabe wird eine kurze Projektzusammenfassung ergaenzt.
