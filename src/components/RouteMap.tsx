@@ -10,9 +10,11 @@ import {
   Coffee,
   Droplets,
   Landmark,
+  Lock,
   Pill,
   ShoppingBasket,
   Train,
+  Unlock,
   Utensils,
   Waves,
   Wrench
@@ -274,6 +276,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   const endpointMarkersRef = useRef<Marker[]>([]);
   const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
+  const [autoFitRoute, setAutoFitRoute] = useState(true);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -415,16 +418,18 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         ];
       }
 
-      map.fitBounds(bounds, {
-        padding: { top: 88, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
-        maxZoom: 12,
-        duration: 600
-      });
+      if (autoFitRoute) {
+        map.fitBounds(bounds, {
+          padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
+          maxZoom: 12,
+          duration: 600
+        });
+      }
       map.resize();
     };
 
     return runWhenMapReady(map, update);
-  }, [route, stages.length, waypoints]);
+  }, [autoFitRoute, route, stages.length, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -473,24 +478,41 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   return (
     <div className="relative h-full min-h-[520px] overflow-hidden rounded-lg border bg-slate-100">
       <div ref={containerRef} className="absolute inset-0" />
-      <div className="absolute left-4 top-4 z-10 inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
-        {[
-          { value: "standard", label: "Standardkarte" },
-          { value: "cycle", label: "Radkarte" }
-        ].map((option) => (
+      <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap gap-2">
+        <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
+          {[
+            { value: "standard", label: "Standardkarte" },
+            { value: "cycle", label: "Radkarte" }
+          ].map((option) => (
+            <button
+              key={option.value}
+              aria-pressed={baseLayer === option.value}
+              className={cn(
+                "rounded px-3 py-2 text-sm font-medium transition",
+                baseLayer === option.value ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+              )}
+              type="button"
+              onClick={() => setBaseLayer(option.value as "standard" | "cycle")}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
           <button
-            key={option.value}
-            aria-pressed={baseLayer === option.value}
+            aria-label={autoFitRoute ? "Kartenausschnitt fixieren" : "Karte automatisch zentrieren"}
+            aria-pressed={autoFitRoute}
             className={cn(
-              "rounded px-3 py-2 text-sm font-medium transition",
-              baseLayer === option.value ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+              "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
+              autoFitRoute ? "bg-primary text-primary-foreground" : "bg-slate-900 text-white"
             )}
             type="button"
-            onClick={() => setBaseLayer(option.value as "standard" | "cycle")}
+            onClick={() => setAutoFitRoute((current) => !current)}
           >
-            {option.label}
+            {autoFitRoute ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+            <span>Auto-Zoom: {autoFitRoute ? "Ein" : "Aus"}</span>
           </button>
-        ))}
+        </div>
       </div>
       {mapError && (
         <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
