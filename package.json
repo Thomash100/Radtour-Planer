@@ -1,6 +1,6 @@
 {
   "name": "radreiseplaner",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "BikeTripHub MVP for planning multi-day bike trips with stages, POI, partners and leads.",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "prisma db seed",

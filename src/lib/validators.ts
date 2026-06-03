@@ -40,6 +40,20 @@ export const autoStageSchema = z.object({
   targetKm: z.coerce.number().min(15).max(180).default(55)
 });
 
+export const stageUpdateSchema = z.object({
+  startName: z.string().min(1).optional(),
+  endName: z.string().min(1).optional(),
+  distanceKm: z.coerce.number().nonnegative().optional(),
+  elevationUp: z.coerce.number().int().nonnegative().optional(),
+  elevationDown: z.coerce.number().int().nonnegative().optional(),
+  geometryGeoJson: z
+    .object({
+      type: z.literal("LineString"),
+      coordinates: z.array(z.tuple([z.number(), z.number()])).min(2)
+    })
+    .optional()
+});
+
 export const partnerRegisterSchema = z.object({
   companyName: z.string().min(2),
   category: z.nativeEnum(PartnerCategory),

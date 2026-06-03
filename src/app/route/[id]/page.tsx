@@ -36,6 +36,12 @@ export default async function RouteDetailPage({ params }: { params: { id: string
             ...stage,
             geometryGeoJson: stage.geometryGeoJson as unknown as LineStringGeoJson
           }))}
+          waypoints={route.waypoints.map((waypoint) => ({
+            order: waypoint.order,
+            name: waypoint.name,
+            lat: waypoint.lat,
+            lon: waypoint.lon
+          }))}
         />
       </section>
       <aside className="space-y-4">

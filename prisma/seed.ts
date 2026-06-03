@@ -219,9 +219,12 @@ async function main() {
       osmId: "seed-alpenhof",
       partnerId: alpenhof.id,
       tagsJson: {
+        rating: 4.7,
         ebikeFriendly: true,
         bikeGarage: true,
+        bikeParking: true,
         luggageAccepted: true,
+        dogsAllowed: true,
         restaurantInHouse: true,
         bookingProvider: "partner"
       }
@@ -239,6 +242,7 @@ async function main() {
       osmId: "seed-transfer",
       partnerId: bagPartner.id,
       tagsJson: {
+        rating: 4.4,
         luggageTransfer: true,
         bikeTransport: true,
         ebikeTransport: true
@@ -257,6 +261,7 @@ async function main() {
       osmId: "seed-repair",
       partnerId: null,
       tagsJson: {
+        rating: 4.3,
         repair: true,
         spareParts: true,
         ebikeService: true,
@@ -276,6 +281,7 @@ async function main() {
       osmId: "seed-cafe",
       partnerId: null,
       tagsJson: {
+        rating: 4.1,
         breakfast: true,
         vegetarian: true,
         bikeParking: true
@@ -294,6 +300,7 @@ async function main() {
       osmId: "seed-supermarket",
       partnerId: null,
       tagsJson: {
+        rating: 3.8,
         supplies: true
       }
     },
@@ -310,6 +317,7 @@ async function main() {
       osmId: "seed-water",
       partnerId: null,
       tagsJson: {
+        rating: 4.0,
         free: true,
         seasonal: false
       }
@@ -327,6 +335,7 @@ async function main() {
       osmId: "seed-sight",
       partnerId: null,
       tagsJson: {
+        rating: 4.6,
         scenic: true
       }
     }

@@ -3,8 +3,20 @@ import IORedis from "ioredis";
 
 const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 
-const connection = new IORedis(redisUrl, {
-  maxRetriesPerRequest: null
-});
+let connection: IORedis | null = null;
+let queue: Queue | null = null;
 
-export const bikeTripQueue = new Queue("bike-trip-jobs", { connection });
+export function getBikeTripQueue() {
+  if (!connection) {
+    connection = new IORedis(redisUrl, {
+      lazyConnect: true,
+      maxRetriesPerRequest: null
+    });
+  }
+
+  if (!queue) {
+    queue = new Queue("bike-trip-jobs", { connection });
+  }
+
+  return queue;
+}

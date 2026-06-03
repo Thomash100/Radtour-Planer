@@ -119,7 +119,13 @@ const categoryOptions = [
   { value: "RESTAURANT", label: "Restaurant" },
   { value: "CAFE", label: "Cafe" },
   { value: "SUPERMARKET", label: "Supermarkt" },
+  { value: "PHARMACY", label: "Apotheke" },
+  { value: "TRAIN_STATION", label: "Bahnhof" },
+  { value: "PUBLIC_TRANSPORT", label: "OePNV" },
   { value: "DRINKING_WATER", label: "Wasser" },
+  { value: "PUBLIC_TOILET", label: "Toilette" },
+  { value: "SWIMMING", label: "Badestelle" },
+  { value: "EBIKE_CHARGING", label: "E-Bike-Laden" },
   { value: "SIGHT", label: "Sehenswuerdig" }
 ];
 
@@ -159,6 +165,10 @@ export function PlannerClient({
   const [ebikeFriendly, setEbikeFriendly] = useState(false);
   const [bikeGarage, setBikeGarage] = useState(false);
   const [luggageAccepted, setLuggageAccepted] = useState(false);
+  const [dogsAllowed, setDogsAllowed] = useState(false);
+  const [restaurantInHouse, setRestaurantInHouse] = useState(false);
+  const [bikeParking, setBikeParking] = useState(false);
+  const [minRating, setMinRating] = useState("0");
   const [status, setStatus] = useState("Bereit fuer die erste Route.");
   const [isBusy, setIsBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
@@ -195,7 +205,10 @@ export function PlannerClient({
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
     { label: "E-Bike", active: ebikeFriendly, setActive: setEbikeFriendly },
     { label: "Garage", active: bikeGarage, setActive: setBikeGarage },
-    { label: "Gepaeck", active: luggageAccepted, setActive: setLuggageAccepted }
+    { label: "Gepaeck", active: luggageAccepted, setActive: setLuggageAccepted },
+    { label: "Hunde", active: dogsAllowed, setActive: setDogsAllowed },
+    { label: "Restaurant", active: restaurantInHouse, setActive: setRestaurantInHouse },
+    { label: "Stellplatz", active: bikeParking, setActive: setBikeParking }
   ];
 
   const selectedCategoryQuery = useMemo(
@@ -216,7 +229,11 @@ export function PlannerClient({
         partnerOnly: String(partnerOnly),
         ebikeFriendly: String(ebikeFriendly),
         bikeGarage: String(bikeGarage),
-        luggageAccepted: String(luggageAccepted)
+        luggageAccepted: String(luggageAccepted),
+        dogsAllowed: String(dogsAllowed),
+        restaurantInHouse: String(restaurantInHouse),
+        bikeParking: String(bikeParking),
+        minRating
       });
       if (selectedCategoryQuery) {
         params.set("categories", selectedCategoryQuery);
@@ -230,7 +247,19 @@ export function PlannerClient({
       setSelectedPoi(payload.pois[0] ?? null);
       setStatus(`${payload.pois.length} POI im ${corridorKm} km Routenkorridor gefunden.`);
     },
-    [bikeGarage, ebikeFriendly, luggageAccepted, partnerOnly, plannerForm, savedRoute?.id, selectedCategoryQuery]
+    [
+      bikeGarage,
+      bikeParking,
+      dogsAllowed,
+      ebikeFriendly,
+      luggageAccepted,
+      minRating,
+      partnerOnly,
+      plannerForm,
+      restaurantInHouse,
+      savedRoute?.id,
+      selectedCategoryQuery
+    ]
   );
 
   async function generateStages(routeId = savedRoute?.id, targetKm = plannerForm.getValues("targetKm")) {
@@ -405,6 +434,32 @@ export function PlannerClient({
     setLeadStatus(`Anfrage ${payload.lead.id.slice(0, 8)} wurde angelegt.`);
   }
 
+  function updateStage(stageId: string, patch: Partial<Pick<Stage, "startName" | "endName" | "distanceKm" | "elevationUp" | "elevationDown">>) {
+    setStages((current) => current.map((stage) => (stage.id === stageId ? { ...stage, ...patch } : stage)));
+  }
+
+  async function saveStage(stage: Stage) {
+    const response = await fetch(`/api/stages/${stage.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startName: stage.startName,
+        endName: stage.endName,
+        distanceKm: stage.distanceKm,
+        elevationUp: stage.elevationUp,
+        elevationDown: stage.elevationDown
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) {
+      setStatus(payload.error ?? "Etappe konnte nicht gespeichert werden.");
+      return;
+    }
+
+    setStages((current) => current.map((item) => (item.id === stage.id ? payload.stage : item)));
+    setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
+  }
+
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       <section className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_340px]">
@@ -547,6 +602,15 @@ export function PlannerClient({
                   </Button>
                 ))}
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="minRating">Mindestbewertung</Label>
+                <Select id="minRating" value={minRating} onChange={(event) => setMinRating(event.target.value)}>
+                  <option value="0">alle Treffer</option>
+                  <option value="3.5">ab 3,5</option>
+                  <option value="4">ab 4,0</option>
+                  <option value="4.5">ab 4,5</option>
+                </Select>
+              </div>
               <Button className="w-full" type="button" variant="outline" onClick={() => loadPois()}>
                 <Search className="h-4 w-4" />
                 POI aktualisieren
@@ -567,6 +631,7 @@ export function PlannerClient({
             route={route?.geometryGeoJson}
             selectedPoiId={selectedPoi?.id}
             stages={stages}
+            waypoints={route?.waypoints}
             onSelectPoi={setSelectedPoi}
           />
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -593,17 +658,73 @@ export function PlannerClient({
                     <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
                       Tag {stage.dayNumber}
                     </div>
-                    <div>
-                      <div className="font-semibold">
-                        {stage.startName} bis {stage.endName}
+                    <div className="grid gap-3">
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
+                          <Input
+                            id={`stage-${stage.id}-start`}
+                            value={stage.startName}
+                            onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
+                          <Input
+                            id={`stage-${stage.id}-end`}
+                            value={stage.endName}
+                            onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
+                          />
+                        </div>
                       </div>
-                      <div className="mt-1 text-sm text-muted-foreground">
-                        {formatKm(stage.distanceKm)} · {stage.elevationUp} m bergauf · {stage.elevationDown} m bergab
+                      <div className="grid gap-2 md:grid-cols-4">
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
+                          <Input
+                            id={`stage-${stage.id}-distance`}
+                            min="0"
+                            step="0.1"
+                            type="number"
+                            value={stage.distanceKm}
+                            onChange={(event) => updateStage(stage.id, { distanceKm: Number(event.target.value) })}
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
+                          <Input
+                            id={`stage-${stage.id}-up`}
+                            min="0"
+                            type="number"
+                            value={stage.elevationUp}
+                            onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
+                          <Input
+                            id={`stage-${stage.id}-down`}
+                            min="0"
+                            type="number"
+                            value={stage.elevationDown}
+                            onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <span className="text-sm font-medium leading-none">Fahrzeit</span>
+                          <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm">
+                            {formatHours(stage.distanceKm / 17)}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <Button size="sm" type="button" variant="outline" onClick={() => loadPois()}>
-                      Unterkunft finden
-                    </Button>
+                    <div className="flex flex-col gap-2">
+                      <Button size="sm" type="button" variant="outline" onClick={() => loadPois()}>
+                        Unterkunft finden
+                      </Button>
+                      <Button size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                        Speichern
+                      </Button>
+                    </div>
                   </div>
                 ))}
                 {stages.length === 0 && (

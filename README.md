@@ -131,10 +131,21 @@ npm run worker
 1. `/planer` oeffnen.
 2. Start, Ziel, Zwischenziele und Routingprofil waehlen.
 3. `Route planen` berechnet eine Mockroute, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI aus der lokalen Seed-Datenbank.
-4. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant und weitere Kategorien nutzen.
-5. Partner-POI auswaehlen und eine Anfrage senden.
-6. `/partner` oeffnen und ein Partnerprofil zur Pruefung einreichen.
-7. `/admin/partner` oeffnen und Partner freigeben oder ablehnen.
+4. Etappen in der Timeline bei Bedarf manuell anpassen und speichern.
+5. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant, Mindestbewertung, Hunde, Fahrradstellplatz und weitere Kategorien nutzen.
+6. Partner-POI auswaehlen und eine Unterkunfts- oder Gepaecktransfer-Anfrage senden.
+7. `/partner` oeffnen und ein Partnerprofil zur Pruefung einreichen.
+8. `/admin/partner` oeffnen und Partner freigeben oder ablehnen.
+
+## Qualitaetschecks
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+`POST /api/poi/sync-osm` initialisiert Redis erst beim API-Aufruf. Dadurch kann der Next.js-Build ohne laufenden Redis-Container kompiliert werden; fuer den Queue-Flow selbst muss Redis laufen.
 
 ## API-Auszug
 
