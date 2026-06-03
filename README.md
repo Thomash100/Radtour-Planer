@@ -99,7 +99,7 @@ https://github.com/Thomash100/Radtour-Planer.git
 Voraussetzungen: Node.js mit npm, PostgreSQL mit PostGIS und Redis.
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
 npx prisma generate
 npx prisma db push
@@ -140,6 +140,7 @@ npm run worker
 ## Qualitaetschecks
 
 ```bash
+npm ci
 npm run lint
 npm run typecheck
 npm run build

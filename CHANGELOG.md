@@ -15,3 +15,5 @@
 - POI-Filter erweitert
 - Waypoints an Karte uebergeben
 - tsconfig.tsbuildinfo in .gitignore aufgenommen
+- package-lock.json fuer reproduzierbare npm-Installationen ergaenzt
+- Dockerfiles auf npm ci umgestellt
