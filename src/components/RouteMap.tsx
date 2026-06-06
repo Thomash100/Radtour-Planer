@@ -20,9 +20,9 @@ import {
   Wrench
 } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { LineStringGeoJson } from "@/lib/geo";
+import { haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
 export type MapPoi = {
@@ -73,6 +73,7 @@ type RouteMapProps = {
 };
 
 const stageColors = ["#0f766e", "#2563eb", "#d97706", "#7c3aed", "#dc2626", "#0891b2"];
+const maxFitJumpKm = 120;
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
   ACCOMMODATION: { color: "#0f766e", label: "B" },
@@ -131,6 +132,54 @@ function validLineString(line?: LineStringGeoJson | null) {
     type: "LineString",
     coordinates
   } satisfies LineStringGeoJson;
+}
+
+function validPosition(coordinate: Position) {
+  return Number.isFinite(coordinate[0]) && Number.isFinite(coordinate[1]) && Math.abs(coordinate[0]) <= 180 && Math.abs(coordinate[1]) <= 90;
+}
+
+function coordinatesForViewport(coordinates: Position[]) {
+  if (coordinates.length < 4) {
+    return coordinates;
+  }
+
+  const filtered = coordinates.filter((coordinate, index) => {
+    const previous = coordinates[index - 1];
+    const next = coordinates[index + 1];
+    const distanceToPrevious = previous ? haversineKm(previous, coordinate) : Number.POSITIVE_INFINITY;
+    const distanceToNext = next ? haversineKm(coordinate, next) : Number.POSITIVE_INFINITY;
+
+    return distanceToPrevious <= maxFitJumpKm || distanceToNext <= maxFitJumpKm;
+  });
+
+  return filtered.length >= 2 ? filtered : coordinates;
+}
+
+function createBounds(coordinates: Position[]) {
+  const bounds = new maplibregl.LngLatBounds();
+  coordinates.forEach((coordinate) => bounds.extend(coordinate));
+  return bounds;
+}
+
+function routeRegionWarning(line?: LineStringGeoJson | null) {
+  const coordinates = line?.coordinates.filter(validPosition) ?? [];
+  if (coordinates.length < 2) {
+    return "";
+  }
+
+  const viewportCoordinates = coordinatesForViewport(coordinates);
+  const europeLikePoints = viewportCoordinates.filter(([lon, lat]) => lon >= -12 && lon <= 35 && lat >= 34 && lat <= 72).length;
+  const europeRatio = europeLikePoints / viewportCoordinates.length;
+
+  if (europeRatio >= 0.8) {
+    return "";
+  }
+
+  const bounds = createBounds(viewportCoordinates);
+  const center = bounds.getCenter();
+  return `Die GPX-Koordinaten liegen grob bei ${center.lat.toFixed(2)}, ${center.lng.toFixed(
+    2
+  )}. Wenn deine Tour in Europa liegen soll, ist die GPX-Datei vermutlich fehlerhaft oder enthaelt Ausreisser.`;
 }
 
 function emptyFeatureCollection() {
@@ -278,6 +327,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
   const [autoFitRoute, setAutoFitRoute] = useState(true);
+  const routeWarning = useMemo(() => routeRegionWarning(validLineString(route)), [route]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -401,8 +451,8 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         return;
       }
 
-      const bounds = new maplibregl.LngLatBounds();
-      line.coordinates.forEach((coordinate) => bounds.extend(coordinate));
+      const fitCoordinates = coordinatesForViewport(line.coordinates);
+      const bounds = createBounds(fitCoordinates);
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
       if (sortedWaypoints.length >= 2) {
         endpointMarkersRef.current = sortedWaypoints.map((waypoint, index) => {
@@ -420,10 +470,17 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       }
 
       if (autoFitRoute) {
-        map.fitBounds(bounds, {
-          padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
-          maxZoom: 12,
-          duration: 600
+        map.resize();
+        window.requestAnimationFrame(() => {
+          if (mapRef.current !== map) {
+            return;
+          }
+
+          map.fitBounds(bounds, {
+            padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
+            maxZoom: 12,
+            duration: 600
+          });
         });
       }
       map.resize();
@@ -515,11 +572,11 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
           </button>
         </div>
       </div>
-      {mapError && (
+      {(mapError || routeWarning) && (
         <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{mapError}</span>
+            <span>{mapError || routeWarning}</span>
           </div>
         </div>
       )}

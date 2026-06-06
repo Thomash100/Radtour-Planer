@@ -13,6 +13,7 @@ export type ParsedGpx = {
   elevationDown: number;
   pointType: "trkpt" | "rtept" | "wpt";
   hasElevation: boolean;
+  coordinateCorrections: string[];
 };
 
 const pointTypes: ParsedGpx["pointType"][] = ["trkpt", "rtept", "wpt"];
@@ -42,6 +43,69 @@ function attributeValue(attributes: string, name: string) {
 
 function isValidPosition(lon: number, lat: number) {
   return Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90;
+}
+
+function europeScore(points: GpxPoint[]) {
+  if (points.length === 0) {
+    return 0;
+  }
+
+  const europeLikePoints = points.filter(({ position: [lon, lat] }) => lon >= -12 && lon <= 35 && lat >= 34 && lat <= 72).length;
+  return europeLikePoints / points.length;
+}
+
+function swappedPoint(point: GpxPoint): GpxPoint | null {
+  const [lon, lat] = point.position;
+  if (!isValidPosition(lat, lon)) {
+    return null;
+  }
+
+  return {
+    ...point,
+    position: [lat, lon]
+  };
+}
+
+function removeDenseTrackOutliers(points: GpxPoint[]) {
+  if (points.length < 50) {
+    return points;
+  }
+
+  const maxDenseTrackJumpKm = 120;
+  const filtered = points.filter((point, index) => {
+    const previous = points[index - 1];
+    const next = points[index + 1];
+    const previousDistance = previous ? cumulativeDistances([previous.position, point.position])[1] : Number.POSITIVE_INFINITY;
+    const nextDistance = next ? cumulativeDistances([point.position, next.position])[1] : Number.POSITIVE_INFINITY;
+
+    return previousDistance <= maxDenseTrackJumpKm || nextDistance <= maxDenseTrackJumpKm;
+  });
+
+  return filtered.length >= Math.max(2, Math.floor(points.length * 0.9)) ? filtered : points;
+}
+
+function normalizeGpxPoints(points: GpxPoint[]) {
+  const corrections: string[] = [];
+  const swappedPoints = points.map(swappedPoint);
+
+  if (swappedPoints.every(Boolean)) {
+    const swapped = swappedPoints.filter((point): point is GpxPoint => Boolean(point));
+    const originalScore = europeScore(points);
+    const swappedScore = europeScore(swapped);
+
+    if (originalScore < 0.2 && swappedScore >= 0.8) {
+      corrections.push("Lat/Lon-Reihenfolge automatisch korrigiert");
+      points = swapped;
+    }
+  }
+
+  const withoutOutliers = removeDenseTrackOutliers(points);
+  if (withoutOutliers.length !== points.length) {
+    corrections.push(`${points.length - withoutOutliers.length} GPX-Ausreisser ignoriert`);
+    points = withoutOutliers;
+  }
+
+  return { points, corrections };
 }
 
 function extractElevation(body = "") {
@@ -123,7 +187,7 @@ function elevationFromPoints(points: GpxPoint[]) {
 
 export function parseGpx(gpx: string): ParsedGpx {
   for (const pointType of pointTypes) {
-    const points = extractPoints(gpx, pointType);
+    const { points, corrections } = normalizeGpxPoints(extractPoints(gpx, pointType));
     if (points.length < 2) {
       continue;
     }
@@ -138,7 +202,8 @@ export function parseGpx(gpx: string): ParsedGpx {
       elevationUp: elevation.elevationUp,
       elevationDown: elevation.elevationDown,
       pointType,
-      hasElevation: elevation.elevationProfile.length >= 2
+      hasElevation: elevation.elevationProfile.length >= 2,
+      coordinateCorrections: corrections
     };
   }
 
@@ -149,6 +214,7 @@ export function parseGpx(gpx: string): ParsedGpx {
     elevationUp: 0,
     elevationDown: 0,
     pointType: "trkpt",
-    hasElevation: false
+    hasElevation: false,
+    coordinateCorrections: []
   };
 }

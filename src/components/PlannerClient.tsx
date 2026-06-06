@@ -49,6 +49,7 @@ type RouteCalculation = {
   geometryGeoJson: LineStringGeoJson;
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
+  coordinateCorrections?: string[];
 };
 
 type SavedRoute = RouteCalculation & {
@@ -370,10 +371,14 @@ export function PlannerClient({
       const generatedStages = await generateStages(saved.route.id, plannerForm.getValues("targetKm"));
       const poiPayload = await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
+      const correctionNotice =
+        Array.isArray(imported.coordinateCorrections) && imported.coordinateCorrections.length > 0
+          ? ` Korrektur: ${imported.coordinateCorrections.join(", ")}.`
+          : "";
       setStatus(
         `GPX-Route importiert: ${imported.pointCount ?? savedData.geometryGeoJson.coordinates.length} Punkte, ${
           imported.elevationSource === "gpx" ? "Hoehenprofil aus Datei" : "Hoehenprofil geschaetzt"
-        }. ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI sind bereit.${poiNotice}`
+        }. ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI sind bereit.${correctionNotice}${poiNotice}`
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
@@ -679,31 +684,33 @@ export function PlannerClient({
           )}
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
             <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-3">
-                <div>
-                  <CardTitle>Etappen-Timeline</CardTitle>
-                  <CardDescription>{status}</CardDescription>
+              <CardHeader className="space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <CardTitle>Etappen-Timeline</CardTitle>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" type="button" variant="outline" onClick={() => generateStages()}>
+                      <Save className="h-4 w-4" />
+                      Etappen erzeugen
+                    </Button>
+                    <Button disabled={!route} size="sm" type="button" variant="secondary" onClick={exportGpx}>
+                      <ArrowDownToLine className="h-4 w-4" />
+                      GPX
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" type="button" variant="outline" onClick={() => generateStages()}>
-                    <Save className="h-4 w-4" />
-                    Etappen erzeugen
-                  </Button>
-                  <Button disabled={!route} size="sm" type="button" variant="secondary" onClick={exportGpx}>
-                    <ArrowDownToLine className="h-4 w-4" />
-                    GPX
-                  </Button>
-                </div>
+                <CardDescription className="leading-relaxed">{status}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {stages.map((stage) => (
-                  <div key={stage.id} className="grid gap-3 rounded-lg border bg-white p-4 sm:grid-cols-[72px_1fr_auto]">
+                  <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
                     <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
                       Tag {stage.dayNumber}
                     </div>
-                    <div className="grid gap-3">
-                      <div className="grid gap-2 md:grid-cols-2">
-                        <div className="grid gap-1">
+                    <div className="grid min-w-0 gap-3">
+                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
+                        <div className="grid min-w-0 gap-1">
                           <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
                           <Input
                             id={`stage-${stage.id}-start`}
@@ -711,7 +718,7 @@ export function PlannerClient({
                             onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
                           />
                         </div>
-                        <div className="grid gap-1">
+                        <div className="grid min-w-0 gap-1">
                           <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
                           <Input
                             id={`stage-${stage.id}-end`}
@@ -720,8 +727,8 @@ export function PlannerClient({
                           />
                         </div>
                       </div>
-                      <div className="grid gap-2 md:grid-cols-4">
-                        <div className="grid gap-1">
+                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                        <div className="grid min-w-0 gap-1">
                           <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
                           <Input
                             id={`stage-${stage.id}-distance`}
@@ -732,7 +739,7 @@ export function PlannerClient({
                             onChange={(event) => updateStage(stage.id, { distanceKm: Number(event.target.value) })}
                           />
                         </div>
-                        <div className="grid gap-1">
+                        <div className="grid min-w-0 gap-1">
                           <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
                           <Input
                             id={`stage-${stage.id}-up`}
@@ -742,7 +749,7 @@ export function PlannerClient({
                             onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
                           />
                         </div>
-                        <div className="grid gap-1">
+                        <div className="grid min-w-0 gap-1">
                           <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
                           <Input
                             id={`stage-${stage.id}-down`}
@@ -752,19 +759,19 @@ export function PlannerClient({
                             onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
                           />
                         </div>
-                        <div className="grid gap-1">
+                        <div className="grid min-w-0 gap-1">
                           <span className="text-sm font-medium leading-none">Fahrzeit</span>
-                          <div className="flex h-10 items-center rounded-md border bg-muted px-3 text-sm">
+                          <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
                             {formatHours(stage.distanceKm / 17)}
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col gap-2">
-                      <Button size="sm" type="button" variant="outline" onClick={() => loadPois()}>
+                    <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-1 2xl:flex-col">
+                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
                         Unterkunft finden
                       </Button>
-                      <Button size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
                         Speichern
                       </Button>
                     </div>

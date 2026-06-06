@@ -21,3 +21,5 @@
 - markierte Test-POI entlang beliebiger importierter Routen ergaenzt, wenn lokale POI fehlen
 - Reiseplan-Webansicht mit Karte, Etappen-Checks und POI je Etappe ausgebaut
 - Produktions-Deployment fuer Webserver mit Caddy, Docker Compose und Deploy-Script ergaenzt
+- GPX-Kartenfit robuster gegen Ausreisser und vertauschte Koordinaten gemacht
+- Etappen-Timeline fuer schmale Planer-Spalten lesbarer gemacht

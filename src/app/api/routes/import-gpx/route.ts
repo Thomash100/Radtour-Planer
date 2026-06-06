@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       pointCount: coordinates.length,
       gpxPointType: parsedGpx.pointType,
       elevationSource: parsedGpx.hasElevation ? "gpx" : "estimated",
+      coordinateCorrections: parsedGpx.coordinateCorrections,
       waypoints: [
         { order: 0, name: "GPX Start", lat: coordinates[0][1], lon: coordinates[0][0] },
         {
