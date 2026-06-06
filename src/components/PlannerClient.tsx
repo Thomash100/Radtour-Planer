@@ -9,6 +9,7 @@ import {
   Briefcase,
   CheckCircle2,
   CirclePlus,
+  FileText,
   Filter,
   GripVertical,
   MapPinned,
@@ -18,6 +19,7 @@ import {
   SlidersHorizontal,
   Trash2
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -36,6 +38,7 @@ import { cn, formatHours, formatKm } from "@/lib/utils";
 
 type RouteCalculation = {
   name: string;
+  description?: string | null;
   startName: string;
   endName: string;
   profile: string;
@@ -72,6 +75,7 @@ type Poi = {
   address?: string | null;
   phone?: string | null;
   website?: string | null;
+  source?: string | null;
   tagsJson: Record<string, unknown>;
   distanceToRouteKm?: number;
   partnerId?: string | null;
@@ -160,7 +164,17 @@ export function PlannerClient({
   const [stages, setStages] = useState<Stage[]>([]);
   const [pois, setPois] = useState<Poi[]>([]);
   const [selectedPoi, setSelectedPoi] = useState<Poi | null>(null);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(["ACCOMMODATION", "LUGGAGE_TRANSFER", "BIKE_REPAIR"]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([
+    "ACCOMMODATION",
+    "LUGGAGE_TRANSFER",
+    "BIKE_REPAIR",
+    "BIKE_SHOP",
+    "RESTAURANT",
+    "CAFE",
+    "SUPERMARKET",
+    "DRINKING_WATER",
+    "SIGHT"
+  ]);
   const [partnerOnly, setPartnerOnly] = useState(false);
   const [ebikeFriendly, setEbikeFriendly] = useState(false);
   const [bikeGarage, setBikeGarage] = useState(false);
@@ -220,7 +234,7 @@ export function PlannerClient({
     async (routeId = savedRoute?.id, corridorKm = plannerForm.getValues("corridorKm")) => {
       if (!routeId) {
         setStatus("Bitte zuerst eine Route planen.");
-        return;
+        return null;
       }
 
       const params = new URLSearchParams({
@@ -245,7 +259,9 @@ export function PlannerClient({
 
       setPois(payload.pois);
       setSelectedPoi(payload.pois[0] ?? null);
-      setStatus(`${payload.pois.length} POI im ${corridorKm} km Routenkorridor gefunden.`);
+      const sourceNotice = typeof payload.sourceNotice === "string" && payload.sourceNotice ? ` ${payload.sourceNotice}` : "";
+      setStatus(`${payload.pois.length} POI im ${corridorKm} km Routenkorridor gefunden.${sourceNotice}`);
+      return payload as { pois: Poi[]; sourceNotice?: string };
     },
     [
       bikeGarage,
@@ -264,8 +280,8 @@ export function PlannerClient({
 
   async function generateStages(routeId = savedRoute?.id, targetKm = plannerForm.getValues("targetKm")) {
     if (!routeId) {
-      setStatus("Bitte zuerst eine Route planen.");
-      return;
+        setStatus("Bitte zuerst eine Route planen.");
+        return [];
     }
 
     const response = await fetch(`/api/routes/${routeId}/stages/auto-generate`, {
@@ -278,6 +294,7 @@ export function PlannerClient({
 
     setStages(payload.stages);
     setStatus(`${payload.stages.length} Tagesetappen erzeugt.`);
+    return payload.stages as Stage[];
   }
 
   async function planRoute(values: PlannerForm) {
@@ -311,9 +328,10 @@ export function PlannerClient({
 
       const savedData: SavedRoute = { ...calculated, id: saved.route.id };
       setSavedRoute(savedData);
-      await generateStages(saved.route.id, values.targetKm);
-      await loadPois(saved.route.id, values.corridorKm);
-      setStatus("Route, Etappen und POI sind bereit.");
+      const generatedStages = await generateStages(saved.route.id, values.targetKm);
+      const poiPayload = await loadPois(saved.route.id, values.corridorKm);
+      const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
+      setStatus(`Route bereit: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
     } finally {
@@ -349,9 +367,14 @@ export function PlannerClient({
 
       const savedData: SavedRoute = { ...imported, id: saved.route.id };
       setSavedRoute(savedData);
-      await generateStages(saved.route.id, plannerForm.getValues("targetKm"));
-      await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
-      setStatus("GPX-Route importiert, gespeichert und ausgewertet.");
+      const generatedStages = await generateStages(saved.route.id, plannerForm.getValues("targetKm"));
+      const poiPayload = await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
+      const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
+      setStatus(
+        `GPX-Route importiert: ${imported.pointCount ?? savedData.geometryGeoJson.coordinates.length} Punkte, ${
+          imported.elevationSource === "gpx" ? "Hoehenprofil aus Datei" : "Hoehenprofil geschaetzt"
+        }. ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI sind bereit.${poiNotice}`
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
     } finally {
@@ -634,6 +657,26 @@ export function PlannerClient({
             waypoints={route?.waypoints}
             onSelectPoi={setSelectedPoi}
           />
+          {savedRoute && (
+            <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-3 shadow-sm">
+              <Button asChild>
+                <Link href={`/reiseplan/${savedRoute.id}`}>
+                  <FileText className="h-4 w-4" />
+                  Reiseplan oeffnen
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/route/${savedRoute.id}`}>
+                  <MapPinned className="h-4 w-4" />
+                  Route ansehen
+                </Link>
+              </Button>
+              <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
+                <ArrowDownToLine className="h-4 w-4" />
+                GPX exportieren
+              </Button>
+            </div>
+          )}
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
             <Card>
               <CardHeader className="flex flex-row items-start justify-between gap-3">
@@ -760,7 +803,10 @@ export function PlannerClient({
                       {categoryIcon(poi.category)}
                       {poi.name}
                     </div>
-                    {poi.partner?.isFeatured && <Badge variant="sponsored">Gesponsert</Badge>}
+                    <div className="flex flex-wrap justify-end gap-1">
+                      {Boolean(poi.tagsJson?.testData) && <Badge variant="outline">Testdaten</Badge>}
+                      {poi.partner?.isFeatured && <Badge variant="sponsored">Gesponsert</Badge>}
+                    </div>
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
                     {poi.distanceToRouteKm?.toFixed(1)} km zur Route · {poi.address ?? "Adresse folgt"}
@@ -792,6 +838,7 @@ export function PlannerClient({
                     <div className="flex flex-wrap gap-2">
                       {selectedPoi.partner && <Badge>Partner</Badge>}
                       {selectedPoi.partner?.isFeatured && <Badge variant="sponsored">Werbung</Badge>}
+                      {Boolean(selectedPoi.tagsJson?.testData) && <Badge variant="outline">Testdaten</Badge>}
                       {Boolean(selectedPoi.tagsJson?.ebikeFriendly) && <Badge variant="outline">E-Bike</Badge>}
                       {Boolean(selectedPoi.tagsJson?.bikeGarage) && <Badge variant="outline">Garage</Badge>}
                     </div>
@@ -847,7 +894,11 @@ export function PlannerClient({
                       {leadStatus && <p className="text-sm text-muted-foreground">{leadStatus}</p>}
                     </form>
                   ) : (
-                    <p className="text-sm text-muted-foreground">Anfragen sind im MVP fuer freigeschaltete Partner verfuegbar.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {Boolean(selectedPoi.tagsJson?.testData)
+                        ? "Dieser Eintrag ist ein markierter Test-POI fuer die GPX-Abnahme. Buchungsanfragen sind nur fuer echte Partnerbetriebe aktiv."
+                        : "Anfragen sind im MVP fuer freigeschaltete Partner verfuegbar."}
+                    </p>
                   )}
                 </>
               ) : (

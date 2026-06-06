@@ -17,3 +17,6 @@
 - tsconfig.tsbuildinfo in .gitignore aufgenommen
 - package-lock.json fuer reproduzierbare npm-Installationen ergaenzt
 - Dockerfiles auf npm ci umgestellt
+- GPX-Testfluss mit direktem Reiseplan-Link im Planer verbessert
+- markierte Test-POI entlang beliebiger importierter Routen ergaenzt, wenn lokale POI fehlen
+- Reiseplan-Webansicht mit Karte, Etappen-Checks und POI je Etappe ausgebaut

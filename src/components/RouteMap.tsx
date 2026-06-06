@@ -34,6 +34,7 @@ export type MapPoi = {
   address?: string | null;
   phone?: string | null;
   website?: string | null;
+  source?: string | null;
   tagsJson: Record<string, unknown>;
   distanceToRouteKm?: number;
   partnerId?: string | null;
