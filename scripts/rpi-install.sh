@@ -11,6 +11,28 @@ read_env_value() {
   fi
 }
 
+wait_for_app_health() {
+  echo "Warte auf App-Healthcheck..."
+  HEALTH_OK=0
+
+  for _ in $(seq 1 60); do
+    if docker compose -f "$COMPOSE_FILE" exec -T app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      HEALTH_OK=1
+      break
+    fi
+    sleep 5
+  done
+
+  if [ "$HEALTH_OK" -ne 1 ]; then
+    echo "Fehler: App-Healthcheck nicht erfolgreich."
+    docker compose -f "$COMPOSE_FILE" ps
+    docker compose -f "$COMPOSE_FILE" logs --tail=120 app
+    exit 1
+  fi
+
+  echo "App-Healthcheck erfolgreich."
+}
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker ist nicht installiert. Installation wird gestartet..."
   sudo apt update
@@ -41,6 +63,8 @@ docker compose -f "$COMPOSE_FILE" up --build -d
 
 echo "Status:"
 docker compose -f "$COMPOSE_FILE" ps
+
+wait_for_app_health
 
 echo "Logs der App:"
 docker compose -f "$COMPOSE_FILE" logs --tail=80 app

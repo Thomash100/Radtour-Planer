@@ -11,8 +11,40 @@ read_env_value() {
   fi
 }
 
+wait_for_app_health() {
+  echo "Warte auf App-Healthcheck..."
+  HEALTH_OK=0
+
+  for _ in $(seq 1 60); do
+    if docker compose -f "$COMPOSE_FILE" exec -T app node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+      HEALTH_OK=1
+      break
+    fi
+    sleep 5
+  done
+
+  if [ "$HEALTH_OK" -ne 1 ]; then
+    echo "Fehler: App-Healthcheck nicht erfolgreich."
+    docker compose -f "$COMPOSE_FILE" ps
+    docker compose -f "$COMPOSE_FILE" logs --tail=120 app
+    exit 1
+  fi
+
+  echo "App-Healthcheck erfolgreich."
+}
+
 if [ ! -f "$COMPOSE_FILE" ]; then
   echo "Fehler: $COMPOSE_FILE nicht gefunden. Script bitte im Projektordner ausfuehren."
+  exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "Fehler: Docker ist nicht installiert."
+  exit 1
+fi
+
+if ! docker compose version >/dev/null 2>&1; then
+  echo "Fehler: Docker Compose Plugin ist nicht installiert."
   exit 1
 fi
 
@@ -26,6 +58,8 @@ docker compose -f "$COMPOSE_FILE" up --build -d --remove-orphans
 
 echo "Pruefe Dienststatus..."
 docker compose -f "$COMPOSE_FILE" ps
+
+wait_for_app_health
 
 echo "App-Logs:"
 docker compose -f "$COMPOSE_FILE" logs --tail=80 app
