@@ -88,6 +88,27 @@ Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
 
 Hinweis: Auf Raspberry Pi/ARM64 verwendet die Compose-Datei `imresamu/postgis:16-3.4-alpine3.21`, weil das offizielle `postgis/postgis`-Image nur fuer `amd64` gebaut ist.
 
+## Webserver-Deployment mit Docker
+
+Fuer einen Linux-Webserver oder VPS mit Domain gibt es eine eigene Produktions-Compose-Datei mit Caddy-Reverse-Proxy, HTTPS, App, Worker, PostgreSQL/PostGIS und Redis.
+
+```bash
+git clone https://github.com/Thomash100/Radtour-Planer.git
+cd Radtour-Planer
+cp .env.production.example .env
+nano .env
+chmod +x scripts/deploy-prod.sh
+./scripts/deploy-prod.sh main
+```
+
+Fuer einen PR- oder Testbranch:
+
+```bash
+./scripts/deploy-prod.sh codex/prepare-v0.3.0-route-planner-test
+```
+
+Details stehen in [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md).
+
 GitHub-Zielrepository:
 
 ```text

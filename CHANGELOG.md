@@ -20,3 +20,4 @@
 - GPX-Testfluss mit direktem Reiseplan-Link im Planer verbessert
 - markierte Test-POI entlang beliebiger importierter Routen ergaenzt, wenn lokale POI fehlen
 - Reiseplan-Webansicht mit Karte, Etappen-Checks und POI je Etappe ausgebaut
+- Produktions-Deployment fuer Webserver mit Caddy, Docker Compose und Deploy-Script ergaenzt
