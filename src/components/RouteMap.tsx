@@ -319,6 +319,24 @@ function validWaypoint(waypoint: MapWaypoint) {
   return Number.isFinite(waypoint.lon) && Number.isFinite(waypoint.lat) && Math.abs(waypoint.lon) <= 180 && Math.abs(waypoint.lat) <= 90;
 }
 
+function waypointPosition(waypoint: MapWaypoint): Position {
+  return [waypoint.lon, waypoint.lat];
+}
+
+function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGeoJson) {
+  if (waypoints.length < 2) {
+    return false;
+  }
+
+  const firstWaypoint = waypointPosition(waypoints[0]);
+  const lastWaypoint = waypointPosition(waypoints[waypoints.length - 1]);
+  const routeStart = line.coordinates[0];
+  const routeEnd = line.coordinates[line.coordinates.length - 1];
+  const maxEndpointDistanceKm = 25;
+
+  return haversineKm(firstWaypoint, routeStart) <= maxEndpointDistanceKm && haversineKm(lastWaypoint, routeEnd) <= maxEndpointDistanceKm;
+}
+
 export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -454,18 +472,18 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       const fitCoordinates = coordinatesForViewport(line.coordinates);
       const bounds = createBounds(fitCoordinates);
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
-      if (sortedWaypoints.length >= 2) {
+      if (waypointEndpointsMatchLine(sortedWaypoints, line)) {
         endpointMarkersRef.current = sortedWaypoints.map((waypoint, index) => {
           const isStart = index === 0;
           const isEnd = index === sortedWaypoints.length - 1;
           const markerType = isStart ? "start" : isEnd ? "end" : "waypoint";
           const label = isStart ? "S" : isEnd ? "Z" : String(index);
-          return createRouteMarker(map, [waypoint.lon, waypoint.lat], label, waypoint.name, markerType);
+          return createRouteMarker(map, waypointPosition(waypoint), label, waypoint.name, markerType);
         });
       } else {
         endpointMarkersRef.current = [
-          createRouteMarker(map, line.coordinates[0], "S", "Start", "start"),
-          createRouteMarker(map, line.coordinates[line.coordinates.length - 1], "Z", "Ziel", "end")
+          createRouteMarker(map, line.coordinates[0], "S", "Start der Routengeometrie", "start"),
+          createRouteMarker(map, line.coordinates[line.coordinates.length - 1], "Z", "Ziel der Routengeometrie", "end")
         ];
       }
 

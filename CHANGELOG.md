@@ -23,3 +23,5 @@
 - Produktions-Deployment fuer Webserver mit Caddy, Docker Compose und Deploy-Script ergaenzt
 - GPX-Kartenfit robuster gegen Ausreisser und vertauschte Koordinaten gemacht
 - Etappen-Timeline fuer schmale Planer-Spalten lesbarer gemacht
+- Alte Route-/POI-Zustaende beim Neuplanen oder GPX-Import zurueckgesetzt
+- Start-/Zielmarker bei abweichenden Waypoints aus der Routengeometrie abgeleitet

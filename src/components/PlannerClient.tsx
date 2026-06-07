@@ -301,6 +301,11 @@ export function PlannerClient({
   async function planRoute(values: PlannerForm) {
     setIsBusy(true);
     setLeadStatus("");
+    setCalculation(null);
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
     try {
       setStatus("Route wird berechnet.");
       const calculateResponse = await fetch("/api/routes/calculate", {
@@ -344,6 +349,11 @@ export function PlannerClient({
     if (!file) return;
     setIsBusy(true);
     setLeadStatus("");
+    setCalculation(null);
+    setSavedRoute(null);
+    setStages([]);
+    setPois([]);
+    setSelectedPoi(null);
     try {
       setStatus("GPX-Datei wird importiert.");
       const formData = new FormData();
