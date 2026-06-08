@@ -25,3 +25,4 @@
 - Etappen-Timeline fuer schmale Planer-Spalten lesbarer gemacht
 - Alte Route-/POI-Zustaende beim Neuplanen oder GPX-Import zurueckgesetzt
 - Start-/Zielmarker bei abweichenden Waypoints aus der Routengeometrie abgeleitet
+- Kartenhoehe im Planer fixiert, damit Route und Marker im sichtbaren Ausschnitt bleiben

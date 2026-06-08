@@ -552,7 +552,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   }, [pois, selectedPoiId, onSelectPoi]);
 
   return (
-    <div className="relative h-full min-h-[520px] overflow-hidden rounded-lg border bg-slate-100">
+    <div className="relative h-[560px] overflow-hidden rounded-lg border bg-slate-100 sm:h-[620px] lg:h-[680px]">
       <div ref={containerRef} className="absolute inset-0" />
       <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap gap-2">
         <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
