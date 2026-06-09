@@ -26,3 +26,6 @@
 - Alte Route-/POI-Zustaende beim Neuplanen oder GPX-Import zurueckgesetzt
 - Start-/Zielmarker bei abweichenden Waypoints aus der Routengeometrie abgeleitet
 - Kartenhoehe im Planer fixiert, damit Route und Marker im sichtbaren Ausschnitt bleiben
+- Karten-Zentrierung auf einmaliges Auto-Fit pro Route umgestellt
+- Button zum manuellen Route-Zentrieren ergaenzt
+- Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt

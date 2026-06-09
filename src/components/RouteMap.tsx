@@ -10,6 +10,7 @@ import {
   Coffee,
   Droplets,
   Landmark,
+  LocateFixed,
   Lock,
   Pill,
   ShoppingBasket,
@@ -20,7 +21,7 @@ import {
   Wrench
 } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,10 @@ type RouteMapProps = {
 
 const stageColors = ["#0f766e", "#2563eb", "#d97706", "#7c3aed", "#dc2626", "#0891b2"];
 const maxFitJumpKm = 120;
+const maxWarningWidthDeg = 25;
+const maxWarningHeightDeg = 20;
+const maxFitWidthDeg = 120;
+const maxFitHeightDeg = 70;
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
   ACCOMMODATION: { color: "#0f766e", label: "B" },
@@ -113,29 +118,34 @@ export function categoryIcon(category: string) {
   return <Bike className={className} />;
 }
 
-function validLineString(line?: LineStringGeoJson | null) {
-  const coordinates = (line?.coordinates ?? []).filter(
-    (coordinate): coordinate is [number, number] =>
-      Array.isArray(coordinate) &&
-      coordinate.length === 2 &&
-      Number.isFinite(coordinate[0]) &&
-      Number.isFinite(coordinate[1]) &&
-      Math.abs(coordinate[0]) <= 180 &&
-      Math.abs(coordinate[1]) <= 90
-  );
-
-  if (coordinates.length < 2) {
-    return null;
-  }
-
-  return {
-    type: "LineString",
-    coordinates
-  } satisfies LineStringGeoJson;
-}
-
 function validPosition(coordinate: Position) {
   return Number.isFinite(coordinate[0]) && Number.isFinite(coordinate[1]) && Math.abs(coordinate[0]) <= 180 && Math.abs(coordinate[1]) <= 90;
+}
+
+function validCoordinate(coordinate: unknown): coordinate is Position {
+  return Array.isArray(coordinate) && coordinate.length === 2 && validPosition(coordinate as Position);
+}
+
+function europeRatio(coordinates: Position[]) {
+  if (coordinates.length === 0) {
+    return 0;
+  }
+
+  const europeLikePoints = coordinates.filter(([lon, lat]) => lon >= -12 && lon <= 35 && lat >= 34 && lat <= 72).length;
+  return europeLikePoints / coordinates.length;
+}
+
+function maybeCorrectSwappedCoordinates(coordinates: Position[]) {
+  const swapped = coordinates.map(([lon, lat]) => [lat, lon] satisfies Position).filter(validPosition);
+  if (swapped.length !== coordinates.length) {
+    return { coordinates, corrected: false };
+  }
+
+  if (europeRatio(coordinates) < 0.2 && europeRatio(swapped) >= 0.8) {
+    return { coordinates: swapped, corrected: true };
+  }
+
+  return { coordinates, corrected: false };
 }
 
 function coordinatesForViewport(coordinates: Position[]) {
@@ -155,31 +165,131 @@ function coordinatesForViewport(coordinates: Position[]) {
   return filtered.length >= 2 ? filtered : coordinates;
 }
 
+function boundsInfo(coordinates: Position[]) {
+  if (coordinates.length < 2) {
+    return null;
+  }
+
+  const lonValues = coordinates.map(([lon]) => lon);
+  const latValues = coordinates.map(([, lat]) => lat);
+  const west = Math.min(...lonValues);
+  const east = Math.max(...lonValues);
+  const south = Math.min(...latValues);
+  const north = Math.max(...latValues);
+
+  if (![west, east, south, north].every(Number.isFinite) || west < -180 || east > 180 || south < -90 || north > 90) {
+    return null;
+  }
+
+  return {
+    west,
+    east,
+    south,
+    north,
+    width: east - west,
+    height: north - south,
+    center: {
+      lon: (west + east) / 2,
+      lat: (south + north) / 2
+    }
+  };
+}
+
 function createBounds(coordinates: Position[]) {
   const bounds = new maplibregl.LngLatBounds();
   coordinates.forEach((coordinate) => bounds.extend(coordinate));
   return bounds;
 }
 
-function routeRegionWarning(line?: LineStringGeoJson | null) {
-  const coordinates = line?.coordinates.filter(validPosition) ?? [];
+function routeSignature(coordinates: Position[]) {
   if (coordinates.length < 2) {
     return "";
   }
 
-  const viewportCoordinates = coordinatesForViewport(coordinates);
-  const europeLikePoints = viewportCoordinates.filter(([lon, lat]) => lon >= -12 && lon <= 35 && lat >= 34 && lat <= 72).length;
-  const europeRatio = europeLikePoints / viewportCoordinates.length;
+  const first = coordinates[0];
+  const middle = coordinates[Math.floor(coordinates.length / 2)];
+  const last = coordinates[coordinates.length - 1];
+  return [coordinates.length, first.join(","), middle.join(","), last.join(",")].join(":");
+}
 
-  if (europeRatio >= 0.8) {
-    return "";
+function validateRoute(line?: LineStringGeoJson | null) {
+  const rawCoordinates = line?.coordinates ?? [];
+  const validCoordinates = rawCoordinates.filter(validCoordinate);
+  const discardedCoordinates = rawCoordinates.length - validCoordinates.length;
+  const warnings: string[] = [];
+
+  if (discardedCoordinates > 0) {
+    warnings.push(`${discardedCoordinates} ungueltige Koordinaten wurden ignoriert.`);
   }
 
-  const bounds = createBounds(viewportCoordinates);
-  const center = bounds.getCenter();
-  return `Die GPX-Koordinaten liegen grob bei ${center.lat.toFixed(2)}, ${center.lng.toFixed(
-    2
-  )}. Wenn deine Tour in Europa liegen soll, ist die GPX-Datei vermutlich fehlerhaft oder enthaelt Ausreisser.`;
+  const corrected = maybeCorrectSwappedCoordinates(validCoordinates);
+  if (corrected.corrected) {
+    warnings.push("Offensichtlich vertauschte Lat/Lon-Koordinaten wurden fuer die Kartenanzeige korrigiert.");
+  }
+
+  const coordinates = corrected.coordinates;
+  if (coordinates.length < 2) {
+    return {
+      line: null,
+      fitCoordinates: [],
+      signature: "",
+      blockFit: true,
+      warning: warnings.join(" "),
+      debug: {
+        inputCoordinates: rawCoordinates.length,
+        validCoordinates: coordinates.length,
+        discardedCoordinates
+      }
+    };
+  }
+
+  const fitCoordinates = coordinatesForViewport(coordinates);
+  const ignoredFitCoordinates = coordinates.length - fitCoordinates.length;
+  if (ignoredFitCoordinates > 0) {
+    warnings.push(`${ignoredFitCoordinates} Ausreisser werden beim Zentrieren ignoriert.`);
+  }
+
+  const bounds = boundsInfo(fitCoordinates);
+  const blockFit = !bounds || bounds.width > maxFitWidthDeg || bounds.height > maxFitHeightDeg;
+  if (!bounds) {
+    warnings.push("Aus den Koordinaten konnten keine plausiblen Karten-Grenzen berechnet werden.");
+  } else {
+    if (bounds.width > maxWarningWidthDeg || bounds.height > maxWarningHeightDeg) {
+      warnings.push(
+        `Die Route hat eine grosse Bounding Box (${bounds.width.toFixed(1)} x ${bounds.height.toFixed(1)} Grad). Bitte GPX-Ausreisser pruefen.`
+      );
+    }
+
+    if (blockFit) {
+      warnings.push("Automatisches Zentrieren wurde fuer diese unplausiblen Grenzen deaktiviert.");
+    }
+
+    if (europeRatio(fitCoordinates) < 0.8) {
+      warnings.push(
+        `Die Route liegt grob bei ${bounds.center.lat.toFixed(2)}, ${bounds.center.lon.toFixed(2)}. Wenn deine Tour in Europa liegen soll, bitte GPX-Datei pruefen.`
+      );
+    }
+  }
+
+  return {
+    line: {
+      type: "LineString",
+      coordinates
+    } satisfies LineStringGeoJson,
+    fitCoordinates,
+    signature: routeSignature(coordinates),
+    blockFit,
+    warning: warnings.join(" "),
+    debug: {
+      inputCoordinates: rawCoordinates.length,
+      validCoordinates: coordinates.length,
+      discardedCoordinates,
+      ignoredFitCoordinates,
+      firstCoordinate: coordinates[0],
+      lastCoordinate: coordinates[coordinates.length - 1],
+      bounds
+    }
+  };
 }
 
 function emptyFeatureCollection() {
@@ -201,7 +311,7 @@ function stageFeatureCollection(stages: Stage[]) {
   return {
     type: "FeatureCollection" as const,
     features: stages.flatMap((stage, index) => {
-      const line = validLineString(stage.geometryGeoJson);
+      const line = validateRoute(stage.geometryGeoJson).line;
       if (!line) {
         return [];
       }
@@ -342,10 +452,53 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const endpointMarkersRef = useRef<Marker[]>([]);
+  const fitTimerRef = useRef<number | null>(null);
+  const fittedRouteSignatureRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
   const [autoFitRoute, setAutoFitRoute] = useState(true);
-  const routeWarning = useMemo(() => routeRegionWarning(validLineString(route)), [route]);
+  const routeValidation = useMemo(() => validateRoute(route), [route]);
+
+  const fitRouteToBounds = useCallback(
+    (force = false) => {
+      const map = mapRef.current;
+      if (!map || !routeValidation.line || routeValidation.fitCoordinates.length < 2 || routeValidation.blockFit) {
+        return;
+      }
+
+      if (!force && fittedRouteSignatureRef.current === routeValidation.signature) {
+        return;
+      }
+
+      if (fitTimerRef.current) {
+        window.clearTimeout(fitTimerRef.current);
+      }
+
+      map.resize();
+      fitTimerRef.current = window.setTimeout(() => {
+        window.requestAnimationFrame(() => {
+          if (mapRef.current !== map) {
+            return;
+          }
+
+          map.resize();
+          map.fitBounds(createBounds(routeValidation.fitCoordinates), {
+            padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
+            maxZoom: 12,
+            duration: 600
+          });
+          fittedRouteSignatureRef.current = routeValidation.signature;
+        });
+      }, 100);
+    },
+    [routeValidation, stages.length]
+  );
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && routeValidation.signature) {
+      console.debug("RouteMap diagnostics", routeValidation.debug);
+    }
+  }, [routeValidation.debug, routeValidation.signature]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -418,6 +571,9 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
 
     return () => {
       window.clearTimeout(resizeTimer);
+      if (fitTimerRef.current) {
+        window.clearTimeout(fitTimerRef.current);
+      }
       resizeObserver?.disconnect();
       window.removeEventListener("resize", resizeMap);
       endpointMarkersRef.current.forEach((marker) => marker.remove());
@@ -458,7 +614,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     }
 
     const update = () => {
-      const line = validLineString(route);
+      const line = routeValidation.line;
       const source = map.getSource("route") as GeoJSONSource | undefined;
       source?.setData(line ? routeFeature(line) : emptyFeatureCollection());
 
@@ -469,8 +625,6 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         return;
       }
 
-      const fitCoordinates = coordinatesForViewport(line.coordinates);
-      const bounds = createBounds(fitCoordinates);
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
       if (waypointEndpointsMatchLine(sortedWaypoints, line)) {
         endpointMarkersRef.current = sortedWaypoints.map((waypoint, index) => {
@@ -488,24 +642,13 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       }
 
       if (autoFitRoute) {
-        map.resize();
-        window.requestAnimationFrame(() => {
-          if (mapRef.current !== map) {
-            return;
-          }
-
-          map.fitBounds(bounds, {
-            padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
-            maxZoom: 12,
-            duration: 600
-          });
-        });
+        fitRouteToBounds(false);
       }
       map.resize();
     };
 
     return runWhenMapReady(map, update);
-  }, [autoFitRoute, route, stages.length, waypoints]);
+  }, [autoFitRoute, fitRouteToBounds, routeValidation, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -576,6 +719,21 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         </div>
         <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
           <button
+            aria-label="Route zentrieren"
+            className={cn(
+              "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
+              routeValidation.line && !routeValidation.blockFit
+                ? "text-slate-700 hover:bg-muted"
+                : "cursor-not-allowed text-slate-400"
+            )}
+            disabled={!routeValidation.line || routeValidation.blockFit}
+            type="button"
+            onClick={() => fitRouteToBounds(true)}
+          >
+            <LocateFixed className="h-4 w-4" />
+            <span>Route zentrieren</span>
+          </button>
+          <button
             aria-label={autoFitRoute ? "Kartenausschnitt fixieren" : "Karte automatisch zentrieren"}
             aria-pressed={autoFitRoute}
             className={cn(
@@ -586,15 +744,15 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
             onClick={() => setAutoFitRoute((current) => !current)}
           >
             {autoFitRoute ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
-            <span>Auto-Zoom: {autoFitRoute ? "Ein" : "Aus"}</span>
+            <span>Auto-Zoom: {autoFitRoute ? "Einmalig" : "Aus"}</span>
           </button>
         </div>
       </div>
-      {(mapError || routeWarning) && (
+      {(mapError || routeValidation.warning) && (
         <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span>{mapError || routeWarning}</span>
+            <span>{mapError || routeValidation.warning}</span>
           </div>
         </div>
       )}
