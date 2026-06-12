@@ -83,6 +83,7 @@ const defaultMinZoom = 2;
 const routeMaxZoom = 16;
 const autoFitMaxZoom = 12;
 const routeBoundsPaddingRatio = 0.18;
+const routeBoundsPaddingKm = 25;
 const minRouteBoundsPaddingDeg = 0.03;
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
@@ -206,7 +207,15 @@ function createBounds(coordinates: Position[]) {
   return bounds;
 }
 
-function fitPadding(stagesLength: number) {
+function fitPadding(stagesLength: number, container?: HTMLElement | null) {
+  const width = container?.clientWidth ?? 0;
+  const height = container?.clientHeight ?? 0;
+  const compact = width < 640 || height < 430;
+
+  if (compact) {
+    return { top: 76, right: 32, bottom: stagesLength > 0 ? 108 : 44, left: 32 };
+  }
+
   return { top: 112, right: 72, bottom: stagesLength > 0 ? 132 : 72, left: 72 };
 }
 
@@ -220,8 +229,12 @@ function paddedRouteBounds(coordinates: Position[]) {
     return null;
   }
 
-  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
-  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
+  const centerLat = bounds.center.lat;
+  const latPaddingFromKm = routeBoundsPaddingKm / 111;
+  const lonKmFactor = Math.max(Math.cos((centerLat * Math.PI) / 180), 0.2) * 111;
+  const lonPaddingFromKm = routeBoundsPaddingKm / lonKmFactor;
+  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, lonPaddingFromKm, minRouteBoundsPaddingDeg);
+  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, latPaddingFromKm, minRouteBoundsPaddingDeg);
 
   const west = clamp(bounds.west - lonPadding, -180, 180);
   const east = clamp(bounds.east + lonPadding, -180, 180);
@@ -233,6 +246,21 @@ function paddedRouteBounds(coordinates: Position[]) {
   }
 
   return new maplibregl.LngLatBounds([west, south], [east, north]);
+}
+
+function containerDebug(container?: HTMLElement | null) {
+  if (!container) {
+    return null;
+  }
+
+  return {
+    width: Math.round(container.clientWidth),
+    height: Math.round(container.clientHeight)
+  };
+}
+
+function debugRouteBounds(routeValidation: ReturnType<typeof validateRoute>) {
+  return "bounds" in routeValidation.debug ? routeValidation.debug.bounds : null;
 }
 
 function routeSignature(coordinates: Position[]) {
@@ -444,34 +472,48 @@ function resetRouteCameraLimits(map: maplibregl.Map) {
   map.setMaxBounds(null);
   map.setMinZoom(defaultMinZoom);
   map.setMaxZoom(routeMaxZoom);
+  return {
+    maxBounds: null,
+    minZoom: defaultMinZoom,
+    maxZoom: routeMaxZoom
+  };
 }
 
-function applyRouteCameraLimits(map: maplibregl.Map, routeValidation: ReturnType<typeof validateRoute>, stagesLength: number) {
+function applyRouteCameraLimits(
+  map: maplibregl.Map,
+  routeValidation: ReturnType<typeof validateRoute>,
+  stagesLength: number,
+  container?: HTMLElement | null
+) {
   if (!routeValidation.line || routeValidation.fitCoordinates.length < 2 || routeValidation.blockFit) {
-    resetRouteCameraLimits(map);
-    return;
+    return resetRouteCameraLimits(map);
   }
 
   const panBounds = paddedRouteBounds(routeValidation.fitCoordinates);
   if (!panBounds) {
-    resetRouteCameraLimits(map);
-    return;
+    return resetRouteCameraLimits(map);
   }
 
   map.setMaxBounds(panBounds);
   map.setMaxZoom(routeMaxZoom);
 
   const fitCamera = map.cameraForBounds(createBounds(routeValidation.fitCoordinates), {
-    padding: fitPadding(stagesLength),
+    padding: fitPadding(stagesLength, container),
     maxZoom: autoFitMaxZoom
   });
   const routeFitZoom = fitCamera?.zoom;
   const minZoom =
     typeof routeFitZoom === "number" && Number.isFinite(routeFitZoom)
-      ? clamp(routeFitZoom - 0.75, defaultMinZoom, autoFitMaxZoom)
+      ? clamp(routeFitZoom - 0.35, defaultMinZoom, autoFitMaxZoom)
       : defaultMinZoom;
 
   map.setMinZoom(minZoom);
+  return {
+    maxBounds: panBounds.toArray(),
+    minZoom,
+    maxZoom: routeMaxZoom,
+    routeFitZoom
+  };
 }
 
 function createRouteMarker(
@@ -551,11 +593,22 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
 
           map.resize();
           map.fitBounds(createBounds(routeValidation.fitCoordinates), {
-            padding: fitPadding(stages.length),
+            padding: fitPadding(stages.length, containerRef.current),
             maxZoom: autoFitMaxZoom,
             duration: 600
           });
           fittedRouteSignatureRef.current = routeValidation.signature;
+          if (process.env.NODE_ENV !== "production") {
+            console.debug("RouteMap fitBounds", {
+              container: containerDebug(containerRef.current),
+              routeBounds: debugRouteBounds(routeValidation),
+              mapBounds: map.getBounds().toArray(),
+              maxBounds: map.getMaxBounds()?.toArray() ?? null,
+              zoom: map.getZoom(),
+              minZoom: map.getMinZoom(),
+              maxZoom: map.getMaxZoom()
+            });
+          }
         });
       }, 100);
     },
@@ -692,12 +745,27 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       endpointMarkersRef.current = [];
 
       if (!line) {
-        resetRouteCameraLimits(map);
+        const cameraLimits = resetRouteCameraLimits(map);
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("RouteMap camera limits", {
+            container: containerDebug(containerRef.current),
+            cameraLimits,
+            zoom: map.getZoom()
+          });
+        }
         map.resize();
         return;
       }
 
-      applyRouteCameraLimits(map, routeValidation, stages.length);
+      const cameraLimits = applyRouteCameraLimits(map, routeValidation, stages.length, containerRef.current);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("RouteMap camera limits", {
+          container: containerDebug(containerRef.current),
+          routeBounds: debugRouteBounds(routeValidation),
+          cameraLimits,
+          zoom: map.getZoom()
+        });
+      }
 
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
       if (waypointEndpointsMatchLine(sortedWaypoints, line)) {
@@ -772,8 +840,9 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     <div
       className="relative overflow-hidden rounded-lg border bg-slate-100"
       style={{
-        height: "clamp(300px, calc(100dvh - 12rem), 620px)",
-        maxHeight: "calc(100dvh - 6rem)"
+        height: "clamp(340px, 68dvh, 620px)",
+        maxHeight: "calc(100dvh - 6.5rem)",
+        overscrollBehavior: "contain"
       }}
     >
       <div ref={containerRef} className="absolute inset-0" />

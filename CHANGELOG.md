@@ -31,3 +31,5 @@
 - Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt
 - Kartenhoehe auf die sichtbare Displayhoehe begrenzt
 - Karten-Pan und Zoom auf den Routenbereich begrenzt
+- Planer-Ansichten fuer Planung, Karte und Desktop-Geteilt ergaenzt
+- Routenkarte mit kilometerbasiertem Routenkorridor fuer Pan-Grenzen stabilisiert
