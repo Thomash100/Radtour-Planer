@@ -79,6 +79,11 @@ const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
 const maxFitWidthDeg = 120;
 const maxFitHeightDeg = 70;
+const defaultMinZoom = 2;
+const routeMaxZoom = 16;
+const autoFitMaxZoom = 12;
+const routeBoundsPaddingRatio = 0.18;
+const minRouteBoundsPaddingDeg = 0.03;
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
   ACCOMMODATION: { color: "#0f766e", label: "B" },
@@ -199,6 +204,35 @@ function createBounds(coordinates: Position[]) {
   const bounds = new maplibregl.LngLatBounds();
   coordinates.forEach((coordinate) => bounds.extend(coordinate));
   return bounds;
+}
+
+function fitPadding(stagesLength: number) {
+  return { top: 112, right: 72, bottom: stagesLength > 0 ? 132 : 72, left: 72 };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function paddedRouteBounds(coordinates: Position[]) {
+  const bounds = boundsInfo(coordinates);
+  if (!bounds) {
+    return null;
+  }
+
+  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
+  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
+
+  const west = clamp(bounds.west - lonPadding, -180, 180);
+  const east = clamp(bounds.east + lonPadding, -180, 180);
+  const south = clamp(bounds.south - latPadding, -90, 90);
+  const north = clamp(bounds.north + latPadding, -90, 90);
+
+  if (west >= east || south >= north) {
+    return null;
+  }
+
+  return new maplibregl.LngLatBounds([west, south], [east, north]);
 }
 
 function routeSignature(coordinates: Position[]) {
@@ -406,6 +440,40 @@ function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
   };
 }
 
+function resetRouteCameraLimits(map: maplibregl.Map) {
+  map.setMaxBounds(null);
+  map.setMinZoom(defaultMinZoom);
+  map.setMaxZoom(routeMaxZoom);
+}
+
+function applyRouteCameraLimits(map: maplibregl.Map, routeValidation: ReturnType<typeof validateRoute>, stagesLength: number) {
+  if (!routeValidation.line || routeValidation.fitCoordinates.length < 2 || routeValidation.blockFit) {
+    resetRouteCameraLimits(map);
+    return;
+  }
+
+  const panBounds = paddedRouteBounds(routeValidation.fitCoordinates);
+  if (!panBounds) {
+    resetRouteCameraLimits(map);
+    return;
+  }
+
+  map.setMaxBounds(panBounds);
+  map.setMaxZoom(routeMaxZoom);
+
+  const fitCamera = map.cameraForBounds(createBounds(routeValidation.fitCoordinates), {
+    padding: fitPadding(stagesLength),
+    maxZoom: autoFitMaxZoom
+  });
+  const routeFitZoom = fitCamera?.zoom;
+  const minZoom =
+    typeof routeFitZoom === "number" && Number.isFinite(routeFitZoom)
+      ? clamp(routeFitZoom - 0.75, defaultMinZoom, autoFitMaxZoom)
+      : defaultMinZoom;
+
+  map.setMinZoom(minZoom);
+}
+
 function createRouteMarker(
   map: maplibregl.Map,
   coordinate: [number, number],
@@ -483,8 +551,8 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
 
           map.resize();
           map.fitBounds(createBounds(routeValidation.fitCoordinates), {
-            padding: { top: 112, right: 72, bottom: stages.length > 0 ? 132 : 72, left: 72 },
-            maxZoom: 12,
+            padding: fitPadding(stages.length),
+            maxZoom: autoFitMaxZoom,
             duration: 600
           });
           fittedRouteSignatureRef.current = routeValidation.signature;
@@ -545,7 +613,9 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         ]
       },
       center: [11.9, 48.0],
-      zoom: 8
+      zoom: 8,
+      minZoom: defaultMinZoom,
+      maxZoom: routeMaxZoom
     });
 
     mapRef.current = map;
@@ -622,8 +692,12 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       endpointMarkersRef.current = [];
 
       if (!line) {
+        resetRouteCameraLimits(map);
+        map.resize();
         return;
       }
+
+      applyRouteCameraLimits(map, routeValidation, stages.length);
 
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
       if (waypointEndpointsMatchLine(sortedWaypoints, line)) {
@@ -648,7 +722,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     };
 
     return runWhenMapReady(map, update);
-  }, [autoFitRoute, fitRouteToBounds, routeValidation, waypoints]);
+  }, [autoFitRoute, fitRouteToBounds, routeValidation, stages.length, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -695,7 +769,13 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   }, [pois, selectedPoiId, onSelectPoi]);
 
   return (
-    <div className="relative h-[560px] overflow-hidden rounded-lg border bg-slate-100 sm:h-[620px] lg:h-[680px]">
+    <div
+      className="relative overflow-hidden rounded-lg border bg-slate-100"
+      style={{
+        height: "clamp(300px, calc(100dvh - 12rem), 620px)",
+        maxHeight: "calc(100dvh - 6rem)"
+      }}
+    >
       <div ref={containerRef} className="absolute inset-0" />
       <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap gap-2">
         <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">

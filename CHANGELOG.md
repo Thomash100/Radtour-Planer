@@ -29,3 +29,5 @@
 - Karten-Zentrierung auf einmaliges Auto-Fit pro Route umgestellt
 - Button zum manuellen Route-Zentrieren ergaenzt
 - Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt
+- Kartenhoehe auf die sichtbare Displayhoehe begrenzt
+- Karten-Pan und Zoom auf den Routenbereich begrenzt
