@@ -33,3 +33,6 @@
 - Karten-Pan und Zoom auf den Routenbereich begrenzt
 - Planer-Ansichten fuer Planung, Karte und Desktop-Geteilt ergaenzt
 - Routenkarte mit kilometerbasiertem Routenkorridor fuer Pan-Grenzen stabilisiert
+- Kartenbedienung aus der Kartenflaeche in eine Toolbar oberhalb verschoben
+- Karten-Vollbildmodus per Klick und Verkleinern per Doppelklick ergaenzt
+- Etappenlegende unter die Karte verschoben, damit die Route frei sichtbar bleibt
