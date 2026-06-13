@@ -554,6 +554,9 @@ export function PlannerClient({
       const imported = await importResponse.json();
       if (!importResponse.ok) throw new Error(imported.error ?? "GPX-Import fehlgeschlagen.");
 
+      plannerForm.setValue("start", imported.startName ?? "GPX Start", { shouldDirty: true });
+      plannerForm.setValue("end", imported.endName ?? "GPX Ziel", { shouldDirty: true });
+      setWaypoints([]);
       setCalculation(imported);
       const saveResponse = await fetch("/api/routes", {
         method: "POST",

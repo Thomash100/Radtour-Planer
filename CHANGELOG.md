@@ -38,3 +38,4 @@
 - Etappenlegende unter die Karte verschoben, damit die Route frei sichtbar bleibt
 - Individuelle Etappenpunkte mit Ortsname und km-Position entlang der GPX-Route ergaenzt
 - GPX-basierter Routenzuschnitt per Start-/End-km ergaenzt
+- Start-/Ziel-Felder werden nach GPX-Import auf GPX Start/Ziel aktualisiert
