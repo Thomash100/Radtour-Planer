@@ -25,7 +25,7 @@ import {
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
-import { haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
+import { closestPointOnRoute, haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
 export type MapPoi = {
@@ -73,7 +73,12 @@ type RouteMapProps = {
   stageBreakpoints?: Array<{ name: string; distanceKm: number }>;
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
+  routePointSelection?: {
+    enabled: boolean;
+    label?: string;
+  };
   onSelectPoi?: (poi: MapPoi) => void;
+  onRoutePointSelect?: (selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) => void;
 };
 
 const stageColors = ["#0f766e", "#2563eb", "#d97706", "#7c3aed", "#dc2626", "#0891b2"];
@@ -567,7 +572,17 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
   return haversineKm(firstWaypoint, routeStart) <= maxEndpointDistanceKm && haversineKm(lastWaypoint, routeEnd) <= maxEndpointDistanceKm;
 }
 
-export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
+export function RouteMap({
+  route,
+  pois = [],
+  stages = [],
+  stageBreakpoints = [],
+  waypoints = [],
+  selectedPoiId,
+  routePointSelection,
+  onSelectPoi,
+  onRoutePointSelect
+}: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -582,6 +597,7 @@ export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [],
   const [autoFitRoute, setAutoFitRoute] = useState(true);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
+  const routePointSelectionEnabled = Boolean(routePointSelection?.enabled && routeValidation.line && onRoutePointSelect);
 
   const fitRouteToBounds = useCallback(
     (force = false) => {
@@ -890,7 +906,7 @@ export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [],
   }
 
   function handleMapClick(event: MouseEvent<HTMLDivElement>) {
-    if (isFullscreenMap || interactiveMapTarget(event.target)) {
+    if (interactiveMapTarget(event.target)) {
       return;
     }
 
@@ -899,6 +915,20 @@ export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [],
       pointerStart &&
       Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 8;
     if (moved) {
+      return;
+    }
+
+    if (routePointSelectionEnabled && routeValidation.line && onRoutePointSelect && mapRef.current) {
+      if (mapClickTimerRef.current) {
+        window.clearTimeout(mapClickTimerRef.current);
+      }
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const point = mapRef.current.unproject([event.clientX - bounds.left, event.clientY - bounds.top]);
+      onRoutePointSelect(closestPointOnRoute([point.lng, point.lat], routeValidation.line.coordinates));
+      return;
+    }
+
+    if (isFullscreenMap) {
       return;
     }
 
@@ -993,7 +1023,8 @@ export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [],
       <div
         className={cn(
           "relative overflow-hidden rounded-lg border bg-slate-100",
-          isFullscreenMap && "min-h-0 flex-1 rounded-md"
+          isFullscreenMap && "min-h-0 flex-1 rounded-md",
+          routePointSelectionEnabled && "cursor-crosshair"
         )}
         style={
           isFullscreenMap
@@ -1009,6 +1040,11 @@ export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [],
         onPointerDown={handleMapPointerDown}
       >
         <div ref={containerRef} className="absolute inset-0" />
+        {routePointSelectionEnabled && (
+          <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white shadow">
+            {routePointSelection?.label ?? "Auf die Route klicken, um einen Etappenpunkt zu setzen."}
+          </div>
+        )}
       </div>
       {stages.length > 0 && (
         <div className="flex gap-2 overflow-x-auto rounded-md border bg-white p-2 shadow-sm">

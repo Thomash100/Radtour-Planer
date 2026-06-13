@@ -43,3 +43,4 @@
 - Stadtname kann auf den naechsten Punkt der GPX-Route projiziert werden
 - Geplante Etappenpunkte werden vor dem Erzeugen als Marker auf der Karte angezeigt
 - Hoehenprofil kompakter direkt unter der Karte platziert und als Grossansicht oeffenbar gemacht
+- Etappenpunkte koennen direkt per Kartenklick auf die naechste GPX-Routenposition gesetzt werden
