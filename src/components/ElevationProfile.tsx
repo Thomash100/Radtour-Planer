@@ -1,5 +1,8 @@
 "use client";
 
+import { Maximize2, Minimize2 } from "lucide-react";
+import { useState } from "react";
+
 import type { ElevationPoint } from "@/lib/geo";
 
 type ElevationProfileProps = {
@@ -7,16 +10,18 @@ type ElevationProfileProps = {
 };
 
 export function ElevationProfile({ points }: ElevationProfileProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (points.length < 2) {
     return (
-      <div className="grid h-28 place-items-center rounded-md border bg-white text-sm text-muted-foreground">
+      <div className="grid h-16 place-items-center rounded-md border bg-white text-sm text-muted-foreground">
         Noch kein Hoehenprofil
       </div>
     );
   }
 
   const width = 640;
-  const height = 140;
+  const height = isExpanded ? 260 : 96;
   const padding = 18;
   const maxDistance = Math.max(...points.map((point) => point.distanceKm));
   const minElevation = Math.min(...points.map((point) => point.elevationM));
@@ -31,17 +36,32 @@ export function ElevationProfile({ points }: ElevationProfileProps) {
     .join(" ");
 
   return (
-    <div className="rounded-md border bg-white p-3">
-      <svg aria-label="Hoehenprofil" className="h-32 w-full" viewBox={`0 0 ${width} ${height}`} role="img">
-        <path d={`${path} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`} fill="#d9f99d" opacity="0.75" />
-        <path d={path} fill="none" stroke="#0f766e" strokeWidth="4" strokeLinecap="round" />
-        <line x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} stroke="#cbd5e1" />
-      </svg>
+    <div className={isExpanded ? "fixed inset-0 z-50 flex flex-col gap-3 bg-white p-4" : "rounded-md border bg-white p-3 shadow-sm"}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">Hoehenprofil</div>
+          <div className="text-xs text-muted-foreground">
+            {minElevation} bis {maxElevation} m - {maxDistance.toFixed(1)} km
+          </div>
+        </div>
+        <button
+          className="inline-flex h-9 items-center gap-2 rounded-md border bg-white px-3 text-sm font-medium hover:bg-muted"
+          type="button"
+          onClick={() => setIsExpanded((current) => !current)}
+        >
+          {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          {isExpanded ? "Schliessen" : "Gross"}
+        </button>
+      </div>
+      <div className={isExpanded ? "min-h-0 flex-1" : ""}>
+        <svg aria-label="Hoehenprofil" className={isExpanded ? "h-full w-full" : "h-20 w-full"} viewBox={`0 0 ${width} ${height}`} role="img">
+          <path d={`${path} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`} fill="#d9f99d" opacity="0.75" />
+          <path d={path} fill="none" stroke="#0f766e" strokeWidth={isExpanded ? 5 : 3} strokeLinecap="round" />
+          <line x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} stroke="#cbd5e1" />
+        </svg>
+      </div>
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>0 km</span>
-        <span>
-          {minElevation} bis {maxElevation} m
-        </span>
         <span>{maxDistance.toFixed(1)} km</span>
       </div>
     </div>

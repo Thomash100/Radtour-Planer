@@ -125,6 +125,36 @@ export function distancePointToLineKm(point: Position, coordinates: Position[]) 
   return minDistance;
 }
 
+export function closestPointOnRoute(point: Position, coordinates: Position[]) {
+  const cumulative = cumulativeDistances(coordinates);
+  let best = {
+    coordinate: coordinates[0] ?? point,
+    distanceKm: 0,
+    distanceToRouteKm: coordinates[0] ? haversineKm(point, coordinates[0]) : Number.POSITIVE_INFINITY
+  };
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const a = coordinates[index - 1];
+    const b = coordinates[index];
+    const p = projectToKm(point, a);
+    const end = projectToKm(b, a);
+    const lengthSquared = end.x * end.x + end.y * end.y;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, (p.x * end.x + p.y * end.y) / lengthSquared));
+    const projected = interpolatePosition(a, b, t);
+    const distanceToRouteKm = haversineKm(point, projected);
+
+    if (distanceToRouteKm < best.distanceToRouteKm) {
+      best = {
+        coordinate: projected,
+        distanceKm: (cumulative[index - 1] ?? 0) + haversineKm(a, projected),
+        distanceToRouteKm
+      };
+    }
+  }
+
+  return best;
+}
+
 export function createElevationProfile(coordinates: Position[]) {
   const cumulative = cumulativeDistances(coordinates);
   return coordinates.map((coordinate, index) => {

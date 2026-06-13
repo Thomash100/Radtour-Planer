@@ -25,7 +25,7 @@ import {
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
-import { haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
+import { haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 
 export type MapPoi = {
@@ -70,6 +70,7 @@ type RouteMapProps = {
   route?: LineStringGeoJson | null;
   pois?: MapPoi[];
   stages?: Stage[];
+  stageBreakpoints?: Array<{ name: string; distanceKm: number }>;
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
   onSelectPoi?: (poi: MapPoi) => void;
@@ -566,11 +567,12 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
   return haversineKm(firstWaypoint, routeStart) <= maxEndpointDistanceKm && haversineKm(lastWaypoint, routeEnd) <= maxEndpointDistanceKm;
 }
 
-export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
+export function RouteMap({ route, pois = [], stages = [], stageBreakpoints = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const endpointMarkersRef = useRef<Marker[]>([]);
+  const stageBreakpointMarkersRef = useRef<Marker[]>([]);
   const fitTimerRef = useRef<number | null>(null);
   const mapClickTimerRef = useRef<number | null>(null);
   const mapPointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -734,6 +736,8 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       window.removeEventListener("resize", resizeMap);
       endpointMarkersRef.current.forEach((marker) => marker.remove());
       endpointMarkersRef.current = [];
+      stageBreakpointMarkersRef.current.forEach((marker) => marker.remove());
+      stageBreakpointMarkersRef.current = [];
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       map.off("error", handleMapError);
@@ -776,6 +780,8 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
 
       endpointMarkersRef.current.forEach((marker) => marker.remove());
       endpointMarkersRef.current = [];
+      stageBreakpointMarkersRef.current.forEach((marker) => marker.remove());
+      stageBreakpointMarkersRef.current = [];
 
       if (!line) {
         const cameraLimits = resetRouteCameraLimits(map);
@@ -816,6 +822,16 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
         ];
       }
 
+      stageBreakpointMarkersRef.current = stageBreakpoints.map((breakpoint, index) =>
+        createRouteMarker(
+          map,
+          pointAtDistance(line.coordinates, breakpoint.distanceKm),
+          String(index + 1),
+          `${breakpoint.name} bei km ${breakpoint.distanceKm.toFixed(1)}`,
+          "waypoint"
+        )
+      );
+
       if (autoFitRoute) {
         fitRouteToBounds(false);
       }
@@ -823,7 +839,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     };
 
     return runWhenMapReady(map, update);
-  }, [autoFitRoute, fitRouteToBounds, routeValidation, stages.length, waypoints]);
+  }, [autoFitRoute, fitRouteToBounds, routeValidation, stageBreakpoints, stages.length, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;

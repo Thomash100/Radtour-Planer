@@ -34,12 +34,14 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  closestPointOnRoute,
   createElevationProfile,
   routeDistanceKm,
   toGpx,
   trimRouteGeometry,
   type ElevationPoint,
   type LineStringGeoJson,
+  type Position,
   type StageBreakpoint
 } from "@/lib/geo";
 import { cn, formatHours, formatKm } from "@/lib/utils";
@@ -123,7 +125,7 @@ const leadSchema = z.object({
 
 type PlannerForm = z.infer<typeof plannerSchema>;
 type LeadForm = z.infer<typeof leadSchema>;
-type PlannerView = "planning" | "map" | "split";
+type PlannerView = "planning" | "map" | "stages" | "split";
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
@@ -154,8 +156,45 @@ const profileLabels: Record<string, string> = {
 const plannerViewOptions: Array<{ value: PlannerView; label: string }> = [
   { value: "planning", label: "Planung" },
   { value: "map", label: "Karte" },
+  { value: "stages", label: "Etappen" },
   { value: "split", label: "Geteilt" }
 ];
+
+const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Position }> = [
+  { name: "Hamburg", coordinate: [9.9937, 53.5511] },
+  { name: "Luebeck", aliases: ["Lubeck"], coordinate: [10.6866, 53.8655] },
+  { name: "Schwerin", coordinate: [11.4075, 53.6355] },
+  { name: "Wismar", coordinate: [11.462, 53.8912] },
+  { name: "Lueneburg", aliases: ["Luneburg"], coordinate: [10.4079, 53.2464] },
+  { name: "Uelzen", coordinate: [10.5589, 52.9657] },
+  { name: "Salzwedel", coordinate: [11.1537, 52.8516] },
+  { name: "Stendal", coordinate: [11.8587, 52.6069] },
+  { name: "Magdeburg", coordinate: [11.6276, 52.1205] },
+  { name: "Dessau", coordinate: [12.2429, 51.8306] },
+  { name: "Wittenberg", coordinate: [12.6464, 51.8667] },
+  { name: "Leipzig", coordinate: [12.3731, 51.3397] },
+  { name: "Halle", coordinate: [11.9688, 51.4969] },
+  { name: "Chemnitz", coordinate: [12.9253, 50.8278] },
+  { name: "Dresden", coordinate: [13.7373, 51.0504] },
+  { name: "Pirna", coordinate: [13.9407, 50.9625] },
+  { name: "Prag", aliases: ["Praha"], coordinate: [14.4378, 50.0755] },
+  { name: "Muenchen", aliases: ["Munchen", "Munich"], coordinate: [11.582, 48.1351] },
+  { name: "Salzburg", coordinate: [13.055, 47.8095] }
+];
+
+function normalizeCity(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00df/g, "ss");
+}
+
+function findCityAnchor(value: string) {
+  const normalized = normalizeCity(value);
+  return cityAnchors.find((city) => [city.name, ...(city.aliases ?? [])].some((name) => normalizeCity(name) === normalized));
+}
 
 function leadTypeForPoi(category: string) {
   if (category === "ACCOMMODATION") return "ACCOMMODATION";
@@ -238,11 +277,46 @@ export function PlannerClient({
 
   const route = savedRoute ?? calculation;
   const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
-  const showPlanningPanels = plannerView !== "map";
+  const sortedStageBreakpoints = useMemo(
+    () => stageBreakpoints.slice().sort((a, b) => a.distanceKm - b.distanceKm),
+    [stageBreakpoints]
+  );
+  const effectiveStageBreakpoints = useMemo(() => {
+    if (routeTotalKm <= 0) {
+      return [];
+    }
+
+    const normalized = sortedStageBreakpoints
+      .map((breakpoint) => ({
+        ...breakpoint,
+        name: breakpoint.name.trim() || "Etappenpunkt",
+        distanceKm: Math.min(Math.max(Number(breakpoint.distanceKm), 0), routeTotalKm)
+      }))
+      .filter((breakpoint) => Number.isFinite(breakpoint.distanceKm) && breakpoint.distanceKm > 0 && breakpoint.distanceKm < routeTotalKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return normalized.filter((breakpoint, index) => index === 0 || Math.abs(breakpoint.distanceKm - normalized[index - 1].distanceKm) >= 0.5);
+  }, [routeTotalKm, sortedStageBreakpoints]);
+  const stagePlanPreview = useMemo(() => {
+    if (!route || routeTotalKm <= 0) {
+      return [];
+    }
+
+    const splitPoints = [0, ...effectiveStageBreakpoints.map((breakpoint) => breakpoint.distanceKm), routeTotalKm];
+    const names = ["Start", ...effectiveStageBreakpoints.map((breakpoint) => breakpoint.name), "Ziel"];
+    return splitPoints.slice(0, -1).map((startKm, index) => ({
+      dayNumber: index + 1,
+      startName: names[index],
+      endName: names[index + 1],
+      distanceKm: Number((splitPoints[index + 1] - startKm).toFixed(1))
+    }));
+  }, [effectiveStageBreakpoints, route, routeTotalKm]);
+  const showPlanningPanels = plannerView !== "map" && plannerView !== "stages";
   const showMapPanel = plannerView !== "planning";
+  const showStagePlanner = plannerView === "stages";
   const plannerGridClass = cn(
     "grid gap-4",
-    plannerView === "map" ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[360px_minmax(0,1fr)_340px]"
+    plannerView === "map" || plannerView === "stages" ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[360px_minmax(0,1fr)_340px]"
   );
   const quickFilters = [
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
@@ -307,10 +381,43 @@ export function PlannerClient({
     setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
   }
 
+  function addCityStageBreakpoint() {
+    if (!route || routeTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const city = findCityAnchor(newStagePointName);
+    if (!city) {
+      setStatus("Stadt nicht in der lokalen Testliste gefunden. Bitte km-Position manuell setzen.");
+      return;
+    }
+
+    const closest = closestPointOnRoute(city.coordinate, route.geometryGeoJson.coordinates);
+    const distanceKm = Math.min(Math.max(closest.distanceKm, 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    setStageBreakpoints((current) =>
+      [...current, { id: crypto.randomUUID(), name: city.name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+    setNewStagePointName("");
+    setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
+    setPlannerView("stages");
+    setStatus(`${city.name} wurde auf den naechsten Routenpunkt bei km ${distanceKm.toFixed(1)} gesetzt (${closest.distanceToRouteKm.toFixed(1)} km vom Stadtzentrum).`);
+  }
+
   function updateStageBreakpoint(id: string, patch: Partial<StageBreakpoint>) {
+    const normalizedPatch =
+      typeof patch.distanceKm === "number"
+        ? {
+            ...patch,
+            distanceKm: Number(
+              Math.min(Math.max(Number.isFinite(patch.distanceKm) ? patch.distanceKm : 0, 0.5), Math.max(routeTotalKm - 0.5, 0.5)).toFixed(1)
+            )
+          }
+        : patch;
+
     setStageBreakpoints((current) =>
       current
-        .map((breakpoint) => (breakpoint.id === id ? { ...breakpoint, ...patch } : breakpoint))
+        .map((breakpoint) => (breakpoint.id === id ? { ...breakpoint, ...normalizedPatch } : breakpoint))
         .sort((a, b) => a.distanceKm - b.distanceKm)
     );
   }
@@ -396,7 +503,7 @@ export function PlannerClient({
       return;
     }
 
-    const breakpoints = stageBreakpoints.map(({ name, distanceKm }) => ({ name, distanceKm }));
+    const breakpoints = effectiveStageBreakpoints.map(({ name, distanceKm }) => ({ name, distanceKm }));
     if (breakpoints.length === 0) {
       setStatus("Bitte zuerst mindestens einen Etappenpunkt anlegen.");
       return;
@@ -818,108 +925,6 @@ export function PlannerClient({
 
           <Card>
             <CardHeader>
-              <CardTitle>Etappen frei planen</CardTitle>
-              <CardDescription>GPX-Route als Grundlage, Etappenorte und Zuschnitt manuell festlegen.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-3">
-                <div className="grid gap-2">
-                  <Label htmlFor="stagePointName">Ort oder Etappenziel</Label>
-                  <Input
-                    id="stagePointName"
-                    placeholder="z. B. Magdeburg"
-                    value={newStagePointName}
-                    onChange={(event) => setNewStagePointName(event.target.value)}
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="stagePointKm">Position auf Route in km</Label>
-                  <Input
-                    id="stagePointKm"
-                    max={routeTotalKm || undefined}
-                    min="0"
-                    step="0.1"
-                    type="number"
-                    value={newStagePointKm}
-                    onChange={(event) => setNewStagePointKm(Number(event.target.value))}
-                  />
-                </div>
-                <Button disabled={!route} type="button" variant="outline" onClick={addStageBreakpoint}>
-                  <CirclePlus className="h-4 w-4" />
-                  Etappenpunkt hinzufuegen
-                </Button>
-              </div>
-
-              {stageBreakpoints.length > 0 && (
-                <div className="space-y-2">
-                  {stageBreakpoints.map((breakpoint) => (
-                    <div key={breakpoint.id} className="grid gap-2 rounded-md border bg-white p-2">
-                      <Input
-                        aria-label="Etappenname"
-                        value={breakpoint.name}
-                        onChange={(event) => updateStageBreakpoint(breakpoint.id, { name: event.target.value })}
-                      />
-                      <div className="flex gap-2">
-                        <Input
-                          aria-label="Etappen-km"
-                          max={routeTotalKm || undefined}
-                          min="0"
-                          step="0.1"
-                          type="number"
-                          value={breakpoint.distanceKm}
-                          onChange={(event) => updateStageBreakpoint(breakpoint.id, { distanceKm: Number(event.target.value) })}
-                        />
-                        <Button aria-label="Etappenpunkt entfernen" size="icon" type="button" variant="outline" onClick={() => removeStageBreakpoint(breakpoint.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <Button className="w-full" disabled={!savedRoute || stageBreakpoints.length === 0 || isBusy} type="button" onClick={generateCustomStages}>
-                <Save className="h-4 w-4" />
-                Individuelle Etappen erzeugen
-              </Button>
-
-              <div className="grid gap-3 border-t pt-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="trimStartKm">Start ab km</Label>
-                    <Input
-                      id="trimStartKm"
-                      max={routeTotalKm || undefined}
-                      min="0"
-                      step="0.1"
-                      type="number"
-                      value={trimStartKm}
-                      onChange={(event) => setTrimStartKm(Number(event.target.value))}
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="trimEndKm">Ende bei km</Label>
-                    <Input
-                      id="trimEndKm"
-                      max={routeTotalKm || undefined}
-                      min="0"
-                      step="0.1"
-                      type="number"
-                      value={trimEndKm}
-                      onChange={(event) => setTrimEndKm(Number(event.target.value))}
-                    />
-                  </div>
-                </div>
-                <Button disabled={!savedRoute || routeTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
-                  <Route className="h-4 w-4" />
-                  GPX-Route kuerzen
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-primary" />
                 Suche entlang der Route
@@ -983,10 +988,205 @@ export function PlannerClient({
               pois={pois}
               route={route?.geometryGeoJson}
               selectedPoiId={selectedPoi?.id}
+              stageBreakpoints={effectiveStageBreakpoints}
               stages={stages}
               waypoints={route?.waypoints}
               onSelectPoi={setSelectedPoi}
             />
+          )}
+          {showMapPanel && <ElevationProfile points={route?.elevationProfile ?? []} />}
+          {showStagePlanner && (
+            <div className="grid gap-4">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Etappenpunkte auf der GPX-Route</CardTitle>
+                    <CardDescription>
+                      Stadt eingeben, naechsten Punkt auf der Route setzen und Etappen neu berechnen.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_160px_auto]">
+                      <div className="grid gap-2">
+                        <Label htmlFor="stagePointName">Stadt oder Etappenziel</Label>
+                        <Input
+                          id="stagePointName"
+                          placeholder="z. B. Magdeburg"
+                          value={newStagePointName}
+                          onChange={(event) => setNewStagePointName(event.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="stagePointKm">km manuell</Label>
+                        <Input
+                          id="stagePointKm"
+                          max={routeTotalKm || undefined}
+                          min="0"
+                          step="0.1"
+                          type="number"
+                          value={newStagePointKm}
+                          onChange={(event) => setNewStagePointKm(Number(event.target.value))}
+                        />
+                      </div>
+                      <div className="flex flex-col justify-end gap-2">
+                        <Button disabled={!route} type="button" onClick={addCityStageBreakpoint}>
+                          <MapPinned className="h-4 w-4" />
+                          An Route setzen
+                        </Button>
+                        <Button disabled={!route} type="button" variant="outline" onClick={addStageBreakpoint}>
+                          <CirclePlus className="h-4 w-4" />
+                          km setzen
+                        </Button>
+                      </div>
+                    </div>
+
+                    {sortedStageBreakpoints.length > 0 ? (
+                      <div className="grid gap-2">
+                        {sortedStageBreakpoints.map((breakpoint, index) => (
+                          <div key={breakpoint.id} className="grid gap-2 rounded-md border bg-white p-3 sm:grid-cols-[44px_minmax(0,1fr)_130px_auto] sm:items-end">
+                            <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
+                              {index + 1}
+                            </div>
+                            <div className="grid gap-1">
+                              <Label htmlFor={`breakpoint-${breakpoint.id}-name`}>Etappenziel</Label>
+                              <Input
+                                id={`breakpoint-${breakpoint.id}-name`}
+                                value={breakpoint.name}
+                                onChange={(event) => updateStageBreakpoint(breakpoint.id, { name: event.target.value })}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label htmlFor={`breakpoint-${breakpoint.id}-km`}>km</Label>
+                              <Input
+                                id={`breakpoint-${breakpoint.id}-km`}
+                                max={routeTotalKm || undefined}
+                                min="0"
+                                step="0.1"
+                                type="number"
+                                value={breakpoint.distanceKm}
+                                onChange={(event) => updateStageBreakpoint(breakpoint.id, { distanceKm: Number(event.target.value) })}
+                              />
+                            </div>
+                            <Button aria-label="Etappenpunkt entfernen" size="icon" type="button" variant="outline" onClick={() => removeStageBreakpoint(breakpoint.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-md border bg-white p-5 text-sm text-muted-foreground">
+                        Noch keine Etappenpunkte gesetzt. Der Start und das Ziel der GPX-Route bleiben automatisch erhalten.
+                      </div>
+                    )}
+
+                    <div className="rounded-md border bg-muted p-3">
+                      <div className="text-sm font-semibold">Ergebnisvorschau: {stagePlanPreview.length || "-"} Etappen</div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {stagePlanPreview.map((stage) => (
+                          <div key={stage.dayNumber} className="rounded-md bg-white p-3 text-sm">
+                            <div className="font-semibold">Tag {stage.dayNumber}</div>
+                            <div className="text-muted-foreground">
+                              {stage.startName} - {stage.endName}
+                            </div>
+                            <div>{formatKm(stage.distanceKm)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button className="w-full" disabled={!savedRoute || effectiveStageBreakpoints.length === 0 || isBusy} type="button" onClick={generateCustomStages}>
+                      <Save className="h-4 w-4" />
+                      Etappen neu berechnen
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Route kuerzen</CardTitle>
+                    <CardDescription>Start und Ende der GPX-Grundroute verschieben.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="trimStartKm">Start ab km</Label>
+                      <Input
+                        id="trimStartKm"
+                        max={routeTotalKm || undefined}
+                        min="0"
+                        step="0.1"
+                        type="number"
+                        value={trimStartKm}
+                        onChange={(event) => setTrimStartKm(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="trimEndKm">Ende bei km</Label>
+                      <Input
+                        id="trimEndKm"
+                        max={routeTotalKm || undefined}
+                        min="0"
+                        step="0.1"
+                        type="number"
+                        value={trimEndKm}
+                        onChange={(event) => setTrimEndKm(Number(event.target.value))}
+                      />
+                    </div>
+                    <Button className="w-full" disabled={!savedRoute || routeTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
+                      <Route className="h-4 w-4" />
+                      GPX-Route kuerzen
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Nach dem Kuerzen werden Etappen und POI zurueckgesetzt und muessen neu berechnet werden.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Etappen bearbeiten</CardTitle>
+                  <CardDescription>{status}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {stages.map((stage) => (
+                    <div key={stage.id} className="grid gap-3 rounded-lg border bg-white p-4 lg:grid-cols-[72px_minmax(0,1fr)_auto]">
+                      <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
+                        Tag {stage.dayNumber}
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-editor-${stage.id}-start`}>Start</Label>
+                          <Input
+                            id={`stage-editor-${stage.id}-start`}
+                            value={stage.startName}
+                            onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <Label htmlFor={`stage-editor-${stage.id}-end`}>Ziel</Label>
+                          <Input
+                            id={`stage-editor-${stage.id}-end`}
+                            value={stage.endName}
+                            onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
+                          />
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {formatKm(stage.distanceKm)} / {stage.elevationUp} Hm auf / {formatHours(stage.distanceKm / 17)}
+                        </div>
+                      </div>
+                      <Button className="min-w-28" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                        Speichern
+                      </Button>
+                    </div>
+                  ))}
+                  {stages.length === 0 && (
+                    <div className="rounded-md border bg-white p-5 text-sm text-muted-foreground">
+                      Erzeuge zuerst Etappen aus den gesetzten Punkten.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
           {savedRoute && (
             <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-3 shadow-sm">
@@ -1002,6 +1202,10 @@ export function PlannerClient({
                   Route ansehen
                 </Link>
               </Button>
+              <Button type="button" variant="outline" onClick={() => setPlannerView("stages")}>
+                <Route className="h-4 w-4" />
+                Etappen bearbeiten
+              </Button>
               <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
                 <ArrowDownToLine className="h-4 w-4" />
                 GPX exportieren
@@ -1009,7 +1213,7 @@ export function PlannerClient({
             </div>
           )}
           {showPlanningPanels && (
-          <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+          <div className="grid gap-4">
             <Card>
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1111,7 +1315,6 @@ export function PlannerClient({
                 )}
               </CardContent>
             </Card>
-            <ElevationProfile points={route?.elevationProfile ?? []} />
           </div>
           )}
         </section>
@@ -1144,7 +1347,7 @@ export function PlannerClient({
                     </div>
                   </div>
                   <div className="mt-2 text-sm text-muted-foreground">
-                    {poi.distanceToRouteKm?.toFixed(1)} km zur Route · {poi.address ?? "Adresse folgt"}
+                    {poi.distanceToRouteKm?.toFixed(1)} km zur Route - {poi.address ?? "Adresse folgt"}
                   </div>
                 </button>
               ))}

@@ -39,3 +39,7 @@
 - Individuelle Etappenpunkte mit Ortsname und km-Position entlang der GPX-Route ergaenzt
 - GPX-basierter Routenzuschnitt per Start-/End-km ergaenzt
 - Start-/Ziel-Felder werden nach GPX-Import auf GPX Start/Ziel aktualisiert
+- Eigene Etappen-Ansicht mit Ergebnisvorschau und bearbeitbaren Etappen ergaenzt
+- Stadtname kann auf den naechsten Punkt der GPX-Route projiziert werden
+- Geplante Etappenpunkte werden vor dem Erzeugen als Marker auf der Karte angezeigt
+- Hoehenprofil kompakter direkt unter der Karte platziert und als Grossansicht oeffenbar gemacht
