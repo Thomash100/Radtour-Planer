@@ -36,3 +36,5 @@
 - Kartenbedienung aus der Kartenflaeche in eine Toolbar oberhalb verschoben
 - Karten-Vollbildmodus per Klick und Verkleinern per Doppelklick ergaenzt
 - Etappenlegende unter die Karte verschoben, damit die Route frei sichtbar bleibt
+- Individuelle Etappenpunkte mit Ortsname und km-Position entlang der GPX-Route ergaenzt
+- GPX-basierter Routenzuschnitt per Start-/End-km ergaenzt

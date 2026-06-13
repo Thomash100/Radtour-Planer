@@ -33,7 +33,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toGpx, type ElevationPoint, type LineStringGeoJson } from "@/lib/geo";
+import {
+  createElevationProfile,
+  routeDistanceKm,
+  toGpx,
+  trimRouteGeometry,
+  type ElevationPoint,
+  type LineStringGeoJson,
+  type StageBreakpoint
+} from "@/lib/geo";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 type RouteCalculation = {
@@ -195,6 +203,11 @@ export function PlannerClient({
   const [isBusy, setIsBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
   const [plannerView, setPlannerView] = useState<PlannerView>("planning");
+  const [stageBreakpoints, setStageBreakpoints] = useState<Array<StageBreakpoint & { id: string }>>([]);
+  const [newStagePointName, setNewStagePointName] = useState("");
+  const [newStagePointKm, setNewStagePointKm] = useState(0);
+  const [trimStartKm, setTrimStartKm] = useState(0);
+  const [trimEndKm, setTrimEndKm] = useState(0);
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -224,6 +237,7 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
   const showPlanningPanels = plannerView !== "map";
   const showMapPanel = plannerView !== "planning";
   const plannerGridClass = cn(
@@ -262,8 +276,47 @@ export function PlannerClient({
     return () => desktopQuery.removeEventListener("change", syncSplitView);
   }, []);
 
+  useEffect(() => {
+    setStageBreakpoints([]);
+    setNewStagePointKm(routeTotalKm > 0 ? Number(Math.min(50, routeTotalKm).toFixed(1)) : 0);
+    setTrimStartKm(0);
+    setTrimEndKm(Number(routeTotalKm.toFixed(1)));
+  }, [route?.geometryGeoJson, routeTotalKm]);
+
   function showRouteMapView() {
     setPlannerView((current) => (current === "split" ? "split" : "map"));
+  }
+
+  function addStageBreakpoint() {
+    if (!route || routeTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const name = newStagePointName.trim();
+    if (!name) {
+      setStatus("Bitte einen Ort oder Etappennamen eintragen.");
+      return;
+    }
+
+    const distanceKm = Math.min(Math.max(Number(newStagePointKm), 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    setStageBreakpoints((current) =>
+      [...current, { id: crypto.randomUUID(), name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+    setNewStagePointName("");
+    setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
+  }
+
+  function updateStageBreakpoint(id: string, patch: Partial<StageBreakpoint>) {
+    setStageBreakpoints((current) =>
+      current
+        .map((breakpoint) => (breakpoint.id === id ? { ...breakpoint, ...patch } : breakpoint))
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+  }
+
+  function removeStageBreakpoint(id: string) {
+    setStageBreakpoints((current) => current.filter((breakpoint) => breakpoint.id !== id));
   }
 
   const loadPois = useCallback(
@@ -314,7 +367,11 @@ export function PlannerClient({
     ]
   );
 
-  async function generateStages(routeId = savedRoute?.id, targetKm = plannerForm.getValues("targetKm")) {
+  async function generateStages(
+    routeId = savedRoute?.id,
+    targetKm = plannerForm.getValues("targetKm"),
+    breakpoints: StageBreakpoint[] = []
+  ) {
     if (!routeId) {
         setStatus("Bitte zuerst eine Route planen.");
         return [];
@@ -323,14 +380,108 @@ export function PlannerClient({
     const response = await fetch(`/api/routes/${routeId}/stages/auto-generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetKm })
+      body: JSON.stringify(breakpoints.length > 0 ? { breakpoints } : { targetKm })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Etappen konnten nicht erzeugt werden.");
 
     setStages(payload.stages);
-    setStatus(`${payload.stages.length} Tagesetappen erzeugt.`);
+    setStatus(breakpoints.length > 0 ? `${payload.stages.length} individuelle Etappen erzeugt.` : `${payload.stages.length} Tagesetappen erzeugt.`);
     return payload.stages as Stage[];
+  }
+
+  async function generateCustomStages() {
+    if (!savedRoute?.id) {
+      setStatus("Bitte zuerst eine Route speichern oder GPX importieren.");
+      return;
+    }
+
+    const breakpoints = stageBreakpoints.map(({ name, distanceKm }) => ({ name, distanceKm }));
+    if (breakpoints.length === 0) {
+      setStatus("Bitte zuerst mindestens einen Etappenpunkt anlegen.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      await generateStages(savedRoute.id, plannerForm.getValues("targetKm"), breakpoints);
+      showRouteMapView();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Individuelle Etappen konnten nicht erzeugt werden.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function applyRouteTrim() {
+    if (!savedRoute?.id || !route) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const startKm = Math.min(Math.max(Number(trimStartKm), 0), Math.max(routeTotalKm - 1, 0));
+    const endKm = Math.min(Math.max(Number(trimEndKm), startKm + 1), routeTotalKm);
+    if (endKm - startKm < 1) {
+      setStatus("Der verbleibende Routenabschnitt muss mindestens 1 km lang sein.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const geometryGeoJson = trimRouteGeometry(route.geometryGeoJson, startKm, endKm);
+      const distanceKm = Number(routeDistanceKm(geometryGeoJson.coordinates).toFixed(1));
+      const elevationProfile = createElevationProfile(geometryGeoJson.coordinates);
+      const elevationUp = Math.round(distanceKm * 6.2);
+      const elevationDown = Math.round(distanceKm * 4.8);
+
+      const response = await fetch(`/api/routes/${savedRoute.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: `${route.description ?? ""}\nGekuerzt auf km ${startKm.toFixed(1)} bis ${endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
+          distanceKm,
+          elevationUp,
+          elevationDown,
+          geometryGeoJson
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Route konnte nicht gekuerzt werden.");
+
+      const updatedRoute: SavedRoute = {
+        ...savedRoute,
+        distanceKm,
+        elevationUp,
+        elevationDown,
+        geometryGeoJson,
+        elevationProfile
+      };
+      setSavedRoute(updatedRoute);
+      setCalculation((current) =>
+        current
+          ? {
+              ...current,
+              distanceKm,
+              elevationUp,
+              elevationDown,
+              geometryGeoJson,
+              elevationProfile
+            }
+          : current
+      );
+      setStages([]);
+      setPois([]);
+      setSelectedPoi(null);
+      setStageBreakpoints([]);
+      setTrimStartKm(0);
+      setTrimEndKm(distanceKm);
+      setStatus(`Route gekuerzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
+      showRouteMapView();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Route konnte nicht gekuerzt werden.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function planRoute(values: PlannerForm) {
@@ -664,6 +815,108 @@ export function PlannerClient({
 
           <Card>
             <CardHeader>
+              <CardTitle>Etappen frei planen</CardTitle>
+              <CardDescription>GPX-Route als Grundlage, Etappenorte und Zuschnitt manuell festlegen.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="stagePointName">Ort oder Etappenziel</Label>
+                  <Input
+                    id="stagePointName"
+                    placeholder="z. B. Magdeburg"
+                    value={newStagePointName}
+                    onChange={(event) => setNewStagePointName(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="stagePointKm">Position auf Route in km</Label>
+                  <Input
+                    id="stagePointKm"
+                    max={routeTotalKm || undefined}
+                    min="0"
+                    step="0.1"
+                    type="number"
+                    value={newStagePointKm}
+                    onChange={(event) => setNewStagePointKm(Number(event.target.value))}
+                  />
+                </div>
+                <Button disabled={!route} type="button" variant="outline" onClick={addStageBreakpoint}>
+                  <CirclePlus className="h-4 w-4" />
+                  Etappenpunkt hinzufuegen
+                </Button>
+              </div>
+
+              {stageBreakpoints.length > 0 && (
+                <div className="space-y-2">
+                  {stageBreakpoints.map((breakpoint) => (
+                    <div key={breakpoint.id} className="grid gap-2 rounded-md border bg-white p-2">
+                      <Input
+                        aria-label="Etappenname"
+                        value={breakpoint.name}
+                        onChange={(event) => updateStageBreakpoint(breakpoint.id, { name: event.target.value })}
+                      />
+                      <div className="flex gap-2">
+                        <Input
+                          aria-label="Etappen-km"
+                          max={routeTotalKm || undefined}
+                          min="0"
+                          step="0.1"
+                          type="number"
+                          value={breakpoint.distanceKm}
+                          onChange={(event) => updateStageBreakpoint(breakpoint.id, { distanceKm: Number(event.target.value) })}
+                        />
+                        <Button aria-label="Etappenpunkt entfernen" size="icon" type="button" variant="outline" onClick={() => removeStageBreakpoint(breakpoint.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <Button className="w-full" disabled={!savedRoute || stageBreakpoints.length === 0 || isBusy} type="button" onClick={generateCustomStages}>
+                <Save className="h-4 w-4" />
+                Individuelle Etappen erzeugen
+              </Button>
+
+              <div className="grid gap-3 border-t pt-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="trimStartKm">Start ab km</Label>
+                    <Input
+                      id="trimStartKm"
+                      max={routeTotalKm || undefined}
+                      min="0"
+                      step="0.1"
+                      type="number"
+                      value={trimStartKm}
+                      onChange={(event) => setTrimStartKm(Number(event.target.value))}
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="trimEndKm">Ende bei km</Label>
+                    <Input
+                      id="trimEndKm"
+                      max={routeTotalKm || undefined}
+                      min="0"
+                      step="0.1"
+                      type="number"
+                      value={trimEndKm}
+                      onChange={(event) => setTrimEndKm(Number(event.target.value))}
+                    />
+                  </div>
+                </div>
+                <Button disabled={!savedRoute || routeTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
+                  <Route className="h-4 w-4" />
+                  GPX-Route kuerzen
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Filter className="h-5 w-5 text-primary" />
                 Suche entlang der Route
@@ -763,7 +1016,7 @@ export function PlannerClient({
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" type="button" variant="outline" onClick={() => generateStages()}>
                       <Save className="h-4 w-4" />
-                      Etappen erzeugen
+                      Auto-Etappen
                     </Button>
                     <Button disabled={!route} size="sm" type="button" variant="secondary" onClick={exportGpx}>
                       <ArrowDownToLine className="h-4 w-4" />

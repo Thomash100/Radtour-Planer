@@ -167,6 +167,60 @@ export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: numb
   return stages;
 }
 
+export type StageBreakpoint = {
+  name: string;
+  distanceKm: number;
+};
+
+export function splitRouteByBreakpoints(geometry: LineStringGeoJson, breakpoints: StageBreakpoint[]) {
+  const coordinates = geometry.coordinates;
+  const totalDistance = routeDistanceKm(coordinates);
+  const sortedBreakpoints = breakpoints
+    .map((breakpoint) => ({
+      name: breakpoint.name.trim() || "Etappenpunkt",
+      distanceKm: Math.min(Math.max(breakpoint.distanceKm, 0), totalDistance)
+    }))
+    .filter((breakpoint) => breakpoint.distanceKm > 0 && breakpoint.distanceKm < totalDistance)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const distinctBreakpoints = sortedBreakpoints.filter(
+    (breakpoint, index) => index === 0 || Math.abs(breakpoint.distanceKm - sortedBreakpoints[index - 1].distanceKm) >= 0.5
+  );
+  const splitPoints = [0, ...distinctBreakpoints.map((breakpoint) => breakpoint.distanceKm), totalDistance];
+  const names = ["Start", ...distinctBreakpoints.map((breakpoint) => breakpoint.name), "Ziel"];
+
+  return splitPoints.slice(0, -1).map((startKm, index) => {
+    const endKm = splitPoints[index + 1];
+    const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
+    const stageDistance = routeDistanceKm(stageCoordinates);
+    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+
+    return {
+      dayNumber: index + 1,
+      startName: names[index],
+      endName: names[index + 1],
+      distanceKm: Number(stageDistance.toFixed(1)),
+      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      geometryGeoJson: {
+        type: "LineString",
+        coordinates: stageCoordinates
+      } satisfies LineStringGeoJson
+    };
+  });
+}
+
+export function trimRouteGeometry(geometry: LineStringGeoJson, startKm: number, endKm: number) {
+  const totalDistance = routeDistanceKm(geometry.coordinates);
+  const start = Math.min(Math.max(startKm, 0), totalDistance);
+  const end = Math.min(Math.max(endKm, start + 1), totalDistance);
+
+  return {
+    type: "LineString",
+    coordinates: sliceLineString(geometry.coordinates, start, end)
+  } satisfies LineStringGeoJson;
+}
+
 export function toGpx(geometry: LineStringGeoJson, name: string) {
   const trkpts = geometry.coordinates
     .map(([lon, lat]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}"></trkpt>`)
