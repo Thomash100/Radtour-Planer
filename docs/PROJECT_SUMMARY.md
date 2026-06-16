@@ -1,0 +1,69 @@
+# Projektzusammenfassung
+
+Stand: 2026-06-16
+
+## Produkt
+
+BikeTripHub / RadreisePlaner ist ein MVP fuer mehrtaegige Radtourplanung. Ziel ist keine reine Kartenanzeige, sondern ein planbarer Reiseablauf mit Route, Etappen, POI, Unterkuenften, Gepaecktransfer, Fahrradservice und spaeter Partner-/Monetarisierungsfunktionen.
+
+## Aktuelle Richtung
+
+Die aktuelle Roadmap steht in Issue #26:
+
+https://github.com/Thomash100/Radtour-Planer/issues/26
+
+P0-Fokus:
+
+- Startseite ohne automatische Demo-Route.
+- Gefuehrter Workflow fuer direkte Eingabe oder GPX-Import.
+- Stabile Kartenansicht mit Vollbildmodus.
+- GPX-Bearbeitung und Etappenlogik.
+- Keine Salzburg-Muenchen-Vorbelegung nach GPX-Import.
+- Keine Luftlinie als echte Route.
+- Codex-Arbeitsstandard und Leitplanken.
+
+## Technischer Stand
+
+- Next.js App Router mit TypeScript.
+- Tailwind CSS und shadcn/ui-kompatible Komponenten.
+- MapLibre GL JS mit OpenStreetMap-Rastertiles.
+- Prisma ORM mit PostgreSQL/PostGIS.
+- Redis und BullMQ fuer Hintergrundjobs.
+- Docker Compose fuer lokale Entwicklung, Raspberry Pi und Webserver.
+
+## Wichtige Architekturprinzipien
+
+- Modularer Monolith vor Microservices.
+- Feature-Slices statt breiter Umbauten.
+- Route, Etappen, Karte und Hoehenprofil muessen dieselbe Routengrundlage nutzen.
+- GPX-Import bleibt eine zentrale Grundlage fuer die erste echte Testplanung.
+- Oeffentliche OSM-/Overpass-/Geocoding-Dienste duerfen nicht als dauerhaftes Produktionsbackend verwendet werden.
+- Datenquellen, Lizenzen und Attribution muessen sichtbar bleiben.
+
+## Qualitaetsstandard
+
+Vor Abschluss eines Entwicklungsabschnitts:
+
+- `git diff --check`
+- `npm run lint`
+- `npm run typecheck` oder `tsc --noEmit`
+- `npm run build`
+- bei Deployment: Docker-/Raspberry-Pi-Pruefung
+- PR oder Issue mit Testergebnis und manuellen Pruefpunkten aktualisieren
+
+## Aktueller Arbeitsstandard
+
+Issue #27 legt fest, dass jeder Codex-Abschnitt mit einem geprueften und dokumentierten Stand endet:
+
+https://github.com/Thomash100/Radtour-Planer/issues/27
+
+Details stehen in:
+
+- [AGENTS.md](../AGENTS.md)
+- [docs/CODEX_WORKFLOW.md](CODEX_WORKFLOW.md)
+- [docs/ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)
+- [docs/TESTING.md](TESTING.md)
+
+## Naechste fachliche Arbeit
+
+Nach #27 koennen #28 und #29 als getrennte Entwicklungsabschnitte umgesetzt werden. Ziel ist, Bedienworkflow, Karte, GPX, Etappen, Hoehenprofil und POIs schrittweise zu verbessern, ohne die App durch unstrukturierte Zusatzfunktionen unuebersichtlich zu machen.

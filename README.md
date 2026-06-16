@@ -169,6 +169,14 @@ npm run build
 
 `POST /api/poi/sync-osm` initialisiert Redis erst beim API-Aufruf. Dadurch kann der Next.js-Build ohne laufenden Redis-Container kompiliert werden; fuer den Queue-Flow selbst muss Redis laufen.
 
+## Projektsteuerung
+
+- Codex-Arbeitsstandard: [AGENTS.md](AGENTS.md)
+- Codex-Workflow: [docs/CODEX_WORKFLOW.md](docs/CODEX_WORKFLOW.md)
+- Projektzusammenfassung: [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md)
+- Architekturentscheidungen: [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)
+- Testing und Pruefstandard: [docs/TESTING.md](docs/TESTING.md)
+
 ## API-Auszug
 
 - `POST /api/routes/calculate`
