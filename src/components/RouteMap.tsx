@@ -70,6 +70,7 @@ type RouteMapProps = {
   stages?: Stage[];
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
+  variant?: "embedded" | "workspace";
   onSelectPoi?: (poi: MapPoi) => void;
 };
 
@@ -515,7 +516,7 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
   return haversineKm(firstWaypoint, routeStart) <= maxEndpointDistanceKm && haversineKm(lastWaypoint, routeEnd) <= maxEndpointDistanceKm;
 }
 
-export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, onSelectPoi }: RouteMapProps) {
+export function RouteMap({ route, pois = [], stages = [], waypoints = [], selectedPoiId, variant = "embedded", onSelectPoi }: RouteMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Marker[]>([]);
@@ -772,8 +773,8 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     <div
       className="relative overflow-hidden rounded-lg border bg-slate-100"
       style={{
-        height: "clamp(300px, calc(100dvh - 12rem), 620px)",
-        maxHeight: "calc(100dvh - 6rem)"
+        height: variant === "workspace" ? "calc(100dvh - 10rem)" : "clamp(300px, calc(100dvh - 12rem), 620px)",
+        maxHeight: variant === "workspace" ? "none" : "calc(100dvh - 6rem)"
       }}
     >
       <div ref={containerRef} className="absolute inset-0" />

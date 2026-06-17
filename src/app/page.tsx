@@ -1,9 +1,8 @@
-import { ArrowRight, Bed, Bike, Briefcase, MapPinned, Utensils, Wrench } from "lucide-react";
+import { Bed, Briefcase, FileText, Map, Route, Upload, Utensils, Wrench } from "lucide-react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 const modules = [
   { icon: Bed, title: "Unterkunft", text: "Hotels, Pensionen, Ferienwohnungen und Camping entlang der Etappen." },
@@ -22,21 +21,33 @@ export default function HomePage() {
             <Badge variant="sponsored">MVP Prototype</Badge>
             <h1 className="mt-5 text-4xl font-bold leading-tight text-slate-950 sm:text-6xl">BikeTripHub</h1>
             <p className="mt-5 text-xl text-slate-700">Plane deine komplette Radreise entlang deiner Route.</p>
-            <form action="/planer" className="mt-8 grid gap-3 rounded-lg border bg-white/94 p-3 shadow-panel sm:grid-cols-[1fr_1fr_auto]">
-              <Input aria-label="Startort" defaultValue="Muenchen" name="start" placeholder="Startort" />
-              <Input aria-label="Zielort" defaultValue="Salzburg" name="end" placeholder="Zielort" />
-              <Button type="submit">
-                Route planen
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Button asChild variant="outline">
-                <Link href="/planer">
-                  <MapPinned className="h-4 w-4" />
-                  GPX-Datei hochladen
+            <div className="mt-8 grid gap-3 rounded-lg border bg-white/94 p-3 shadow-panel sm:grid-cols-2">
+              <Button asChild>
+                <Link href="/planer?mode=direct">
+                  <Route className="h-4 w-4" />
+                  Neue Tour planen
                 </Link>
               </Button>
+              <Button asChild variant="outline">
+                <Link href="/planer?mode=gpx">
+                  <Upload className="h-4 w-4" />
+                  GPX-Datei laden
+                </Link>
+              </Button>
+              <Button asChild variant="secondary">
+                <Link href="/planer?mode=demo">
+                  <Map className="h-4 w-4" />
+                  Demo-Tour oeffnen
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/planer?open=last">
+                  <FileText className="h-4 w-4" />
+                  Gespeicherte Tour
+                </Link>
+              </Button>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild variant="ghost">
                 <Link href="/partner">Partnerbetrieb eintragen</Link>
               </Button>
