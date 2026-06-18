@@ -12,7 +12,11 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "prisma db seed",
-    "worker": "tsx scripts/worker.ts"
+    "worker": "tsx scripts/worker.ts",
+    "artifact:public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-public-artifact.ps1",
+    "artifact:private": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-private-artifact.ps1",
+    "artifact:check-public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-public-artifact.ps1",
+    "artifact:check-private": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-private-artifact.ps1"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-18
+Stand: 2026-06-19
 
 ## Produkt
 
@@ -30,6 +30,7 @@ P0-Fokus:
 - Prisma ORM mit PostgreSQL/PostGIS.
 - Redis und BullMQ fuer Hintergrundjobs.
 - Docker Compose fuer lokale Entwicklung, Raspberry Pi und Webserver.
+- Public/private-Deployment-Artefakte sind als naechster Strukturstandard vorbereitet.
 
 ## Wichtige Architekturprinzipien
 
@@ -71,6 +72,14 @@ Details stehen in:
 - Explizite Demo-Tour bleibt verfuegbar, wird aber nicht automatisch geladen.
 - Lokaler TourState speichert Route, Etappen und POI fuer Ruecksprung und Vollbildkarte.
 - `/planer/karte` ist ein eigener Kartenarbeitsbereich mit Ruecksprung zur Bearbeitung und Etappenplanung.
+
+## Deployment-Struktur
+
+- Arbeitsbranches bleiben vollstaendige Entwicklungsstaende mit Quellcode, Tests, Doku und Buildlogik.
+- `public` soll nur oeffentlich auslieferbare Webroot-/Asset-/Proxy-Dateien enthalten.
+- `private` soll die serverseitige Next.js-Anwendung mit API, Prisma, Redis-/Worker-Anbindung und Beispielkonfiguration enthalten.
+- Die aktuelle App ist nicht als rein statischer Export geeignet; empfohlen ist Next.js-Serverbetrieb im privaten Bereich mit oeffentlichem Webroot/Reverse Proxy.
+- Lokale Artefakte werden mit `npm run artifact:public` und `npm run artifact:private` unter `artifacts/` erzeugt und mit den zugehoerigen Check-Skripten geprueft.
 
 ## Naechste fachliche Arbeit
 
