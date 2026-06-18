@@ -20,7 +20,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -115,6 +115,7 @@ const leadSchema = z.object({
 
 type PlannerForm = z.infer<typeof plannerSchema>;
 type LeadForm = z.infer<typeof leadSchema>;
+type PlannerView = "planning" | "map" | "split";
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
@@ -141,6 +142,12 @@ const profileLabels: Record<string, string> = {
   touristic: "touristisch",
   sportive: "sportlich"
 };
+
+const plannerViewOptions: Array<{ value: PlannerView; label: string }> = [
+  { value: "planning", label: "Planung" },
+  { value: "map", label: "Karte" },
+  { value: "split", label: "Geteilt" }
+];
 
 function leadTypeForPoi(category: string) {
   if (category === "ACCOMMODATION") return "ACCOMMODATION";
@@ -187,6 +194,7 @@ export function PlannerClient({
   const [status, setStatus] = useState("Bereit fuer die erste Route.");
   const [isBusy, setIsBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
+  const [plannerView, setPlannerView] = useState<PlannerView>("planning");
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -216,6 +224,12 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const showPlanningPanels = plannerView !== "map";
+  const showMapPanel = plannerView !== "planning";
+  const plannerGridClass = cn(
+    "grid gap-4",
+    plannerView === "map" ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[360px_minmax(0,1fr)_340px]"
+  );
   const quickFilters = [
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
     { label: "E-Bike", active: ebikeFriendly, setActive: setEbikeFriendly },
@@ -230,6 +244,27 @@ export function PlannerClient({
     () => (selectedCategories.length > 0 ? selectedCategories.join(",") : ""),
     [selectedCategories]
   );
+
+  useEffect(() => {
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
+
+    if (desktopQuery.matches) {
+      setPlannerView("split");
+    }
+
+    const syncSplitView = (event: MediaQueryListEvent) => {
+      if (!event.matches) {
+        setPlannerView((current) => (current === "split" ? "planning" : current));
+      }
+    };
+
+    desktopQuery.addEventListener("change", syncSplitView);
+    return () => desktopQuery.removeEventListener("change", syncSplitView);
+  }, []);
+
+  function showRouteMapView() {
+    setPlannerView((current) => (current === "split" ? "split" : "map"));
+  }
 
   const loadPois = useCallback(
     async (routeId = savedRoute?.id, corridorKm = plannerForm.getValues("corridorKm")) => {
@@ -334,6 +369,7 @@ export function PlannerClient({
 
       const savedData: SavedRoute = { ...calculated, id: saved.route.id };
       setSavedRoute(savedData);
+      showRouteMapView();
       const generatedStages = await generateStages(saved.route.id, values.targetKm);
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
@@ -378,6 +414,7 @@ export function PlannerClient({
 
       const savedData: SavedRoute = { ...imported, id: saved.route.id };
       setSavedRoute(savedData);
+      showRouteMapView();
       const generatedStages = await generateStages(saved.route.id, plannerForm.getValues("targetKm"));
       const poiPayload = await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
@@ -500,8 +537,29 @@ export function PlannerClient({
 
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
-      <section className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_340px]">
-        <aside className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-white p-2 shadow-sm">
+        <div className="inline-flex rounded-md border bg-white p-1">
+          {plannerViewOptions.map((option) => (
+            <Button
+              key={option.value}
+              aria-pressed={plannerView === option.value}
+              className={cn(option.value === "split" && "hidden lg:inline-flex")}
+              size="sm"
+              type="button"
+              variant={plannerView === option.value ? "default" : "ghost"}
+              onClick={() => setPlannerView(option.value)}
+            >
+              {option.value === "planning" && <Route className="h-4 w-4" />}
+              {option.value === "map" && <MapPinned className="h-4 w-4" />}
+              {option.value === "split" && <SlidersHorizontal className="h-4 w-4" />}
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
+      <section className={plannerGridClass}>
+        <aside className={cn("space-y-4", showPlanningPanels ? "block" : "hidden")}>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -657,21 +715,23 @@ export function PlannerClient({
           </Card>
         </aside>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
             <Metric label="Distanz" value={route ? formatKm(route.distanceKm) : "-"} />
             <Metric label="Hoehenmeter" value={route ? `${route.elevationUp} m` : "-"} />
             <Metric label="Fahrzeit" value={route ? formatHours(route.durationHours) : "-"} />
             <Metric label="Etappen" value={stages.length ? String(stages.length) : "-"} />
           </div>
-          <RouteMap
-            pois={pois}
-            route={route?.geometryGeoJson}
-            selectedPoiId={selectedPoi?.id}
-            stages={stages}
-            waypoints={route?.waypoints}
-            onSelectPoi={setSelectedPoi}
-          />
+          {showMapPanel && (
+            <RouteMap
+              pois={pois}
+              route={route?.geometryGeoJson}
+              selectedPoiId={selectedPoi?.id}
+              stages={stages}
+              waypoints={route?.waypoints}
+              onSelectPoi={setSelectedPoi}
+            />
+          )}
           {savedRoute && (
             <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-3 shadow-sm">
               <Button asChild>
@@ -692,6 +752,7 @@ export function PlannerClient({
               </Button>
             </div>
           )}
+          {showPlanningPanels && (
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
             <Card>
               <CardHeader className="space-y-3">
@@ -796,9 +857,10 @@ export function PlannerClient({
             </Card>
             <ElevationProfile points={route?.elevationProfile ?? []} />
           </div>
+          )}
         </section>
 
-        <aside className="space-y-4">
+        <aside className={cn("space-y-4", showPlanningPanels ? "block" : "hidden")}>
           <Card>
             <CardHeader>
               <CardTitle>POI und Angebote</CardTitle>

@@ -12,6 +12,8 @@ import {
   Landmark,
   LocateFixed,
   Lock,
+  Maximize2,
+  Minimize2,
   Pill,
   ShoppingBasket,
   Train,
@@ -21,7 +23,7 @@ import {
   Wrench
 } from "lucide-react";
 import maplibregl, { type GeoJSONSource, type Marker } from "maplibre-gl";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 import { haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 import { cn } from "@/lib/utils";
@@ -83,6 +85,7 @@ const defaultMinZoom = 2;
 const routeMaxZoom = 16;
 const autoFitMaxZoom = 12;
 const routeBoundsPaddingRatio = 0.18;
+const routeBoundsPaddingKm = 25;
 const minRouteBoundsPaddingDeg = 0.03;
 
 const categoryStyles: Record<string, { color: string; label: string }> = {
@@ -206,7 +209,15 @@ function createBounds(coordinates: Position[]) {
   return bounds;
 }
 
-function fitPadding(stagesLength: number) {
+function fitPadding(stagesLength: number, container?: HTMLElement | null) {
+  const width = container?.clientWidth ?? 0;
+  const height = container?.clientHeight ?? 0;
+  const compact = width < 640 || height < 430;
+
+  if (compact) {
+    return { top: 76, right: 32, bottom: stagesLength > 0 ? 108 : 44, left: 32 };
+  }
+
   return { top: 112, right: 72, bottom: stagesLength > 0 ? 132 : 72, left: 72 };
 }
 
@@ -220,8 +231,12 @@ function paddedRouteBounds(coordinates: Position[]) {
     return null;
   }
 
-  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
-  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, minRouteBoundsPaddingDeg);
+  const centerLat = bounds.center.lat;
+  const latPaddingFromKm = routeBoundsPaddingKm / 111;
+  const lonKmFactor = Math.max(Math.cos((centerLat * Math.PI) / 180), 0.2) * 111;
+  const lonPaddingFromKm = routeBoundsPaddingKm / lonKmFactor;
+  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, lonPaddingFromKm, minRouteBoundsPaddingDeg);
+  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, latPaddingFromKm, minRouteBoundsPaddingDeg);
 
   const west = clamp(bounds.west - lonPadding, -180, 180);
   const east = clamp(bounds.east + lonPadding, -180, 180);
@@ -233,6 +248,28 @@ function paddedRouteBounds(coordinates: Position[]) {
   }
 
   return new maplibregl.LngLatBounds([west, south], [east, north]);
+}
+
+function containerDebug(container?: HTMLElement | null) {
+  if (!container) {
+    return null;
+  }
+
+  return {
+    width: Math.round(container.clientWidth),
+    height: Math.round(container.clientHeight)
+  };
+}
+
+function debugRouteBounds(routeValidation: ReturnType<typeof validateRoute>) {
+  return "bounds" in routeValidation.debug ? routeValidation.debug.bounds : null;
+}
+
+function interactiveMapTarget(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    Boolean(target.closest("button, a, .maplibregl-ctrl, .map-marker, .route-endpoint-marker, .route-waypoint-marker"))
+  );
 }
 
 function routeSignature(coordinates: Position[]) {
@@ -444,34 +481,48 @@ function resetRouteCameraLimits(map: maplibregl.Map) {
   map.setMaxBounds(null);
   map.setMinZoom(defaultMinZoom);
   map.setMaxZoom(routeMaxZoom);
+  return {
+    maxBounds: null,
+    minZoom: defaultMinZoom,
+    maxZoom: routeMaxZoom
+  };
 }
 
-function applyRouteCameraLimits(map: maplibregl.Map, routeValidation: ReturnType<typeof validateRoute>, stagesLength: number) {
+function applyRouteCameraLimits(
+  map: maplibregl.Map,
+  routeValidation: ReturnType<typeof validateRoute>,
+  stagesLength: number,
+  container?: HTMLElement | null
+) {
   if (!routeValidation.line || routeValidation.fitCoordinates.length < 2 || routeValidation.blockFit) {
-    resetRouteCameraLimits(map);
-    return;
+    return resetRouteCameraLimits(map);
   }
 
   const panBounds = paddedRouteBounds(routeValidation.fitCoordinates);
   if (!panBounds) {
-    resetRouteCameraLimits(map);
-    return;
+    return resetRouteCameraLimits(map);
   }
 
   map.setMaxBounds(panBounds);
   map.setMaxZoom(routeMaxZoom);
 
   const fitCamera = map.cameraForBounds(createBounds(routeValidation.fitCoordinates), {
-    padding: fitPadding(stagesLength),
+    padding: fitPadding(stagesLength, container),
     maxZoom: autoFitMaxZoom
   });
   const routeFitZoom = fitCamera?.zoom;
   const minZoom =
     typeof routeFitZoom === "number" && Number.isFinite(routeFitZoom)
-      ? clamp(routeFitZoom - 0.75, defaultMinZoom, autoFitMaxZoom)
+      ? clamp(routeFitZoom - 0.35, defaultMinZoom, autoFitMaxZoom)
       : defaultMinZoom;
 
   map.setMinZoom(minZoom);
+  return {
+    maxBounds: panBounds.toArray(),
+    minZoom,
+    maxZoom: routeMaxZoom,
+    routeFitZoom
+  };
 }
 
 function createRouteMarker(
@@ -521,10 +572,13 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
   const markersRef = useRef<Marker[]>([]);
   const endpointMarkersRef = useRef<Marker[]>([]);
   const fitTimerRef = useRef<number | null>(null);
+  const mapClickTimerRef = useRef<number | null>(null);
+  const mapPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const fittedRouteSignatureRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState("");
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
   const [autoFitRoute, setAutoFitRoute] = useState(true);
+  const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
 
   const fitRouteToBounds = useCallback(
@@ -551,11 +605,22 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
 
           map.resize();
           map.fitBounds(createBounds(routeValidation.fitCoordinates), {
-            padding: fitPadding(stages.length),
+            padding: fitPadding(stages.length, containerRef.current),
             maxZoom: autoFitMaxZoom,
             duration: 600
           });
           fittedRouteSignatureRef.current = routeValidation.signature;
+          if (process.env.NODE_ENV !== "production") {
+            console.debug("RouteMap fitBounds", {
+              container: containerDebug(containerRef.current),
+              routeBounds: debugRouteBounds(routeValidation),
+              mapBounds: map.getBounds().toArray(),
+              maxBounds: map.getMaxBounds()?.toArray() ?? null,
+              zoom: map.getZoom(),
+              minZoom: map.getMinZoom(),
+              maxZoom: map.getMaxZoom()
+            });
+          }
         });
       }, 100);
     },
@@ -567,6 +632,23 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       console.debug("RouteMap diagnostics", routeValidation.debug);
     }
   }, [routeValidation.debug, routeValidation.signature]);
+
+  useEffect(() => {
+    const resizeTimer = window.setTimeout(() => mapRef.current?.resize(), 80);
+    return () => window.clearTimeout(resizeTimer);
+  }, [isFullscreenMap]);
+
+  useEffect(() => {
+    if (!isFullscreenMap) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreenMap]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -619,6 +701,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     });
 
     mapRef.current = map;
+    map.doubleClickZoom.disable();
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
     map.on("load", () => {
@@ -643,6 +726,9 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       window.clearTimeout(resizeTimer);
       if (fitTimerRef.current) {
         window.clearTimeout(fitTimerRef.current);
+      }
+      if (mapClickTimerRef.current) {
+        window.clearTimeout(mapClickTimerRef.current);
       }
       resizeObserver?.disconnect();
       window.removeEventListener("resize", resizeMap);
@@ -692,12 +778,27 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
       endpointMarkersRef.current = [];
 
       if (!line) {
-        resetRouteCameraLimits(map);
+        const cameraLimits = resetRouteCameraLimits(map);
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("RouteMap camera limits", {
+            container: containerDebug(containerRef.current),
+            cameraLimits,
+            zoom: map.getZoom()
+          });
+        }
         map.resize();
         return;
       }
 
-      applyRouteCameraLimits(map, routeValidation, stages.length);
+      const cameraLimits = applyRouteCameraLimits(map, routeValidation, stages.length, containerRef.current);
+      if (process.env.NODE_ENV !== "production") {
+        console.debug("RouteMap camera limits", {
+          container: containerDebug(containerRef.current),
+          routeBounds: debugRouteBounds(routeValidation),
+          cameraLimits,
+          zoom: map.getZoom()
+        });
+      }
 
       const sortedWaypoints = waypoints.filter(validWaypoint).slice().sort((a, b) => a.order - b.order);
       if (waypointEndpointsMatchLine(sortedWaypoints, line)) {
@@ -768,17 +869,45 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
     });
   }, [pois, selectedPoiId, onSelectPoi]);
 
+  function handleMapPointerDown(event: PointerEvent<HTMLDivElement>) {
+    mapPointerStartRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handleMapClick(event: MouseEvent<HTMLDivElement>) {
+    if (isFullscreenMap || interactiveMapTarget(event.target)) {
+      return;
+    }
+
+    const pointerStart = mapPointerStartRef.current;
+    const moved =
+      pointerStart &&
+      Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 8;
+    if (moved) {
+      return;
+    }
+
+    if (mapClickTimerRef.current) {
+      window.clearTimeout(mapClickTimerRef.current);
+    }
+    mapClickTimerRef.current = window.setTimeout(() => setIsFullscreenMap(true), 180);
+  }
+
+  function handleMapDoubleClick(event: MouseEvent<HTMLDivElement>) {
+    if (interactiveMapTarget(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (mapClickTimerRef.current) {
+      window.clearTimeout(mapClickTimerRef.current);
+    }
+    setIsFullscreenMap((current) => !current);
+  }
+
   return (
-    <div
-      className="relative overflow-hidden rounded-lg border bg-slate-100"
-      style={{
-        height: "clamp(300px, calc(100dvh - 12rem), 620px)",
-        maxHeight: "calc(100dvh - 6rem)"
-      }}
-    >
-      <div ref={containerRef} className="absolute inset-0" />
-      <div className="absolute left-4 top-4 z-10 flex max-w-[calc(100%-2rem)] flex-wrap gap-2">
-        <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
+    <div className={cn("space-y-2", isFullscreenMap && "fixed inset-0 z-50 flex flex-col bg-white p-2")}>
+      <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-2 shadow-sm">
+        <div className="inline-flex rounded-md border bg-white p-1">
           {[
             { value: "standard", label: "Standardkarte" },
             { value: "cycle", label: "Radkarte" }
@@ -797,9 +926,9 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
             </button>
           ))}
         </div>
-        <div className="inline-flex rounded-md border bg-white/92 p-1 shadow-panel backdrop-blur">
+        <div className="inline-flex rounded-md border bg-white p-1">
           <button
-            aria-label="Route zentrieren"
+            aria-label="Route anzeigen"
             className={cn(
               "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
               routeValidation.line && !routeValidation.blockFit
@@ -811,7 +940,7 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
             onClick={() => fitRouteToBounds(true)}
           >
             <LocateFixed className="h-4 w-4" />
-            <span>Route zentrieren</span>
+            <span>Route anzeigen</span>
           </button>
           <button
             aria-label={autoFitRoute ? "Kartenausschnitt fixieren" : "Karte automatisch zentrieren"}
@@ -827,17 +956,46 @@ export function RouteMap({ route, pois = [], stages = [], waypoints = [], select
             <span>Auto-Zoom: {autoFitRoute ? "Einmalig" : "Aus"}</span>
           </button>
         </div>
+        <button
+          aria-pressed={isFullscreenMap}
+          className="inline-flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-muted"
+          type="button"
+          onClick={() => setIsFullscreenMap((current) => !current)}
+        >
+          {isFullscreenMap ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          <span>{isFullscreenMap ? "Verkleinern" : "Vollbild"}</span>
+        </button>
       </div>
       {(mapError || routeValidation.warning) && (
-        <div className="absolute right-4 top-4 z-10 max-w-sm rounded-md border border-amber-200 bg-amber-50/95 p-3 text-sm text-amber-950 shadow-panel backdrop-blur">
+        <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-sm">
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{mapError || routeValidation.warning}</span>
           </div>
         </div>
       )}
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-lg border bg-slate-100",
+          isFullscreenMap && "min-h-0 flex-1 rounded-md"
+        )}
+        style={
+          isFullscreenMap
+            ? { overscrollBehavior: "contain" }
+            : {
+                height: "clamp(300px, 60dvh, 560px)",
+                maxHeight: "calc(100dvh - 12rem)",
+                overscrollBehavior: "contain"
+              }
+        }
+        onClick={handleMapClick}
+        onDoubleClick={handleMapDoubleClick}
+        onPointerDown={handleMapPointerDown}
+      >
+        <div ref={containerRef} className="absolute inset-0" />
+      </div>
       {stages.length > 0 && (
-        <div className="absolute bottom-4 left-4 right-4 flex max-w-2xl gap-2 overflow-x-auto rounded-md border bg-white/92 p-2 shadow-panel backdrop-blur">
+        <div className="flex gap-2 overflow-x-auto rounded-md border bg-white p-2 shadow-sm">
           {stages.map((stage, index) => (
             <div key={stage.id ?? stage.dayNumber} className="min-w-28 rounded-md bg-muted px-3 py-2 text-sm">
               <div className="flex items-center gap-2 font-semibold">

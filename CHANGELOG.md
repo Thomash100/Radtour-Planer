@@ -31,3 +31,8 @@
 - Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt
 - Kartenhoehe auf die sichtbare Displayhoehe begrenzt
 - Karten-Pan und Zoom auf den Routenbereich begrenzt
+- Planer-Ansichten fuer Planung, Karte und Desktop-Geteilt ergaenzt
+- Routenkarte mit kilometerbasiertem Routenkorridor fuer Pan-Grenzen stabilisiert
+- Kartenbedienung aus der Kartenflaeche in eine Toolbar oberhalb verschoben
+- Karten-Vollbildmodus per Klick und Verkleinern per Doppelklick ergaenzt
+- Etappenlegende unter die Karte verschoben, damit die Route frei sichtbar bleibt
