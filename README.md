@@ -122,6 +122,13 @@ npm run artifact:check-private
 
 Details stehen in [docs/DEPLOYMENT_PUBLIC_PRIVATE.md](docs/DEPLOYMENT_PUBLIC_PRIVATE.md).
 
+Die echten Deployment-Branches sind zielordnerrein:
+
+- `public`: oeffentlicher Webroot bzw. Proxy-/Asset-Bereich.
+- `private`: privater Next.js-/API-/Prisma-/Worker-Bereich.
+
+Details zur Befuellung und zum manuellen Server-/RPi-Test stehen in [docs/DEPLOYMENT_BRANCHES.md](docs/DEPLOYMENT_BRANCHES.md).
+
 GitHub-Zielrepository:
 
 ```text

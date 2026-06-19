@@ -31,6 +31,7 @@ P0-Fokus:
 - Redis und BullMQ fuer Hintergrundjobs.
 - Docker Compose fuer lokale Entwicklung, Raspberry Pi und Webserver.
 - Public/private-Deployment-Artefakte sind als naechster Strukturstandard vorbereitet.
+- Echte Deployment-Branches `public` und `private` werden aus geprueften Artefakten befuellt.
 
 ## Wichtige Architekturprinzipien
 
@@ -80,6 +81,8 @@ Details stehen in:
 - `private` soll die serverseitige Next.js-Anwendung mit API, Prisma, Redis-/Worker-Anbindung und Beispielkonfiguration enthalten.
 - Die aktuelle App ist nicht als rein statischer Export geeignet; empfohlen ist Next.js-Serverbetrieb im privaten Bereich mit oeffentlichem Webroot/Reverse Proxy.
 - Lokale Artefakte werden mit `npm run artifact:public` und `npm run artifact:private` unter `artifacts/` erzeugt und mit den zugehoerigen Check-Skripten geprueft.
+- Der Branch `public` entspricht dem oeffentlichen Zielordner; der Branch `private` entspricht dem privaten/serverseitigen Zielordner.
+- Nach dem Push der Deployment-Branches bleibt ein manueller Server- oder Raspberry-Pi-Deploytest erforderlich.
 
 ## Naechste fachliche Arbeit
 

@@ -38,3 +38,4 @@
 - Public/private-Deployment-Konzept dokumentiert
 - Artefakt-Skripte fuer public/private-Branch-Vorbereitung ergaenzt
 - Sicherheitschecks fuer public/private-Artefakte ergaenzt
+- Echte Deployment-Branches `public` und `private` vorbereitet und dokumentiert

@@ -46,6 +46,15 @@ git clone https://github.com/Thomash100/Radtour-Planer.git
 cd Radtour-Planer
 ```
 
+Wenn der echte Deployment-Branch getestet werden soll:
+
+```bash
+git clone --branch private https://github.com/Thomash100/Radtour-Planer.git Radtour-Planer
+cd Radtour-Planer
+```
+
+Der Branch `public` wird fuer den Raspberry-Pi-Test nicht benoetigt, weil die App aus dem privaten Next.js-/Docker-Bereich laeuft.
+
 Falls ein Testbranch oder PR-Branch geprueft wird:
 
 ```bash

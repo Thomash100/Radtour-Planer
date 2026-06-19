@@ -108,6 +108,35 @@ npm run artifact:private
 
 Die Artefakte werden nicht committed. Sie dienen als vorbereitete Quelle fuer spaetere Befuellung der Branches `public` und `private`.
 
+## Echte Deployment-Branches
+
+Die echten Branches `public` und `private` sind keine Entwicklungsbranches und bekommen keine Pull Requests gegen `main`.
+
+- `public` entspricht direkt dem oeffentlichen Zielordner bzw. Webroot.
+- `private` entspricht direkt dem privaten/serverseitigen Zielordner.
+- Beide Branches sind zielordnerrein.
+- Es werden keine Wrapper-Ordner wie `httpdocs/`, `var/www/`, `_private/` oder projektspezifische Serverpfade angelegt.
+
+Aktuelle Quelle fuer die initiale Befuellung:
+
+- Integrationsbranch: `codex/prepare-v0.3.0-route-planner-test`
+- Quellstand: `92392e7`
+
+Die Befuellung erfolgt aus geprueften lokalen Artefakten:
+
+```bash
+npm install
+npm run build
+npm run artifact:public
+npm run artifact:check-public
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Danach wird der Inhalt von `artifacts/public` in den Branch `public` und der Inhalt von `artifacts/private` in den Branch `private` uebernommen.
+
+Die Deployment-Branches duerfen nur aktualisiert werden, wenn die Artefakt-Checks erfolgreich waren.
+
 ## Artefakte pruefen
 
 ```bash
@@ -128,6 +157,17 @@ Die Pruefung blockiert typische Fehler:
 Fuer Raspberry Pi bleibt `docker-compose.rpi.yml` der praktische Testpfad.
 
 Fuer Webserver/VPS bleibt `docker-compose.prod.yml` mit Reverse Proxy der produktionsnaehere Pfad. Ein klassischer FTP-Webspace reicht fuer die aktuelle App nicht aus, solange API, Prisma, Redis und Worker Teil des MVP sind.
+
+## Branch-Zuordnung auf Servern
+
+Empfohlene Zuordnung:
+
+- Webroot/oeffentlicher Bereich: Branch `public`
+- Privater App-/Runtime-Bereich: Branch `private`
+
+Der Branch `public` ist nicht allein lauffaehig. Er enthaelt nur oeffentlich zulaessige Dateien und optional statische Next-Assets. Die eigentliche Anwendung laeuft aus dem privaten Bereich.
+
+Der Branch `private` enthaelt die Next.js-App, API-Routen, Prisma, Worker- und Docker-Konfiguration. Echte `.env`-Dateien werden auf dem Zielsystem angelegt und nicht aus Git bezogen.
 
 ## Manueller Stopppunkt
 

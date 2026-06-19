@@ -33,6 +33,30 @@ git fetch origin
 git switch codex/prepare-v0.3.0-route-planner-test
 ```
 
+## Deployment-Branches public/private
+
+Fuer getrennte Serverbereiche koennen die zielordnerreinen Deployment-Branches verwendet werden:
+
+- `public`: oeffentlicher Webroot bzw. Proxy-/Asset-Bereich.
+- `private`: privater Next.js-/API-/Prisma-/Worker-Bereich.
+
+Der Branch `public` enthaelt keine lauffaehige App und keine Secrets. Die App laeuft aus `private`.
+
+Privater Bereich:
+
+```bash
+git clone --branch private https://github.com/Thomash100/Radtour-Planer.git radtour-private
+cd radtour-private
+```
+
+Oeffentlicher Bereich:
+
+```bash
+git clone --branch public https://github.com/Thomash100/Radtour-Planer.git radtour-public
+```
+
+Details stehen in [docs/DEPLOYMENT_BRANCHES.md](DEPLOYMENT_BRANCHES.md).
+
 ## Umgebung konfigurieren
 
 ```bash

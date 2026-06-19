@@ -15,6 +15,7 @@ if (Test-Path -LiteralPath $outputFullPath) {
 New-Item -ItemType Directory -Path $outputFullPath -Force | Out-Null
 
 $files = @(
+  ".gitignore",
   "AGENTS.md",
   "Caddyfile",
   "CHANGELOG.md",
