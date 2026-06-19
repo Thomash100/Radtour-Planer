@@ -109,6 +109,19 @@ Fuer einen PR- oder Testbranch:
 
 Details stehen in [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md).
 
+## Public/private-Deployment-Artefakte
+
+Fuer eine spaetere Trennung in oeffentlichen Webroot und privaten Serverbereich gibt es vorbereitete Artefakt-Skripte:
+
+```bash
+npm run artifact:public
+npm run artifact:check-public
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Details stehen in [docs/DEPLOYMENT_PUBLIC_PRIVATE.md](docs/DEPLOYMENT_PUBLIC_PRIVATE.md).
+
 GitHub-Zielrepository:
 
 ```text

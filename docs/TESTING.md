@@ -48,6 +48,19 @@ docker compose -f docker-compose.rpi.yml up -d
 curl -fsS http://localhost:3000/api/health
 ```
 
+## Public/private-Artefaktpruefung
+
+Bei Webserver- oder public/private-Deployment-Aenderungen:
+
+```bash
+npm run artifact:public
+npm run artifact:check-public
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Die Artefakte liegen lokal unter `artifacts/` und werden nicht committed.
+
 ## Manuelle UI-Pruefung
 
 Je nach Aufgabe pruefen:
@@ -75,6 +88,7 @@ Jeder PR oder Issue-Abschlusskommentar muss enthalten:
 - Ergebnis Typecheck
 - Ergebnis Build
 - Ergebnis Docker-/Raspberry-Pi-Test, falls betroffen
+- Ergebnis public/private-Artefaktpruefung, falls betroffen
 - manuelle Pruefpunkte
 - Entscheidung: merge empfohlen oder Nacharbeit erforderlich
 
