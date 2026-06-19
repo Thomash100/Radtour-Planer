@@ -31,3 +31,7 @@
 - Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt
 - Kartenhoehe auf die sichtbare Displayhoehe begrenzt
 - Karten-Pan und Zoom auf den Routenbereich begrenzt
+- Mehrseitiger Planungsworkflow fuer Eingabeart, direkte Route, GPX, Uebersicht, Bearbeitung und Etappen vorbereitet
+- Startseite startet ohne Demo-Orte und bietet getrennte Aktionen fuer direkte Eingabe, GPX, Demo und gespeicherte Tour
+- Lokaler TourState fuer Routenuebersicht und Vollbildkarte ergaenzt
+- Eigene Vollbildkartenroute `/planer/karte` mit Ruecksprung zur Bearbeitung und Etappenplanung ergaenzt

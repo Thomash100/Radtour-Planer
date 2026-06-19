@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-16
+Stand: 2026-06-18
 
 ## Produkt
 
@@ -14,9 +14,9 @@ https://github.com/Thomash100/Radtour-Planer/issues/26
 
 P0-Fokus:
 
-- Startseite ohne automatische Demo-Route.
-- Gefuehrter Workflow fuer direkte Eingabe oder GPX-Import.
-- Stabile Kartenansicht mit Vollbildmodus.
+- Startseite ohne automatische Demo-Route: umgesetzt in #28-Schnitt.
+- Gefuehrter Workflow fuer direkte Eingabe oder GPX-Import: als mehrstufige Planerstruktur vorbereitet.
+- Stabile Kartenansicht mit Vollbildmodus: eigene Route `/planer/karte` nutzt denselben lokalen TourState.
 - GPX-Bearbeitung und Etappenlogik.
 - Keine Salzburg-Muenchen-Vorbelegung nach GPX-Import.
 - Keine Luftlinie als echte Route.
@@ -64,6 +64,14 @@ Details stehen in:
 - [docs/ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)
 - [docs/TESTING.md](TESTING.md)
 
+## Aktueller Stand nach #28-Schnitt
+
+- Startseite zeigt keine Salzburg-/Muenchen-Vorbelegung mehr.
+- `/planer` trennt Eingabeart, direkte Route, GPX-Import, Uebersicht, Bearbeitung und Etappen als Workflow-Schritte.
+- Explizite Demo-Tour bleibt verfuegbar, wird aber nicht automatisch geladen.
+- Lokaler TourState speichert Route, Etappen und POI fuer Ruecksprung und Vollbildkarte.
+- `/planer/karte` ist ein eigener Kartenarbeitsbereich mit Ruecksprung zur Bearbeitung und Etappenplanung.
+
 ## Naechste fachliche Arbeit
 
-Nach #27 koennen #28 und #29 als getrennte Entwicklungsabschnitte umgesetzt werden. Ziel ist, Bedienworkflow, Karte, GPX, Etappen, Hoehenprofil und POIs schrittweise zu verbessern, ohne die App durch unstrukturierte Zusatzfunktionen unuebersichtlich zu machen.
+#29 bleibt getrennt: GPX-Bearbeitung und Etappenlogik sollen auf dem neuen Workflow aufsetzen, ohne die Bedienstruktur wieder zu ueberladen.

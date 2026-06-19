@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowDownToLine,
+  ArrowRight,
   BadgeEuro,
   Bed,
   Bike,
@@ -12,6 +13,7 @@ import {
   FileText,
   Filter,
   GripVertical,
+  Map,
   MapPinned,
   Route,
   Save,
@@ -20,7 +22,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -34,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toGpx, type ElevationPoint, type LineStringGeoJson } from "@/lib/geo";
+import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type TourInputMode } from "@/lib/tour-state";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 type RouteCalculation = {
@@ -115,6 +118,7 @@ const leadSchema = z.object({
 
 type PlannerForm = z.infer<typeof plannerSchema>;
 type LeadForm = z.infer<typeof leadSchema>;
+type PlannerStep = "mode" | "direct" | "gpx" | "overview" | "edit" | "stages";
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
@@ -150,13 +154,39 @@ function leadTypeForPoi(category: string) {
   return "PARTNER_CONTACT";
 }
 
+function normalizeTourMode(value?: string): TourInputMode | null {
+  if (value === "direct" || value === "gpx" || value === "demo") {
+    return value;
+  }
+  return null;
+}
+
+function normalizePlannerStep(value?: string): PlannerStep | null {
+  if (value === "mode" || value === "direct" || value === "gpx" || value === "overview" || value === "edit" || value === "stages") {
+    return value;
+  }
+  return null;
+}
+
 export function PlannerClient({
-  initialStart = "Muenchen",
-  initialEnd = "Salzburg"
+  initialStart = "",
+  initialEnd = "",
+  initialMode,
+  initialStep,
+  openLast = false
 }: {
   initialStart?: string;
   initialEnd?: string;
+  initialMode?: string;
+  initialStep?: string;
+  openLast?: boolean;
 }) {
+  const normalizedInitialMode = normalizeTourMode(initialMode);
+  const normalizedInitialStep = normalizePlannerStep(initialStep);
+  const initialPlannerStep =
+    normalizedInitialStep ?? (normalizedInitialMode === "direct" ? "direct" : normalizedInitialMode === "gpx" ? "gpx" : "mode");
+  const [inputMode, setInputMode] = useState<TourInputMode>(normalizedInitialMode ?? "direct");
+  const [plannerStep, setPlannerStep] = useState<PlannerStep>(initialPlannerStep);
   const [waypoints, setWaypoints] = useState<string[]>([]);
   const [draggedWaypointIndex, setDraggedWaypointIndex] = useState<number | null>(null);
   const [newWaypoint, setNewWaypoint] = useState("");
@@ -216,6 +246,7 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
   const quickFilters = [
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
     { label: "E-Bike", active: ebikeFriendly, setActive: setEbikeFriendly },
@@ -230,6 +261,58 @@ export function PlannerClient({
     () => (selectedCategories.length > 0 ? selectedCategories.join(",") : ""),
     [selectedCategories]
   );
+
+  useEffect(() => {
+    const urlMode = normalizeTourMode(initialMode);
+    const urlStep = normalizePlannerStep(initialStep);
+
+    if (openLast) {
+      const stored = parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY));
+      if (stored?.route) {
+        setInputMode(stored.inputMode);
+        if (stored.route.id) {
+          setSavedRoute(stored.route as SavedRoute);
+        } else {
+          setCalculation(stored.route);
+        }
+        setStages(stored.stages as Stage[]);
+        setPois(stored.pois as Poi[]);
+        setSelectedPoi(stored.pois.find((poi) => poi.id === stored.selectedPoiId) ?? stored.pois[0] ?? null);
+        setPlannerStep(urlStep ?? "overview");
+        setStatus(stored.status ? `Gespeicherte Tour geladen. ${stored.status}` : "Gespeicherte Tour geladen.");
+        return;
+      }
+      setStatus("Keine gespeicherte Tour im Browser gefunden.");
+    }
+
+    if (urlMode) {
+      setInputMode(urlMode);
+      setPlannerStep(urlMode === "demo" ? "mode" : urlMode);
+    }
+
+    if (urlStep) {
+      setPlannerStep(urlStep);
+    }
+  }, [initialMode, initialStep, openLast]);
+
+  useEffect(() => {
+    if (!route) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      TOUR_STATE_STORAGE_KEY,
+      JSON.stringify({
+        inputMode,
+        route,
+        stages,
+        pois,
+        selectedPoiId: selectedPoi?.id ?? null,
+        status,
+        updatedAt: new Date().toISOString()
+      })
+    );
+  }, [inputMode, pois, route, selectedPoi?.id, stages, status]);
 
   const loadPois = useCallback(
     async (routeId = savedRoute?.id, corridorKm = plannerForm.getValues("corridorKm")) => {
@@ -298,7 +381,7 @@ export function PlannerClient({
     return payload.stages as Stage[];
   }
 
-  async function planRoute(values: PlannerForm) {
+  async function planRoute(values: PlannerForm, routeWaypoints = waypoints) {
     setIsBusy(true);
     setLeadStatus("");
     setCalculation(null);
@@ -315,7 +398,7 @@ export function PlannerClient({
           start: values.start,
           end: values.end,
           profile: values.profile,
-          waypoints
+          waypoints: routeWaypoints
         })
       });
       const calculated = await calculateResponse.json();
@@ -338,6 +421,7 @@ export function PlannerClient({
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
       setStatus(`Route bereit: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
+      setPlannerStep("overview");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
     } finally {
@@ -347,6 +431,7 @@ export function PlannerClient({
 
   async function importGpx(file: File | null) {
     if (!file) return;
+    setInputMode("gpx");
     setIsBusy(true);
     setLeadStatus("");
     setCalculation(null);
@@ -390,11 +475,27 @@ export function PlannerClient({
           imported.elevationSource === "gpx" ? "Hoehenprofil aus Datei" : "Hoehenprofil geschaetzt"
         }. ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI sind bereit.${correctionNotice}${poiNotice}`
       );
+      setPlannerStep("overview");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
     } finally {
       setIsBusy(false);
     }
+  }
+
+  async function startDemoTour() {
+    const demoValues = {
+      ...plannerForm.getValues(),
+      start: "Muenchen",
+      end: "Salzburg",
+      profile: "balanced" as const
+    };
+    plannerForm.setValue("start", demoValues.start);
+    plannerForm.setValue("end", demoValues.end);
+    plannerForm.setValue("profile", demoValues.profile);
+    setWaypoints([]);
+    setInputMode("demo");
+    await planRoute(demoValues, []);
   }
 
   function addWaypoint() {
@@ -498,8 +599,281 @@ export function PlannerClient({
     setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
   }
 
+  const workflowHeader = (
+    <section className="rounded-lg border bg-white p-3 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <div className="text-sm text-muted-foreground">Planungsworkflow</div>
+          <h1 className="text-2xl font-semibold">Radreise planen</h1>
+          <p className="text-sm text-muted-foreground">Modus: {modeLabel}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            ["mode", "Eingabeart"],
+            ["direct", "Route"],
+            ["gpx", "GPX"],
+            ["overview", "Uebersicht"],
+            ["edit", "Bearbeiten"],
+            ["stages", "Etappen"]
+          ].map(([step, label]) => (
+            <Button
+              key={step}
+              disabled={(step === "overview" || step === "edit" || step === "stages") && !route}
+              size="sm"
+              type="button"
+              variant={plannerStep === step ? "default" : "outline"}
+              onClick={() => setPlannerStep(step as PlannerStep)}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+
+  const routeInputForm = (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Route className="h-5 w-5 text-primary" />
+          Direkte Routeneingabe
+        </CardTitle>
+        <CardDescription>Start, Ziel, Zwischenziele und Profil festlegen. Das MVP nutzt weiterhin Mockrouting.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => {
+          setInputMode("direct");
+          void planRoute(values);
+        })}>
+          <div className="grid gap-2">
+            <Label htmlFor="start">Startort</Label>
+            <Input id="start" placeholder="z. B. Hamburg" {...plannerForm.register("start")} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="end">Zielort</Label>
+            <Input id="end" placeholder="z. B. Dresden" {...plannerForm.register("end")} />
+          </div>
+          <div className="grid gap-2">
+            <Label>Zwischenziele</Label>
+            <div className="space-y-2">
+              {waypoints.map((waypoint, index) => (
+                <div
+                  key={`${waypoint}-${index}`}
+                  className="flex gap-2"
+                  draggable
+                  onDragEnd={() => setDraggedWaypointIndex(null)}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDragStart={() => setDraggedWaypointIndex(index)}
+                  onDrop={() => moveWaypoint(index)}
+                >
+                  <Button aria-label="Zwischenziel verschieben" size="icon" type="button" variant="ghost">
+                    <GripVertical className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    value={waypoint}
+                    onChange={(event) =>
+                      setWaypoints((current) => current.map((item, waypointIndex) => (waypointIndex === index ? event.target.value : item)))
+                    }
+                  />
+                  <Button aria-label="Zwischenziel entfernen" size="icon" type="button" variant="outline" onClick={() => removeWaypoint(index)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="z. B. Magdeburg"
+                  value={newWaypoint}
+                  onChange={(event) => setNewWaypoint(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addWaypoint();
+                    }
+                  }}
+                />
+                <Button aria-label="Zwischenziel hinzufuegen" size="icon" type="button" variant="secondary" onClick={addWaypoint}>
+                  <CirclePlus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-2">
+              <Label htmlFor="profile">Profil</Label>
+              <Select id="profile" {...plannerForm.register("profile")}>
+                {Object.entries(profileLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="targetKm">Tages-km</Label>
+              <Input id="targetKm" type="number" {...plannerForm.register("targetKm")} />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="corridorKm">Korridor km</Label>
+              <Input id="corridorKm" step="0.5" type="number" {...plannerForm.register("corridorKm")} />
+            </div>
+          </div>
+          <Button className="w-full" disabled={isBusy} type="submit">
+            <MapPinned className="h-4 w-4" />
+            {isBusy ? "Plant..." : "Route berechnen"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+
+  if (plannerStep === "mode") {
+    return (
+      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+        {workflowHeader}
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Neue Tour planen</CardTitle>
+              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" type="button" onClick={() => {
+                setInputMode("direct");
+                setPlannerStep("direct");
+              }}>
+                <Route className="h-4 w-4" />
+                Direkte Eingabe
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>GPX-Datei laden</CardTitle>
+              <CardDescription>Eine vorhandene GPX-Route als Grundlage importieren.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" type="button" variant="outline" onClick={() => {
+                setInputMode("gpx");
+                setPlannerStep("gpx");
+              }}>
+                <ArrowDownToLine className="h-4 w-4" />
+                GPX importieren
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Demo-Tour oeffnen</CardTitle>
+              <CardDescription>Demo bewusst laden, nicht automatisch beim Start.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full" disabled={isBusy} type="button" variant="secondary" onClick={() => void startDemoTour()}>
+                <Map className="h-4 w-4" />
+                Demo laden
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Gespeicherte Tour</CardTitle>
+              <CardDescription>Letzten Browser-TourState wiederherstellen, falls vorhanden.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild className="w-full" variant="outline">
+                <Link href="/planer?open=last">
+                  <FileText className="h-4 w-4" />
+                  Tour oeffnen
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+        <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">{status}</p>
+      </main>
+    );
+  }
+
+  if (!route && plannerStep === "direct") {
+    return (
+      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
+        {workflowHeader}
+        {routeInputForm}
+      </main>
+    );
+  }
+
+  if (!route && plannerStep === "gpx") {
+    return (
+      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6">
+        {workflowHeader}
+        <Card>
+          <CardHeader>
+            <CardTitle>GPX-Datei importieren</CardTitle>
+            <CardDescription>Nach dem Import folgt eine Uebersichtskarte zur Plausibilitaetspruefung.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input accept=".gpx,application/gpx+xml,text/xml" type="file" onChange={(event) => importGpx(event.target.files?.[0] ?? null)} />
+            <p className="text-sm text-muted-foreground">{status}</p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (route && plannerStep === "overview") {
+    return (
+      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+        {workflowHeader}
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric label="Distanz" value={formatKm(route.distanceKm)} />
+              <Metric label="Hoehenmeter" value={`${route.elevationUp} m`} />
+              <Metric label="Fahrzeit" value={formatHours(route.durationHours)} />
+              <Metric label="Eingabe" value={modeLabel} />
+            </div>
+            <RouteMap pois={pois} route={route.geometryGeoJson} selectedPoiId={selectedPoi?.id} stages={stages} waypoints={route.waypoints} onSelectPoi={setSelectedPoi} />
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Uebersicht pruefen</CardTitle>
+              <CardDescription>{route.startName} - {route.endName}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                MVP-Hinweis: Direkte Eingabe nutzt Mockrouting und ist noch keine produktive Fahrradnavigation.
+              </p>
+              {route.coordinateCorrections?.length ? (
+                <p className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
+                  Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
+                </p>
+              ) : null}
+              <Button className="w-full" type="button" onClick={() => setPlannerStep("edit")}>
+                <ArrowRight className="h-4 w-4" />
+                Weiter bearbeiten
+              </Button>
+              <Button asChild className="w-full" variant="outline">
+                <Link href="/planer/karte">
+                  <Map className="h-4 w-4" />
+                  Vollbildkarte
+                </Link>
+              </Button>
+              <Button className="w-full" type="button" variant="secondary" onClick={() => setPlannerStep("stages")}>
+                <Save className="h-4 w-4" />
+                Etappen pruefen
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+      {workflowHeader}
       <section className="grid gap-4 lg:grid-cols-[360px_minmax(0,1fr)_340px]">
         <aside className="space-y-4">
           <Card>
@@ -511,7 +885,10 @@ export function PlannerClient({
               <CardDescription>Start, Ziel, Profil und Etappenlaenge festlegen.</CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="space-y-4" onSubmit={plannerForm.handleSubmit(planRoute)}>
+              <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => {
+                setInputMode("direct");
+                void planRoute(values);
+              })}>
                 <div className="grid gap-2">
                   <Label htmlFor="start">Startort</Label>
                   <Input id="start" {...plannerForm.register("start")} />
@@ -684,6 +1061,12 @@ export function PlannerClient({
                 <Link href={`/route/${savedRoute.id}`}>
                   <MapPinned className="h-4 w-4" />
                   Route ansehen
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/planer/karte">
+                  <Map className="h-4 w-4" />
+                  Vollbildkarte
                 </Link>
               </Button>
               <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
