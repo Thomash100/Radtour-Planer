@@ -1,0 +1,248 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+enum Role {
+  GUEST
+  USER
+  PARTNER
+  ADMIN
+}
+
+enum PartnerCategory {
+  HOTEL
+  PENSION
+  CAMPING
+  LUGGAGE_TRANSFER
+  BIKE_SHOP
+  BIKE_REPAIR
+  RESTAURANT
+  TOURISM
+}
+
+enum PartnerStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum SubscriptionPlan {
+  FREE
+  HIGHLIGHTED
+  SPONSORED
+  PREMIUM
+}
+
+enum PoiCategory {
+  ACCOMMODATION
+  RESTAURANT
+  CAFE
+  BIKE_SHOP
+  BIKE_REPAIR
+  SUPERMARKET
+  PHARMACY
+  TRAIN_STATION
+  PUBLIC_TRANSPORT
+  DRINKING_WATER
+  PUBLIC_TOILET
+  SIGHT
+  SWIMMING
+  EBIKE_CHARGING
+  LUGGAGE_TRANSFER
+}
+
+enum BookingLeadType {
+  ACCOMMODATION
+  LUGGAGE_TRANSFER
+  BIKE_TRANSPORT
+  BIKE_SERVICE
+  RESTAURANT
+  PARTNER_CONTACT
+}
+
+enum LeadStatus {
+  NEW
+  SENT
+  IN_PROGRESS
+  WON
+  LOST
+  ARCHIVED
+}
+
+enum AdStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+model User {
+  id              String           @id @default(cuid())
+  name            String
+  email           String           @unique
+  role            Role             @default(USER)
+  createdAt       DateTime         @default(now())
+  routes          Route[]
+  partner         Partner?
+  bookingLeads    BookingLead[]
+  affiliateClicks AffiliateClick[]
+}
+
+model Route {
+  id              String           @id @default(cuid())
+  userId          String
+  name            String
+  description     String?
+  startName       String
+  endName         String
+  distanceKm      Float
+  elevationUp     Int
+  elevationDown   Int
+  geometryGeoJson Json
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  waypoints       RouteWaypoint[]
+  stages          RouteStage[]
+  bookingLeads    BookingLead[]
+  affiliateClicks AffiliateClick[]
+
+  @@index([userId])
+}
+
+model RouteWaypoint {
+  id      String @id @default(cuid())
+  routeId String
+  order   Int    @map("order_index")
+  name    String
+  lat     Float
+  lon     Float
+  route   Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@index([routeId, order])
+}
+
+model RouteStage {
+  id              String        @id @default(cuid())
+  routeId          String
+  dayNumber        Int
+  startName        String
+  endName          String
+  distanceKm       Float
+  elevationUp      Int
+  elevationDown    Int
+  geometryGeoJson  Json
+  route            Route         @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  bookingLeads     BookingLead[]
+
+  @@index([routeId, dayNumber])
+}
+
+model Poi {
+  id              String           @id @default(cuid())
+  name            String
+  category        PoiCategory
+  lat             Float
+  lon             Float
+  address         String?
+  phone           String?
+  website         String?
+  source          String
+  osmId           String?          @unique
+  partnerId       String?
+  tagsJson        Json
+  partner         Partner?         @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  affiliateClicks AffiliateClick[]
+
+  @@index([category])
+  @@index([partnerId])
+}
+
+model Partner {
+  id               String           @id @default(cuid())
+  userId           String           @unique
+  companyName      String
+  category         PartnerCategory
+  description      String?
+  address          String
+  lat              Float
+  lon              Float
+  phone            String?
+  email            String
+  website          String?
+  status           PartnerStatus    @default(DRAFT)
+  subscriptionPlan SubscriptionPlan  @default(FREE)
+  isFeatured       Boolean          @default(false)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pois             Poi[]
+  bookingLeads     BookingLead[]
+  affiliateClicks  AffiliateClick[]
+  adPlacements     AdPlacement[]
+}
+
+model BookingLead {
+  id            String          @id @default(cuid())
+  userId        String
+  partnerId     String
+  routeId       String?
+  stageId       String?
+  type          BookingLeadType
+  startDate     DateTime
+  endDate       DateTime?
+  persons       Int
+  bikes         Int
+  luggageItems  Int
+  message       String?
+  status        LeadStatus      @default(NEW)
+  createdAt     DateTime        @default(now())
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner       Partner         @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  route         Route?          @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  stage         RouteStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([partnerId])
+  @@index([routeId])
+}
+
+model AffiliateClick {
+  id        String   @id @default(cuid())
+  userId    String?
+  routeId   String?
+  poiId     String?
+  partnerId String?
+  provider  String
+  targetUrl String
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  route     Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  poi       Poi?     @relation(fields: [poiId], references: [id], onDelete: SetNull)
+  partner   Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+model AdPlacement {
+  id          String    @id @default(cuid())
+  partnerId   String
+  title       String
+  description String
+  category    String
+  routeRegion String
+  startDate   DateTime
+  endDate     DateTime
+  budget      Float
+  status      AdStatus  @default(DRAFT)
+  partner     Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([status])
+}

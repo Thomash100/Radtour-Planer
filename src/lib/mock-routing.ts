@@ -1,0 +1,219 @@
+import { createElevationProfile, haversineKm, routeDistanceKm, type LineStringGeoJson, type Position } from "@/lib/geo";
+
+export type RoutingProfile = "balanced" | "cycleways" | "low_elevation" | "touristic" | "sportive";
+
+export type RouteCalculationInput = {
+  start: string;
+  end: string;
+  waypoints?: string[];
+  profile?: RoutingProfile;
+};
+
+export type RouteCalculation = {
+  name: string;
+  startName: string;
+  endName: string;
+  profile: RoutingProfile;
+  distanceKm: number;
+  elevationUp: number;
+  elevationDown: number;
+  durationHours: number;
+  geometryGeoJson: LineStringGeoJson;
+  elevationProfile: ReturnType<typeof createElevationProfile>;
+  waypoints: Array<{
+    order: number;
+    name: string;
+    lat: number;
+    lon: number;
+  }>;
+};
+
+const knownPlaces: Record<string, Position> = {
+  munchen: [11.5761, 48.1372],
+  muenchen: [11.5761, 48.1372],
+  munich: [11.5761, 48.1372],
+  rosenheim: [12.1264, 47.8561],
+  traunstein: [12.6421, 47.8685],
+  salzburg: [13.0457, 47.8095],
+  dresden: [13.7373, 51.0504],
+  meissen: [13.4775, 51.1616],
+  riesa: [13.2877, 51.3077],
+  torgau: [12.9961, 51.5602],
+  wittenberg: [12.6499, 51.8661],
+  lutherstadtwittenberg: [12.6499, 51.8661],
+  dessau: [12.2421, 51.834],
+  dessaurosslau: [12.2421, 51.834],
+  magdeburg: [11.6276, 52.1205],
+  tangermunde: [11.9768, 52.5447],
+  tangermuende: [11.9768, 52.5447],
+  havelberg: [12.0753, 52.8306],
+  wittenberge: [11.7505, 53.0059],
+  hitzacker: [11.0443, 53.1486],
+  hitzackerelbe: [11.0443, 53.1486],
+  lauenburg: [10.5566, 53.3716],
+  lauenburgelbe: [10.5566, 53.3716],
+  haldensleben: [11.4095, 52.2894],
+  wolfsburg: [10.7865, 52.4227],
+  gifhorn: [10.545, 52.486],
+  uelzen: [10.5589, 52.9657],
+  luneburg: [10.4073, 53.2464],
+  lueneburg: [10.4073, 53.2464],
+  passau: [13.4319, 48.5667],
+  regensburg: [12.1016, 49.0134],
+  nurnberg: [11.0767, 49.4521],
+  nuernberg: [11.0767, 49.4521],
+  augsburg: [10.8978, 48.3705],
+  ulm: [9.9937, 48.4011],
+  konstanz: [9.1751, 47.6603],
+  hamburg: [9.9937, 53.5511],
+  berlin: [13.405, 52.52],
+  potsdam: [13.0645, 52.3906],
+  leipzig: [12.3731, 51.3397],
+  halle: [11.9697, 51.4828],
+  erfurt: [11.0299, 50.9848],
+  weimar: [11.329, 50.9795],
+  kassel: [9.4797, 51.3127],
+  gottingen: [9.9352, 51.5413],
+  goettingen: [9.9352, 51.5413],
+  hannover: [9.732, 52.3759],
+  bremen: [8.8017, 53.0793],
+  schwerin: [11.4075, 53.6355],
+  lubeck: [10.6866, 53.8655],
+  luebeck: [10.6866, 53.8655],
+  koln: [6.9603, 50.9375],
+  koeln: [6.9603, 50.9375],
+  frankfurt: [8.6821, 50.1109],
+  freiburg: [7.8421, 47.999],
+  innsbruck: [11.4041, 47.2692]
+};
+
+const demoCorridors: Record<string, string[]> = {
+  dresdenhamburg: [
+    "Meissen",
+    "Riesa",
+    "Torgau",
+    "Lutherstadt Wittenberg",
+    "Dessau-Rosslau",
+    "Magdeburg",
+    "Tangermuende",
+    "Havelberg",
+    "Wittenberge",
+    "Hitzacker",
+    "Lauenburg/Elbe"
+  ],
+  hamburgdresden: [
+    "Lauenburg/Elbe",
+    "Hitzacker",
+    "Wittenberge",
+    "Havelberg",
+    "Tangermuende",
+    "Magdeburg",
+    "Dessau-Rosslau",
+    "Lutherstadt Wittenberg",
+    "Torgau",
+    "Riesa",
+    "Meissen"
+  ]
+};
+
+const profileSettings: Record<RoutingProfile, { speed: number; curve: number; elevation: number }> = {
+  balanced: { speed: 18, curve: 0.018, elevation: 1 },
+  cycleways: { speed: 17, curve: 0.026, elevation: 1.05 },
+  low_elevation: { speed: 16, curve: 0.022, elevation: 0.72 },
+  touristic: { speed: 15, curve: 0.034, elevation: 0.95 },
+  sportive: { speed: 23, curve: 0.014, elevation: 1.3 }
+};
+
+function normalizePlace(place: string) {
+  return place
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00df/g, "ss")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function fallbackCoordinate(place: string): Position {
+  const normalized = normalizePlace(place);
+  const hash = normalized.split("").reduce((sum, character) => sum + character.charCodeAt(0), 0);
+  const lon = 7.5 + (hash % 700) / 100;
+  const lat = 47.2 + ((hash * 7) % 420) / 100;
+  return [Number(lon.toFixed(4)), Number(lat.toFixed(4))];
+}
+
+export function geocodeMock(place: string): Position {
+  return knownPlaces[normalizePlace(place)] ?? fallbackCoordinate(place);
+}
+
+function enrichDemoWaypoints(start: string, end: string, waypoints: string[]) {
+  if (waypoints.length > 0) {
+    return waypoints;
+  }
+
+  const corridorKey = `${normalizePlace(start)}${normalizePlace(end)}`;
+  return demoCorridors[corridorKey] ?? [];
+}
+
+function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmentIndex: number) {
+  const settings = profileSettings[profile];
+  const distance = haversineKm(a, b);
+  const steps = Math.max(4, Math.ceil(distance / 18));
+  const points: Position[] = [];
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length = Math.sqrt(dx * dx + dy * dy) || 1;
+  const normal: Position = [-dy / length, dx / length];
+  const longDistanceCurve = Math.min(0.075, distance / 5500);
+  const curve = settings.curve + longDistanceCurve;
+
+  for (let index = 0; index <= steps; index += 1) {
+    const ratio = index / steps;
+    const wave = Math.sin(ratio * Math.PI) * curve * (segmentIndex % 2 === 0 ? 1 : -1);
+    points.push([
+      Number((a[0] + dx * ratio + normal[0] * wave).toFixed(6)),
+      Number((a[1] + dy * ratio + normal[1] * wave).toFixed(6))
+    ]);
+  }
+
+  return points;
+}
+
+export function calculateMockRoute(input: RouteCalculationInput): RouteCalculation {
+  const profile = input.profile ?? "balanced";
+  const inputWaypoints = (input.waypoints ?? []).filter(Boolean);
+  const demoWaypoints = enrichDemoWaypoints(input.start, input.end, inputWaypoints);
+  const orderedNames = [input.start, ...demoWaypoints, input.end];
+  const controlPoints = orderedNames.map(geocodeMock);
+  const coordinates: Position[] = [];
+
+  for (let index = 1; index < controlPoints.length; index += 1) {
+    const segment = segmentPoints(controlPoints[index - 1], controlPoints[index], profile, index);
+    coordinates.push(...(index === 1 ? segment : segment.slice(1)));
+  }
+
+  const distanceKm = routeDistanceKm(coordinates);
+  const settings = profileSettings[profile];
+  const elevationUp = Math.round(distanceKm * 5.4 * settings.elevation + controlPoints.length * 35);
+  const elevationDown = Math.round(distanceKm * 4.6 * settings.elevation + controlPoints.length * 25);
+
+  return {
+    name: `${input.start.trim()} nach ${input.end.trim()}`,
+    startName: input.start.trim(),
+    endName: input.end.trim(),
+    profile,
+    distanceKm: Number(distanceKm.toFixed(1)),
+    elevationUp,
+    elevationDown,
+    durationHours: Number((distanceKm / settings.speed).toFixed(2)),
+    geometryGeoJson: {
+      type: "LineString",
+      coordinates
+    },
+    elevationProfile: createElevationProfile(coordinates),
+    waypoints: orderedNames.map((name, order) => {
+      const [lon, lat] = controlPoints[order];
+      return { order, name, lat, lon };
+    })
+  };
+}
