@@ -106,6 +106,30 @@ docker compose -f docker-compose.rpi.yml build --no-cache
 docker compose -f docker-compose.rpi.yml up -d
 ```
 
+### Gepruefte Startreihenfolge
+
+Der Containerstart ist auf folgende Reihenfolge ausgelegt:
+
+1. `postgres` startet und meldet `pg_isready` healthy.
+2. `redis` startet und meldet `redis-cli ping` healthy.
+3. `app` startet erst nach healthy Postgres/Redis und wartet zusaetzlich im Startscript auf Postgres.
+4. `app` fuehrt `prisma db push` und `prisma db seed` aus.
+5. `app` startet Next.js im Produktionsmodus.
+6. `worker` startet erst nach healthy Postgres/Redis und wartet zusaetzlich auf Redis.
+7. `app` und `worker` muessen im Compose-Status healthy werden.
+
+Harter Neustarttest fuer Raspberry Pi:
+
+```bash
+docker compose -f docker-compose.rpi.yml down --remove-orphans
+docker network prune -f
+docker compose -f docker-compose.rpi.yml up -d
+docker compose -f docker-compose.rpi.yml ps
+curl -fsS http://localhost:3000/api/health
+```
+
+Erwartung: Der Stack wird ohne manuelles Nachstarten vollstaendig healthy. Bei Fehlern geben `rpi-install.sh` und `rpi-update.sh` App-, Worker-, Redis- und Postgres-Logs aus.
+
 ## 5. Abhaengigkeiten optional lokal pruefen
 
 Wenn Node.js/npm auf dem Raspberry Pi direkt verfuegbar sind:
@@ -132,6 +156,7 @@ Logs:
 ```bash
 docker compose -f docker-compose.rpi.yml logs -f app
 docker compose -f docker-compose.rpi.yml logs -f worker
+docker compose -f docker-compose.rpi.yml logs -f postgres redis
 ```
 
 Healthcheck:
@@ -228,8 +253,10 @@ docker compose -f docker-compose.rpi.yml down -v
 
 - Die RPI-Datei nutzt `Dockerfile.rpi` und startet Next.js im Produktionsmodus.
 - Fuer PostGIS nutzt die RPI-Datei ein ARM64-kompatibles Image: `imresamu/postgis:16-3.4-alpine3.21`.
-- Beim App-Start werden Prisma-Client, Schema-Push und Seed-Daten ausgefuehrt.
+- Beim App-Start wird zuerst auf Postgres gewartet; danach werden Prisma-Client, Schema-Push und Seed-Daten ausgefuehrt.
+- Der Worker wartet vor dem Queue-Start auf Redis.
 - Die App besitzt einen Healthcheck unter `/api/health`.
+- Der Worker besitzt einen Redis-basierten Healthcheck.
 - Das ist fuer eine Testversion bequem. Fuer Produktion sollten Migrationen, Secrets, Backups, Auth, HTTPS und Reverse Proxy sauber getrennt werden.
 - Nicht nach `main` mergen, solange Lint, Typecheck, Build, Dockerfile.rpi-Build und Raspberry-Pi-Smoke-Test nicht erfolgreich dokumentiert sind.
 

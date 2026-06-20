@@ -39,3 +39,5 @@
 - Artefakt-Skripte fuer public/private-Branch-Vorbereitung ergaenzt
 - Sicherheitschecks fuer public/private-Artefakte ergaenzt
 - Echte Deployment-Branches `public` und `private` vorbereitet und dokumentiert
+- RPi-/Produktionsstart um Wait-for-Postgres und Wait-for-Redis ergaenzt
+- Worker-Healthcheck und RPi-Install-/Update-Logs verbessert

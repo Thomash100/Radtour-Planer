@@ -98,6 +98,12 @@ Das Script fuehrt aus:
 - `app`, `worker`, `postgres`, `redis` und `caddy` starten
 - internen `/api/health`-Check pruefen
 
+Startrobustheit:
+
+- `app` wartet vor `prisma db push` und `prisma db seed` auf Postgres.
+- `worker` wartet vor Queue-Start auf Redis.
+- `worker` besitzt einen Redis-basierten Healthcheck.
+
 ## Manuelle Befehle
 
 Falls das Script nicht verwendet werden soll:
@@ -143,6 +149,7 @@ Logs:
 docker compose -f docker-compose.prod.yml logs -f app
 docker compose -f docker-compose.prod.yml logs -f worker
 docker compose -f docker-compose.prod.yml logs -f caddy
+docker compose -f docker-compose.prod.yml logs -f postgres redis
 ```
 
 Stoppen:
