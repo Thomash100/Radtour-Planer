@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-20
+Stand: 2026-06-21
 
 ## Produkt
 
@@ -90,7 +90,8 @@ Details stehen in:
 - `scripts/start-production.sh` wartet vor Prisma auf Postgres.
 - `worker` wartet vor BullMQ-Start auf Redis.
 - `scripts/rpi-install.sh` und `scripts/rpi-update.sh` pruefen App- und Worker-Health und geben bei Fehlern relevante Logs aus.
-- Der harte RPi-Test bleibt manuell: `docker compose down --remove-orphans`, `docker network prune -f`, `docker compose up -d`, danach Healthcheck.
+- PR #40 wurde auf dem Raspberry Pi mit hartem Neustarttest erfolgreich abgenommen: `docker compose down --remove-orphans`, `docker network prune -f`, `docker compose up -d --build`, danach `postgres`, `redis`, `app` und `worker` healthy.
+- Der Healthcheck `/api/health` meldete `{"status":"ok","service":"radtour-planer","timestamp":"2026-06-20T22:14:48.092Z"}`.
 
 ## Naechste fachliche Arbeit
 
