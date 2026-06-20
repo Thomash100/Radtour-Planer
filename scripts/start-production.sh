@@ -2,6 +2,7 @@
 set -e
 
 echo "Preparing database..."
+sh scripts/wait-for-services.sh postgres
 npx prisma db push
 npx prisma db seed
 

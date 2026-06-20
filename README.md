@@ -88,6 +88,8 @@ Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
 
 Hinweis: Auf Raspberry Pi/ARM64 verwendet die Compose-Datei `imresamu/postgis:16-3.4-alpine3.21`, weil das offizielle `postgis/postgis`-Image nur fuer `amd64` gebaut ist.
 
+Der RPi-Stack wartet beim Start explizit auf Postgres und Redis. App und Worker werden in den RPi-Skripten auf Health geprueft; ein harter Neustarttest ist in der RPi-Doku beschrieben.
+
 ## Webserver-Deployment mit Docker
 
 Fuer einen Linux-Webserver oder VPS mit Domain gibt es eine eigene Produktions-Compose-Datei mit Caddy-Reverse-Proxy, HTTPS, App, Worker, PostgreSQL/PostGIS und Redis.
@@ -108,6 +110,26 @@ Fuer einen PR- oder Testbranch:
 ```
 
 Details stehen in [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md).
+
+## Public/private-Deployment-Artefakte
+
+Fuer eine spaetere Trennung in oeffentlichen Webroot und privaten Serverbereich gibt es vorbereitete Artefakt-Skripte:
+
+```bash
+npm run artifact:public
+npm run artifact:check-public
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Details stehen in [docs/DEPLOYMENT_PUBLIC_PRIVATE.md](docs/DEPLOYMENT_PUBLIC_PRIVATE.md).
+
+Die echten Deployment-Branches sind zielordnerrein:
+
+- `public`: oeffentlicher Webroot bzw. Proxy-/Asset-Bereich.
+- `private`: privater Next.js-/API-/Prisma-/Worker-Bereich.
+
+Details zur Befuellung und zum manuellen Server-/RPi-Test stehen in [docs/DEPLOYMENT_BRANCHES.md](docs/DEPLOYMENT_BRANCHES.md).
 
 GitHub-Zielrepository:
 
@@ -168,6 +190,14 @@ npm run build
 ```
 
 `POST /api/poi/sync-osm` initialisiert Redis erst beim API-Aufruf. Dadurch kann der Next.js-Build ohne laufenden Redis-Container kompiliert werden; fuer den Queue-Flow selbst muss Redis laufen.
+
+## Projektsteuerung
+
+- Codex-Arbeitsstandard: [AGENTS.md](AGENTS.md)
+- Codex-Workflow: [docs/CODEX_WORKFLOW.md](docs/CODEX_WORKFLOW.md)
+- Projektzusammenfassung: [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md)
+- Architekturentscheidungen: [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)
+- Testing und Pruefstandard: [docs/TESTING.md](docs/TESTING.md)
 
 ## API-Auszug
 

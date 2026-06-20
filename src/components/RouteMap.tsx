@@ -73,6 +73,7 @@ type RouteMapProps = {
   stageBreakpoints?: Array<{ name: string; distanceKm: number }>;
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
+  variant?: "embedded" | "workspace";
   routePointSelection?: {
     enabled: boolean;
     label?: string;
@@ -579,6 +580,7 @@ export function RouteMap({
   stageBreakpoints = [],
   waypoints = [],
   selectedPoiId,
+  variant = "embedded",
   routePointSelection,
   onSelectPoi,
   onRoutePointSelect
@@ -1029,11 +1031,17 @@ export function RouteMap({
         style={
           isFullscreenMap
             ? { overscrollBehavior: "contain" }
-            : {
-                height: "clamp(300px, 60dvh, 560px)",
-                maxHeight: "calc(100dvh - 12rem)",
-                overscrollBehavior: "contain"
-              }
+            : variant === "workspace"
+              ? {
+                  height: "calc(100dvh - 10rem)",
+                  maxHeight: "none",
+                  overscrollBehavior: "contain"
+                }
+              : {
+                  height: "clamp(300px, 60dvh, 560px)",
+                  maxHeight: "calc(100dvh - 12rem)",
+                  overscrollBehavior: "contain"
+                }
         }
         onClick={handleMapClick}
         onDoubleClick={handleMapDoubleClick}

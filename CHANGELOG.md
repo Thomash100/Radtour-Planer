@@ -31,16 +31,17 @@
 - Karten-Diagnostik fuer Koordinaten, Bounds und verworfene Punkte ergaenzt
 - Kartenhoehe auf die sichtbare Displayhoehe begrenzt
 - Karten-Pan und Zoom auf den Routenbereich begrenzt
-- Planer-Ansichten fuer Planung, Karte und Desktop-Geteilt ergaenzt
-- Routenkarte mit kilometerbasiertem Routenkorridor fuer Pan-Grenzen stabilisiert
-- Kartenbedienung aus der Kartenflaeche in eine Toolbar oberhalb verschoben
-- Karten-Vollbildmodus per Klick und Verkleinern per Doppelklick ergaenzt
-- Etappenlegende unter die Karte verschoben, damit die Route frei sichtbar bleibt
-- Individuelle Etappenpunkte mit Ortsname und km-Position entlang der GPX-Route ergaenzt
+- Mehrseitiger Planungsworkflow fuer Eingabeart, direkte Route, GPX, Uebersicht, Bearbeitung und Etappen vorbereitet
+- Startseite startet ohne Demo-Orte und bietet getrennte Aktionen fuer direkte Eingabe, GPX, Demo und gespeicherte Tour
+- Lokaler TourState fuer Routenuebersicht und Vollbildkarte ergaenzt
+- Eigene Vollbildkartenroute `/planer/karte` mit Ruecksprung zur Bearbeitung und Etappenplanung ergaenzt
+- Individuelle Etappenpunkte mit Ortsname, km-Position und Kartenklick entlang der GPX-Route ergaenzt
 - GPX-basierter Routenzuschnitt per Start-/End-km ergaenzt
-- Start-/Ziel-Felder werden nach GPX-Import auf GPX Start/Ziel aktualisiert
-- Eigene Etappen-Ansicht mit Ergebnisvorschau und bearbeitbaren Etappen ergaenzt
-- Stadtname kann auf den naechsten Punkt der GPX-Route projiziert werden
-- Geplante Etappenpunkte werden vor dem Erzeugen als Marker auf der Karte angezeigt
-- Hoehenprofil kompakter direkt unter der Karte platziert und als Grossansicht oeffenbar gemacht
-- Etappenpunkte koennen direkt per Kartenklick auf die naechste GPX-Routenposition gesetzt werden
+- Manuelle Etappenbearbeitung ueber Start-km, Ziel-km und Laenge mit Neuberechnung der Etappengeometrie ergaenzt
+- Tests fuer GPX-Import, Routentrimmen, Etappenvorschlaege und manuelle Etappengeometrie ergaenzt
+- Public/private-Deployment-Konzept dokumentiert
+- Artefakt-Skripte fuer public/private-Branch-Vorbereitung ergaenzt
+- Sicherheitschecks fuer public/private-Artefakte ergaenzt
+- Echte Deployment-Branches `public` und `private` vorbereitet und dokumentiert
+- RPi-/Produktionsstart um Wait-for-Postgres und Wait-for-Redis ergaenzt
+- Worker-Healthcheck und RPi-Install-/Update-Logs verbessert
