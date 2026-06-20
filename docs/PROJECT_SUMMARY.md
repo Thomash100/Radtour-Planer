@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-19
+Stand: 2026-06-20
 
 ## Produkt
 
@@ -32,6 +32,7 @@ P0-Fokus:
 - Docker Compose fuer lokale Entwicklung, Raspberry Pi und Webserver.
 - Public/private-Deployment-Artefakte sind als naechster Strukturstandard vorbereitet.
 - Echte Deployment-Branches `public` und `private` werden aus geprueften Artefakten befuellt.
+- RPi-/Produktionsstart wartet explizit auf Postgres und Redis, damit App und Worker nach Neustart oder Update stabil anlaufen.
 
 ## Wichtige Architekturprinzipien
 
@@ -83,6 +84,13 @@ Details stehen in:
 - Lokale Artefakte werden mit `npm run artifact:public` und `npm run artifact:private` unter `artifacts/` erzeugt und mit den zugehoerigen Check-Skripten geprueft.
 - Der Branch `public` entspricht dem oeffentlichen Zielordner; der Branch `private` entspricht dem privaten/serverseitigen Zielordner.
 - Nach dem Push der Deployment-Branches bleibt ein manueller Server- oder Raspberry-Pi-Deploytest erforderlich.
+
+## RPi-Startrobustheit
+
+- `scripts/start-production.sh` wartet vor Prisma auf Postgres.
+- `worker` wartet vor BullMQ-Start auf Redis.
+- `scripts/rpi-install.sh` und `scripts/rpi-update.sh` pruefen App- und Worker-Health und geben bei Fehlern relevante Logs aus.
+- Der harte RPi-Test bleibt manuell: `docker compose down --remove-orphans`, `docker network prune -f`, `docker compose up -d`, danach Healthcheck.
 
 ## Naechste fachliche Arbeit
 
