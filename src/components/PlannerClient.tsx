@@ -37,6 +37,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   closestPointOnRoute,
   createElevationProfile,
+  createStageSliceFromBounds,
+  routeBoundsForStage,
   routeDistanceKm,
   toGpx,
   trimRouteGeometry,
@@ -76,6 +78,8 @@ type Stage = {
   elevationUp: number;
   elevationDown: number;
   geometryGeoJson: LineStringGeoJson;
+  routeStartKm?: number;
+  routeEndKm?: number;
 };
 
 type Poi = {
@@ -800,6 +804,53 @@ export function PlannerClient({
     setStages((current) => current.map((stage) => (stage.id === stageId ? { ...stage, ...patch } : stage)));
   }
 
+  function stageKilometers(stage: Stage) {
+    if (typeof stage.routeStartKm === "number" && typeof stage.routeEndKm === "number") {
+      return {
+        startKm: stage.routeStartKm,
+        endKm: stage.routeEndKm
+      };
+    }
+
+    if (!route) {
+      return {
+        startKm: 0,
+        endKm: stage.distanceKm
+      };
+    }
+
+    return routeBoundsForStage(route.geometryGeoJson, stage.geometryGeoJson);
+  }
+
+  function updateStageRouteSlice(stageId: string, patch: { startKm?: number; endKm?: number; distanceKm?: number }) {
+    if (!route || routeTotalKm <= 0) {
+      return;
+    }
+
+    setStages((current) =>
+      current.map((stage) => {
+        if (stage.id !== stageId) {
+          return stage;
+        }
+
+        const currentBounds = stageKilometers(stage);
+        const startKm = patch.startKm ?? currentBounds.startKm;
+        const endKm = typeof patch.distanceKm === "number" ? startKm + patch.distanceKm : patch.endKm ?? currentBounds.endKm;
+        const slice = createStageSliceFromBounds(route.geometryGeoJson, startKm, endKm, stage.dayNumber - 1);
+
+        return {
+          ...stage,
+          routeStartKm: slice.startKm,
+          routeEndKm: slice.endKm,
+          distanceKm: slice.distanceKm,
+          elevationUp: slice.elevationUp,
+          elevationDown: slice.elevationDown,
+          geometryGeoJson: slice.geometryGeoJson
+        };
+      })
+    );
+  }
+
   async function saveStage(stage: Stage) {
     const response = await fetch(`/api/stages/${stage.id}`, {
       method: "PATCH",
@@ -809,7 +860,8 @@ export function PlannerClient({
         endName: stage.endName,
         distanceKm: stage.distanceKm,
         elevationUp: stage.elevationUp,
-        elevationDown: stage.elevationDown
+        elevationDown: stage.elevationDown,
+        geometryGeoJson: stage.geometryGeoJson
       })
     });
     const payload = await response.json();
@@ -818,7 +870,17 @@ export function PlannerClient({
       return;
     }
 
-    setStages((current) => current.map((item) => (item.id === stage.id ? payload.stage : item)));
+    setStages((current) =>
+      current.map((item) =>
+        item.id === stage.id
+          ? {
+              ...payload.stage,
+              routeStartKm: stage.routeStartKm,
+              routeEndKm: stage.routeEndKm
+            }
+          : item
+      )
+    );
     setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
   }
 
@@ -1188,37 +1250,86 @@ export function PlannerClient({
                   <CardDescription>{status}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {stages.map((stage) => (
-                    <div key={stage.id} className="grid gap-3 rounded-lg border bg-white p-4 lg:grid-cols-[72px_minmax(0,1fr)_auto]">
-                      <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
-                        Tag {stage.dayNumber}
+                  {stages.map((stage) => {
+                    const stageKmBounds = stageKilometers(stage);
+
+                    return (
+                      <div key={stage.id} className="grid gap-3 rounded-lg border bg-white p-4 lg:grid-cols-[72px_minmax(0,1fr)_auto]">
+                        <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
+                          Tag {stage.dayNumber}
+                        </div>
+                        <div className="grid gap-3">
+                          <div className="grid gap-2 md:grid-cols-2">
+                            <div className="grid gap-1">
+                              <Label htmlFor={`stage-editor-${stage.id}-start`}>Start</Label>
+                              <Input
+                                id={`stage-editor-${stage.id}-start`}
+                                value={stage.startName}
+                                onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label htmlFor={`stage-editor-${stage.id}-end`}>Ziel</Label>
+                              <Input
+                                id={`stage-editor-${stage.id}-end`}
+                                value={stage.endName}
+                                onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                            <div className="grid gap-1">
+                              <Label htmlFor={`stage-editor-${stage.id}-start-km`}>Start-km</Label>
+                              <Input
+                                id={`stage-editor-${stage.id}-start-km`}
+                                max={routeTotalKm || undefined}
+                                min="0"
+                                step="0.1"
+                                type="number"
+                                value={stageKmBounds.startKm}
+                                onChange={(event) => updateStageRouteSlice(stage.id, { startKm: Number(event.target.value) })}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label htmlFor={`stage-editor-${stage.id}-end-km`}>Ziel-km</Label>
+                              <Input
+                                id={`stage-editor-${stage.id}-end-km`}
+                                max={routeTotalKm || undefined}
+                                min="0"
+                                step="0.1"
+                                type="number"
+                                value={stageKmBounds.endKm}
+                                onChange={(event) => updateStageRouteSlice(stage.id, { endKm: Number(event.target.value) })}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <Label htmlFor={`stage-editor-${stage.id}-distance`}>Laenge</Label>
+                              <Input
+                                id={`stage-editor-${stage.id}-distance`}
+                                min="0.1"
+                                step="0.1"
+                                type="number"
+                                value={stage.distanceKm}
+                                onChange={(event) => updateStageRouteSlice(stage.id, { distanceKm: Number(event.target.value) })}
+                              />
+                            </div>
+                            <div className="grid gap-1">
+                              <span className="text-sm font-medium leading-none">Fahrzeit</span>
+                              <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
+                                {formatHours(stage.distanceKm / 17)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatKm(stage.distanceKm)} / {stage.elevationUp} Hm auf / {stage.elevationDown} Hm ab
+                          </div>
+                        </div>
+                        <Button className="min-w-28" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                          Speichern
+                        </Button>
                       </div>
-                      <div className="grid gap-2 md:grid-cols-2">
-                        <div className="grid gap-1">
-                          <Label htmlFor={`stage-editor-${stage.id}-start`}>Start</Label>
-                          <Input
-                            id={`stage-editor-${stage.id}-start`}
-                            value={stage.startName}
-                            onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
-                          />
-                        </div>
-                        <div className="grid gap-1">
-                          <Label htmlFor={`stage-editor-${stage.id}-end`}>Ziel</Label>
-                          <Input
-                            id={`stage-editor-${stage.id}-end`}
-                            value={stage.endName}
-                            onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
-                          />
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {formatKm(stage.distanceKm)} / {stage.elevationUp} Hm auf / {formatHours(stage.distanceKm / 17)}
-                        </div>
-                      </div>
-                      <Button className="min-w-28" type="button" variant="secondary" onClick={() => saveStage(stage)}>
-                        Speichern
-                      </Button>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {stages.length === 0 && (
                     <div className="rounded-md border bg-white p-5 text-sm text-muted-foreground">
                       Erzeuge zuerst Etappen aus den gesetzten Punkten.
@@ -1274,80 +1385,108 @@ export function PlannerClient({
                 <CardDescription className="leading-relaxed">{status}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {stages.map((stage) => (
-                  <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
-                    <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
-                      Tag {stage.dayNumber}
-                    </div>
-                    <div className="grid min-w-0 gap-3">
-                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
-                          <Input
-                            id={`stage-${stage.id}-start`}
-                            value={stage.startName}
-                            onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
-                          <Input
-                            id={`stage-${stage.id}-end`}
-                            value={stage.endName}
-                            onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
-                          />
-                        </div>
+                {stages.map((stage) => {
+                  const stageKmBounds = stageKilometers(stage);
+
+                  return (
+                    <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
+                      <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
+                        Tag {stage.dayNumber}
                       </div>
-                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
-                          <Input
-                            id={`stage-${stage.id}-distance`}
-                            min="0"
-                            step="0.1"
-                            type="number"
-                            value={stage.distanceKm}
-                            onChange={(event) => updateStage(stage.id, { distanceKm: Number(event.target.value) })}
-                          />
+                      <div className="grid min-w-0 gap-3">
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
+                            <Input
+                              id={`stage-${stage.id}-start`}
+                              value={stage.startName}
+                              onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
+                            <Input
+                              id={`stage-${stage.id}-end`}
+                              value={stage.endName}
+                              onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
+                            />
+                          </div>
                         </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
-                          <Input
-                            id={`stage-${stage.id}-up`}
-                            min="0"
-                            type="number"
-                            value={stage.elevationUp}
-                            onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
-                          <Input
-                            id={`stage-${stage.id}-down`}
-                            min="0"
-                            type="number"
-                            value={stage.elevationDown}
-                            onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <span className="text-sm font-medium leading-none">Fahrzeit</span>
-                          <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
-                            {formatHours(stage.distanceKm / 17)}
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-start-km`}>Start-km</Label>
+                            <Input
+                              id={`stage-${stage.id}-start-km`}
+                              max={routeTotalKm || undefined}
+                              min="0"
+                              step="0.1"
+                              type="number"
+                              value={stageKmBounds.startKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { startKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-end-km`}>Ziel-km</Label>
+                            <Input
+                              id={`stage-${stage.id}-end-km`}
+                              max={routeTotalKm || undefined}
+                              min="0"
+                              step="0.1"
+                              type="number"
+                              value={stageKmBounds.endKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { endKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
+                            <Input
+                              id={`stage-${stage.id}-distance`}
+                              min="0.1"
+                              step="0.1"
+                              type="number"
+                              value={stage.distanceKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { distanceKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
+                            <Input
+                              id={`stage-${stage.id}-up`}
+                              min="0"
+                              type="number"
+                              value={stage.elevationUp}
+                              onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
+                            <Input
+                              id={`stage-${stage.id}-down`}
+                              min="0"
+                              type="number"
+                              value={stage.elevationDown}
+                              onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <span className="text-sm font-medium leading-none">Fahrzeit</span>
+                            <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
+                              {formatHours(stage.distanceKm / 17)}
+                            </div>
                           </div>
                         </div>
                       </div>
+                      <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-1 2xl:flex-col">
+                        <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
+                          Unterkunft finden
+                        </Button>
+                        <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                          Speichern
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-1 2xl:flex-col">
-                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
-                        Unterkunft finden
-                      </Button>
-                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
-                        Speichern
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {stages.length === 0 && (
                   <div className="rounded-md border bg-white p-6 text-sm text-muted-foreground">
                     Nach dem Planen werden hier automatisch Tagesetappen vorgeschlagen.

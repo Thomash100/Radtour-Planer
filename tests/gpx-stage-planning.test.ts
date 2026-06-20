@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import { parseGpx } from "../src/lib/gpx";
 import {
   closestPointOnRoute,
+  createStageSliceFromBounds,
   cumulativeDistances,
   routeDistanceKm,
+  routeBoundsForStage,
   splitRouteByBreakpoints,
   splitRouteIntoStages,
   trimRouteGeometry,
@@ -131,6 +133,28 @@ describe("GPX parsing and stage planning", () => {
       totalKm,
       0.3
     );
+  });
+
+  it("maps manual stage geometry back to editable route kilometers", () => {
+    const totalKm = routeDistanceKm(straightRoute.coordinates);
+    const stageGeometry = trimRouteGeometry(straightRoute, totalKm * 0.25, totalKm * 0.5);
+    const bounds = routeBoundsForStage(straightRoute, stageGeometry);
+
+    assertClose(bounds.startKm, totalKm * 0.25, 0.15);
+    assertClose(bounds.endKm, totalKm * 0.5, 0.15);
+  });
+
+  it("rebuilds a manual stage slice when start, target or length changes", () => {
+    const totalKm = routeDistanceKm(straightRoute.coordinates);
+    const slice = createStageSliceFromBounds(straightRoute, totalKm * 0.2, totalKm * 0.45, 1);
+
+    assertClose(slice.startKm, totalKm * 0.2, 0.15);
+    assertClose(slice.endKm, totalKm * 0.45, 0.15);
+    assertClose(slice.distanceKm, totalKm * 0.25, 0.3);
+    assert.ok(slice.elevationUp > 0);
+    assert.ok(slice.elevationDown > 0);
+    assertClose(slice.geometryGeoJson.coordinates[0][0], 11.3, 0.01);
+    assertClose(slice.geometryGeoJson.coordinates.at(-1)?.[0] ?? 0, 11.675, 0.01);
   });
 
   it("projects a selected off-center target to the nearest existing route position", () => {
