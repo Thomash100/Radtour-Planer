@@ -114,6 +114,56 @@ curl -fsS http://localhost:3000/api/health
 
 Der Branch `public` ist fuer den Raspberry-Pi-Test nicht erforderlich.
 
+## Initiale Remote-Befuellung
+
+Stand: 2026-06-19
+
+- Arbeitsbranch: `codex/create-public-private-deployment-branches`
+- Arbeitsbranch-Commit bei Artefakterzeugung: `e73e3af`
+- Public-Branch-Commit: `7ea6c08`
+- Private-Branch-Commit: `1a0ec81`
+
+Root-Dateiliste `public`:
+
+- `README.md`
+- `_next/`
+- `health/`
+
+Root-Dateiliste `private`:
+
+- `.env.example`
+- `.env.production.example`
+- `.env.rpi.example`
+- `.gitignore`
+- `AGENTS.md`
+- `CHANGELOG.md`
+- `Caddyfile`
+- `DEPLOYMENT_ARTIFACT.md`
+- `Dockerfile`
+- `Dockerfile.rpi`
+- `README.md`
+- `components.json`
+- `docker-compose.prod.yml`
+- `docker-compose.rpi.yml`
+- `docker-compose.yml`
+- `docs/`
+- `next-env.d.ts`
+- `next.config.mjs`
+- `package-lock.json`
+- `package.json`
+- `postcss.config.mjs`
+- `prisma/`
+- `scripts/`
+- `src/`
+- `tailwind.config.ts`
+- `tsconfig.json`
+
+Scan-Ergebnis:
+
+- `public`: keine `.env`, keine Logs, keine Datenbankdateien, keine Runtime-Dateien, keine privaten Configs, keine Secret-Treffer.
+- `private`: keine echten `.env`-Dateien, keine Logs, keine Datenbankdateien, keine Keys/Zertifikate, keine Zielpfad-Wrapper.
+- `private`: Content-Treffer zu `DATABASE_URL`, `REDIS_URL` und `POSTGRES_PASSWORD` sind Platzhalter bzw. Docker-/Doku-Beispiele, keine echten produktiven Secrets.
+
 ## Stopppunkt
 
 Nach dem Push von `public` und `private` ist ein manueller Server- oder Raspberry-Pi-Deploytest erforderlich. Erst dieser Test bestaetigt, dass die Zielumgebung die Branches korrekt verwendet.

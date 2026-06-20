@@ -27,10 +27,38 @@ wait_for_app_health() {
     echo "Fehler: App-Healthcheck nicht erfolgreich."
     docker compose -f "$COMPOSE_FILE" ps
     docker compose -f "$COMPOSE_FILE" logs --tail=120 app
+    docker compose -f "$COMPOSE_FILE" logs --tail=80 postgres redis worker
     exit 1
   fi
 
   echo "App-Healthcheck erfolgreich."
+}
+
+wait_for_worker_health() {
+  echo "Warte auf Worker-Healthcheck..."
+  WORKER_OK=0
+
+  for _ in $(seq 1 60); do
+    WORKER_ID="$(docker compose -f "$COMPOSE_FILE" ps -q worker 2>/dev/null || true)"
+    if [ -n "$WORKER_ID" ]; then
+      WORKER_STATUS="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$WORKER_ID" 2>/dev/null || true)"
+      if [ "$WORKER_STATUS" = "healthy" ] || [ "$WORKER_STATUS" = "running" ]; then
+        WORKER_OK=1
+        break
+      fi
+    fi
+    sleep 5
+  done
+
+  if [ "$WORKER_OK" -ne 1 ]; then
+    echo "Fehler: Worker wurde nicht healthy/running."
+    docker compose -f "$COMPOSE_FILE" ps
+    docker compose -f "$COMPOSE_FILE" logs --tail=120 worker
+    docker compose -f "$COMPOSE_FILE" logs --tail=80 redis
+    exit 1
+  fi
+
+  echo "Worker-Healthcheck erfolgreich."
 }
 
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -60,9 +88,12 @@ echo "Pruefe Dienststatus..."
 docker compose -f "$COMPOSE_FILE" ps
 
 wait_for_app_health
+wait_for_worker_health
 
 echo "App-Logs:"
 docker compose -f "$COMPOSE_FILE" logs --tail=80 app
+echo "Worker-Logs:"
+docker compose -f "$COMPOSE_FILE" logs --tail=80 worker
 
 echo "Update abgeschlossen."
 APP_PORT="$(read_env_value APP_PORT)"

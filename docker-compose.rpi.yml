@@ -67,7 +67,7 @@ services:
         NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
         NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-06-03}"
     restart: unless-stopped
-    command: npm run worker
+    command: sh -c "sh scripts/wait-for-services.sh redis && npm run worker"
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:-change-me-on-rpi}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
       REDIS_URL: "redis://redis:6379"
@@ -77,6 +77,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const Redis=require('ioredis'); const redis=new Redis(process.env.REDIS_URL); const timeout=setTimeout(()=>{redis.disconnect();process.exit(1)},5000); redis.ping().then(()=>{clearTimeout(timeout); redis.disconnect(); process.exit(0)}).catch(()=>{clearTimeout(timeout); redis.disconnect(); process.exit(1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
 
 volumes:
   postgres-data:

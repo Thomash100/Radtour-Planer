@@ -88,6 +88,8 @@ Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
 
 Hinweis: Auf Raspberry Pi/ARM64 verwendet die Compose-Datei `imresamu/postgis:16-3.4-alpine3.21`, weil das offizielle `postgis/postgis`-Image nur fuer `amd64` gebaut ist.
 
+Der RPi-Stack wartet beim Start explizit auf Postgres und Redis. App und Worker werden in den RPi-Skripten auf Health geprueft; ein harter Neustarttest ist in der RPi-Doku beschrieben.
+
 ## Webserver-Deployment mit Docker
 
 Fuer einen Linux-Webserver oder VPS mit Domain gibt es eine eigene Produktions-Compose-Datei mit Caddy-Reverse-Proxy, HTTPS, App, Worker, PostgreSQL/PostGIS und Redis.
