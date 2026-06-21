@@ -88,6 +88,40 @@ Details stehen in [docs/RPI_DEPLOYMENT.md](docs/RPI_DEPLOYMENT.md).
 
 Hinweis: Auf Raspberry Pi/ARM64 verwendet die Compose-Datei `imresamu/postgis:16-3.4-alpine3.21`, weil das offizielle `postgis/postgis`-Image nur fuer `amd64` gebaut ist.
 
+## Webserver-Deployment mit Docker
+
+Fuer einen Linux-Webserver oder VPS mit Domain gibt es eine eigene Produktions-Compose-Datei mit Caddy-Reverse-Proxy, HTTPS, App, Worker, PostgreSQL/PostGIS und Redis.
+
+```bash
+git clone https://github.com/Thomash100/Radtour-Planer.git
+cd Radtour-Planer
+cp .env.production.example .env
+nano .env
+chmod +x scripts/deploy-prod.sh
+./scripts/deploy-prod.sh main
+```
+
+Fuer einen PR- oder Testbranch:
+
+```bash
+./scripts/deploy-prod.sh codex/prepare-v0.3.0-route-planner-test
+```
+
+Details stehen in [docs/PRODUCTION_DEPLOYMENT.md](docs/PRODUCTION_DEPLOYMENT.md).
+
+## Public/private-Deployment-Artefakte
+
+Fuer eine spaetere Trennung in oeffentlichen Webroot und privaten Serverbereich gibt es vorbereitete Artefakt-Skripte:
+
+```bash
+npm run artifact:public
+npm run artifact:check-public
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Details stehen in [docs/DEPLOYMENT_PUBLIC_PRIVATE.md](docs/DEPLOYMENT_PUBLIC_PRIVATE.md).
+
 GitHub-Zielrepository:
 
 ```text
@@ -99,7 +133,7 @@ https://github.com/Thomash100/Radtour-Planer.git
 Voraussetzungen: Node.js mit npm, PostgreSQL mit PostGIS und Redis.
 
 ```bash
-npm install
+npm ci
 cp .env.example .env.local
 npx prisma generate
 npx prisma db push
@@ -131,10 +165,30 @@ npm run worker
 1. `/planer` oeffnen.
 2. Start, Ziel, Zwischenziele und Routingprofil waehlen.
 3. `Route planen` berechnet eine Mockroute, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI aus der lokalen Seed-Datenbank.
-4. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant und weitere Kategorien nutzen.
-5. Partner-POI auswaehlen und eine Anfrage senden.
-6. `/partner` oeffnen und ein Partnerprofil zur Pruefung einreichen.
-7. `/admin/partner` oeffnen und Partner freigeben oder ablehnen.
+4. Etappen in der Timeline bei Bedarf manuell anpassen und speichern.
+5. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant, Mindestbewertung, Hunde, Fahrradstellplatz und weitere Kategorien nutzen.
+6. Partner-POI auswaehlen und eine Unterkunfts- oder Gepaecktransfer-Anfrage senden.
+7. `/partner` oeffnen und ein Partnerprofil zur Pruefung einreichen.
+8. `/admin/partner` oeffnen und Partner freigeben oder ablehnen.
+
+## Qualitaetschecks
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run build
+```
+
+`POST /api/poi/sync-osm` initialisiert Redis erst beim API-Aufruf. Dadurch kann der Next.js-Build ohne laufenden Redis-Container kompiliert werden; fuer den Queue-Flow selbst muss Redis laufen.
+
+## Projektsteuerung
+
+- Codex-Arbeitsstandard: [AGENTS.md](AGENTS.md)
+- Codex-Workflow: [docs/CODEX_WORKFLOW.md](docs/CODEX_WORKFLOW.md)
+- Projektzusammenfassung: [docs/PROJECT_SUMMARY.md](docs/PROJECT_SUMMARY.md)
+- Architekturentscheidungen: [docs/ARCHITECTURE_DECISIONS.md](docs/ARCHITECTURE_DECISIONS.md)
+- Testing und Pruefstandard: [docs/TESTING.md](docs/TESTING.md)
 
 ## API-Auszug
 

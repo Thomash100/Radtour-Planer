@@ -1,6 +1,6 @@
 {
   "name": "radreiseplaner",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "BikeTripHub MVP for planning multi-day bike trips with stages, POI, partners and leads.",
   "scripts": {
@@ -8,10 +8,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "prisma db seed",
-    "worker": "tsx scripts/worker.ts"
+    "worker": "tsx scripts/worker.ts",
+    "artifact:public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-public-artifact.ps1",
+    "artifact:private": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-private-artifact.ps1",
+    "artifact:check-public": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-public-artifact.ps1",
+    "artifact:check-private": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check-private-artifact.ps1"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

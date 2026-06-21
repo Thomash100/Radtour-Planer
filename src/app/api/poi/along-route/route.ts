@@ -1,9 +1,10 @@
-import { PartnerStatus, PoiCategory } from "@prisma/client";
+import { PoiCategory } from "@prisma/client";
 import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api";
-import { distancePointToLineKm, type LineStringGeoJson } from "@/lib/geo";
+import type { LineStringGeoJson } from "@/lib/geo";
 import { prisma } from "@/lib/prisma";
+import { applyPoiFilters, createRouteTestPois, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
 
 function parseCategories(value: string | null) {
   if (!value) {
@@ -17,20 +18,26 @@ function parseCategories(value: string | null) {
   return categories.length > 0 ? categories : undefined;
 }
 
-function tagValue(tags: unknown, key: string) {
-  return typeof tags === "object" && tags !== null && key in tags ? Boolean((tags as Record<string, unknown>)[key]) : false;
+function boundedNumber(value: string | null, fallback: number, min: number, max: number) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const routeId = url.searchParams.get("routeId") ?? "route_demo_munich_salzburg";
-    const corridorKm = Math.min(50, Math.max(0.5, Number(url.searchParams.get("corridorKm") ?? 5)));
+    const corridorKm = boundedNumber(url.searchParams.get("corridorKm"), 5, 0.5, 50);
+    const minRating = boundedNumber(url.searchParams.get("minRating"), 0, 0, 5);
     const categories = parseCategories(url.searchParams.get("categories"));
     const partnerOnly = url.searchParams.get("partnerOnly") === "true";
+    const includeTestPois = url.searchParams.get("includeTestPois") !== "false";
     const ebikeFriendly = url.searchParams.get("ebikeFriendly") === "true";
     const bikeGarage = url.searchParams.get("bikeGarage") === "true";
     const luggageAccepted = url.searchParams.get("luggageAccepted") === "true";
+    const dogsAllowed = url.searchParams.get("dogsAllowed") === "true";
+    const restaurantInHouse = url.searchParams.get("restaurantInHouse") === "true";
+    const bikeParking = url.searchParams.get("bikeParking") === "true";
 
     const route = await prisma.route.findUnique({ where: { id: routeId } });
     if (!route) {
@@ -46,23 +53,30 @@ export async function GET(request: Request) {
       include: { partner: true }
     });
 
-    const filtered = pois
-      .map((poi) => ({
-        ...poi,
-        distanceToRouteKm: Number(distancePointToLineKm([poi.lon, poi.lat], geometry.coordinates).toFixed(2))
-      }))
-      .filter((poi) => poi.distanceToRouteKm <= corridorKm)
-      .filter((poi) => (partnerOnly ? poi.partner?.status === PartnerStatus.APPROVED : true))
-      .filter((poi) => (ebikeFriendly ? tagValue(poi.tagsJson, "ebikeFriendly") || tagValue(poi.tagsJson, "ebikeService") : true))
-      .filter((poi) => (bikeGarage ? tagValue(poi.tagsJson, "bikeGarage") : true))
-      .filter((poi) => (luggageAccepted ? tagValue(poi.tagsJson, "luggageAccepted") || tagValue(poi.tagsJson, "luggageTransfer") : true))
-      .sort((a, b) => {
-        const featuredA = a.partner?.isFeatured ? 1 : 0;
-        const featuredB = b.partner?.isFeatured ? 1 : 0;
-        return featuredB - featuredA || a.distanceToRouteKm - b.distanceToRouteKm;
-      });
+    const filters: PoiFilterOptions = {
+      corridorKm,
+      minRating,
+      categories,
+      partnerOnly,
+      ebikeFriendly,
+      bikeGarage,
+      luggageAccepted,
+      dogsAllowed,
+      restaurantInHouse,
+      bikeParking
+    };
 
-    return NextResponse.json({ routeId, corridorKm, pois: filtered });
+    let sourceNotice = "";
+    let filtered = sortRoutePois(applyPoiFilters(withDistanceToRoute(pois, geometry) as RoutePoi[], filters));
+
+    if (filtered.length === 0 && includeTestPois && !partnerOnly) {
+      filtered = sortRoutePois(applyPoiFilters(createRouteTestPois(routeId, geometry, categories), filters));
+      if (filtered.length > 0) {
+        sourceNotice = "Keine lokalen POI im Korridor gefunden. Es werden markierte Test-POI entlang der Route angezeigt.";
+      }
+    }
+
+    return NextResponse.json({ routeId, corridorKm, minRating, pois: filtered, sourceNotice });
   } catch (error) {
     return apiError(error, 500);
   }

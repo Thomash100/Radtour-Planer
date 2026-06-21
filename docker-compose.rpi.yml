@@ -34,11 +34,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.rpi
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+        NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-06-03}"
     restart: unless-stopped
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:-change-me-on-rpi}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
       REDIS_URL: "redis://redis:6379"
       NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+      NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-06-03}"
       NODE_ENV: "production"
     ports:
       - "${APP_PORT:-3000}:3000"
@@ -59,6 +63,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.rpi
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://localhost:3000}"
+        NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-06-03}"
     restart: unless-stopped
     command: npm run worker
     environment:
