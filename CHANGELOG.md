@@ -35,6 +35,10 @@
 - Startseite startet ohne Demo-Orte und bietet getrennte Aktionen fuer direkte Eingabe, GPX, Demo und gespeicherte Tour
 - Lokaler TourState fuer Routenuebersicht und Vollbildkarte ergaenzt
 - Eigene Vollbildkartenroute `/planer/karte` mit Ruecksprung zur Bearbeitung und Etappenplanung ergaenzt
+- Individuelle Etappenpunkte mit Ortsname, km-Position und Kartenklick entlang der GPX-Route ergaenzt
+- GPX-basierter Routenzuschnitt per Start-/End-km ergaenzt
+- Manuelle Etappenbearbeitung ueber Start-km, Ziel-km und Laenge mit Neuberechnung der Etappengeometrie ergaenzt
+- Tests fuer GPX-Import, Routentrimmen, Etappenvorschlaege und manuelle Etappengeometrie ergaenzt
 - Public/private-Deployment-Konzept dokumentiert
 - Artefakt-Skripte fuer public/private-Branch-Vorbereitung ergaenzt
 - Sicherheitschecks fuer public/private-Artefakte ergaenzt

@@ -75,6 +75,18 @@ Details stehen in:
 - Lokaler TourState speichert Route, Etappen und POI fuer Ruecksprung und Vollbildkarte.
 - `/planer/karte` ist ein eigener Kartenarbeitsbereich mit Ruecksprung zur Bearbeitung und Etappenplanung.
 
+## Aktueller Stand nach #29-Abnahme
+
+- PR #25 wurde nach fachlicher RPi-/Browser-Abnahme in den Integrationsbranch gemergt: `5c15c827624f75005595d05e2c63df0778a31886`.
+- Der #29-Branch wurde auf dem Raspberry Pi per `rpi-update.sh` gestartet; App- und Worker-Healthcheck waren erfolgreich.
+- Im Browser wurde eine echte GPX-Datei aus `gps-touring/sample-gpx` geladen und vollstaendig angezeigt.
+- GPX-Start und -Ende wurden entlang der Route getrimmt: km 2,0 bis km 76,8.
+- Nach dem Trim wurden 2 Etappen nach km erzeugt.
+- Eine Etappe wurde manuell per Start-km, Ziel-km und Laenge geaendert: 0,0 -> 0,5 km, 37,4 -> 38,9 km und 37,4 -> 38,4 km.
+- Distanz, Hoehenmeter und Fahrzeit wurden neu berechnet; Hoehenmeter stiegen im Test von 259 auf 266 Hm.
+- Farbige Etappenlinien, Speichern, erneutes Oeffnen und persistierte Etappengeometrie wurden geprueft.
+- Prisma wurde im Rahmen von #29 nicht aktualisiert; der angezeigte Prisma-Update-Hinweis bleibt ein separater technischer Auftrag.
+
 ## Deployment-Struktur
 
 - Arbeitsbranches bleiben vollstaendige Entwicklungsstaende mit Quellcode, Tests, Doku und Buildlogik.
@@ -95,4 +107,5 @@ Details stehen in:
 
 ## Naechste fachliche Arbeit
 
-#29 bleibt getrennt: GPX-Bearbeitung und Etappenlogik sollen auf dem neuen Workflow aufsetzen, ohne die Bedienstruktur wieder zu ueberladen.
+- #29 ist fachlich abgenommen und integriert.
+- Naechste fachliche Erweiterungen bleiben ausserhalb dieses Stands: Hotelbuchung, Nutzerkonten, produktive POI-Massenabfrage, neue Routing-API und Aenderungen am public/private-Konzept.
