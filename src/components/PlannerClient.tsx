@@ -40,8 +40,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   closestPointOnRoute,
   createElevationProfile,
+  createTrimmedRouteFromOriginal,
   createValidatedStageSliceFromBounds,
-  normalizeRouteTrimBounds,
   routeBoundsForStage,
   routeDistanceKm,
   toGpx,
@@ -65,6 +65,16 @@ type RouteCalculation = {
   elevationDown: number;
   durationHours: number;
   geometryGeoJson: LineStringGeoJson;
+  originalGeometryGeoJson?: LineStringGeoJson;
+  originalDistanceKm?: number;
+  originalElevationUp?: number;
+  originalElevationDown?: number;
+  originalDurationHours?: number;
+  originalElevationProfile?: ElevationPoint[];
+  trimStartKmOriginal?: number;
+  trimEndKmOriginal?: number;
+  startLocationName?: string;
+  startLocationCoordinate?: Position;
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
   coordinateCorrections?: string[];
@@ -222,6 +232,31 @@ function normalizePlannerStep(value?: string): PlannerStep | null {
   return null;
 }
 
+function routeWithOriginalGeometry<T extends RouteCalculation>(routeData: T): T {
+  const originalGeometryGeoJson = routeData.originalGeometryGeoJson ?? routeData.geometryGeoJson;
+  const originalDistanceKm = routeDistanceKm(originalGeometryGeoJson.coordinates);
+
+  return {
+    ...routeData,
+    originalGeometryGeoJson,
+    originalDistanceKm: routeData.originalDistanceKm ?? Number(originalDistanceKm.toFixed(1)),
+    originalElevationUp: routeData.originalElevationUp ?? routeData.elevationUp,
+    originalElevationDown: routeData.originalElevationDown ?? routeData.elevationDown,
+    originalDurationHours: routeData.originalDurationHours ?? routeData.durationHours,
+    originalElevationProfile: routeData.originalElevationProfile ?? routeData.elevationProfile,
+    trimStartKmOriginal: routeData.trimStartKmOriginal ?? 0,
+    trimEndKmOriginal: routeData.trimEndKmOriginal ?? originalDistanceKm
+  };
+}
+
+function descriptionWithoutTrimNotice(description?: string | null) {
+  return (description ?? "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("Gekuerzt auf km "))
+    .join("\n")
+    .trim();
+}
+
 export function PlannerClient({
   initialStart = "",
   initialEnd = "",
@@ -276,6 +311,13 @@ export function PlannerClient({
   const [newStagePointKm, setNewStagePointKm] = useState(0);
   const [trimStartKm, setTrimStartKm] = useState(0);
   const [trimEndKm, setTrimEndKm] = useState(0);
+  const [trimStartLocationName, setTrimStartLocationName] = useState("");
+  const [startLocationPreview, setStartLocationPreview] = useState<{
+    name: string;
+    coordinate: Position;
+    distanceKm: number;
+    distanceToRouteKm: number;
+  } | null>(null);
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
@@ -309,7 +351,22 @@ export function PlannerClient({
 
   const route = savedRoute ?? calculation;
   const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
+  const originalRouteGeometry = route?.originalGeometryGeoJson ?? route?.geometryGeoJson ?? null;
+  const originalRouteTotalKm = useMemo(
+    () => (originalRouteGeometry ? routeDistanceKm(originalRouteGeometry.coordinates) : 0),
+    [originalRouteGeometry]
+  );
   const routeTrimSummary = useMemo(() => {
+    if (route?.trimStartKmOriginal !== undefined && route.trimEndKmOriginal !== undefined) {
+      if (route.trimStartKmOriginal > 0 || route.trimEndKmOriginal < originalRouteTotalKm - 0.05) {
+        return {
+          startKm: route.trimStartKmOriginal,
+          endKm: route.trimEndKmOriginal,
+          distanceKm: route.distanceKm
+        };
+      }
+    }
+
     if (!route?.description) {
       return null;
     }
@@ -325,7 +382,7 @@ export function PlannerClient({
       endKm: Number(match[2].replace(",", ".")),
       distanceKm: route.distanceKm
     };
-  }, [route]);
+  }, [originalRouteTotalKm, route]);
   const sortedStageBreakpoints = useMemo(
     () => stageBreakpoints.slice().sort((a, b) => a.distanceKm - b.distanceKm),
     [stageBreakpoints]
@@ -383,11 +440,12 @@ export function PlannerClient({
     if (openLast) {
       const stored = parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY));
       if (stored?.route) {
+        const storedRoute = routeWithOriginalGeometry(stored.route as RouteCalculation & { id?: string });
         setInputMode(stored.inputMode);
-        if (stored.route.id) {
-          setSavedRoute(stored.route as SavedRoute);
+        if (storedRoute.id) {
+          setSavedRoute(storedRoute as SavedRoute);
         } else {
-          setCalculation(stored.route);
+          setCalculation(storedRoute);
         }
         setStages(stored.stages as Stage[]);
         setPois(stored.pois as Poi[]);
@@ -431,11 +489,13 @@ export function PlannerClient({
   useEffect(() => {
     setStageBreakpoints([]);
     setNewStagePointKm(routeTotalKm > 0 ? Number(Math.min(50, routeTotalKm).toFixed(1)) : 0);
-    setTrimStartKm(0);
-    setTrimEndKm(Number(routeTotalKm.toFixed(1)));
+    setTrimStartKm(Number((route?.trimStartKmOriginal ?? 0).toFixed(1)));
+    setTrimEndKm(Number((route?.trimEndKmOriginal ?? originalRouteTotalKm).toFixed(1)));
+    setTrimStartLocationName(route?.startLocationName ?? "");
+    setStartLocationPreview(null);
     setIsPickingStagePoint(false);
     setStageFeedback({});
-  }, [route?.geometryGeoJson, routeTotalKm]);
+  }, [originalRouteTotalKm, route?.geometryGeoJson, route?.startLocationName, route?.trimEndKmOriginal, route?.trimStartKmOriginal, routeTotalKm]);
 
   function addStageBreakpoint() {
     if (!route || routeTotalKm <= 0) {
@@ -640,38 +700,82 @@ export function PlannerClient({
     }
   }
 
+  function previewTrimStartLocation() {
+    if (!originalRouteGeometry || originalRouteTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const city = findCityAnchor(trimStartLocationName);
+    if (!city) {
+      setStartLocationPreview(null);
+      setStatus("Startort nicht in der lokalen Testliste gefunden. Bitte Start-km manuell setzen.");
+      return;
+    }
+
+    const closest = closestPointOnRoute(city.coordinate, originalRouteGeometry.coordinates);
+    const distanceKm = Math.min(Math.max(closest.distanceKm, 0), originalRouteTotalKm);
+    const preview = {
+      name: city.name,
+      coordinate: city.coordinate,
+      distanceKm: Number(distanceKm.toFixed(1)),
+      distanceToRouteKm: Number(closest.distanceToRouteKm.toFixed(1))
+    };
+    setStartLocationPreview(preview);
+    setStatus(
+      `${preview.name} liegt ${preview.distanceToRouteKm.toFixed(1)} km von der GPX-Route entfernt. Vorschlag: Start bei GPX-km ${preview.distanceKm.toFixed(1)}. Bitte pruefen und uebernehmen.`
+    );
+  }
+
+  function applyTrimStartLocationPreview() {
+    if (!startLocationPreview) {
+      setStatus("Bitte zuerst einen Startort pruefen.");
+      return;
+    }
+
+    setTrimStartKm(startLocationPreview.distanceKm);
+    setStatus(
+      `Startort ${startLocationPreview.name} uebernommen: GPX-km ${startLocationPreview.distanceKm.toFixed(1)}. Die Route wird erst mit "GPX-Route kuerzen" angepasst.`
+    );
+  }
+
   async function applyRouteTrim() {
-    if (!savedRoute?.id || !route) {
+    if (!savedRoute?.id || !route || !originalRouteGeometry) {
       setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
       return;
     }
 
     const startKm = Number(trimStartKm);
     const endKm = Number(trimEndKm);
-    const validation = normalizeRouteTrimBounds(routeTotalKm, startKm, endKm);
-    if (!validation.ok) {
-      setStatus(`Route konnte nicht gekuerzt werden: ${validation.message}`);
+    const trim = createTrimmedRouteFromOriginal(originalRouteGeometry, startKm, endKm);
+    if (!trim.ok) {
+      setStatus(`Route konnte nicht gekuerzt werden: ${trim.message}`);
       return;
     }
 
-    if (validation.endKm - validation.startKm < 1) {
+    if (trim.endKm - trim.startKm < 1) {
       setStatus("Der verbleibende Routenabschnitt muss mindestens 1 km lang sein.");
       return;
     }
 
     setIsBusy(true);
     try {
-      const geometryGeoJson = trimRouteGeometry(route.geometryGeoJson, validation.startKm, validation.endKm);
-      const distanceKm = Number(routeDistanceKm(geometryGeoJson.coordinates).toFixed(1));
+      const geometryGeoJson = trim.geometryGeoJson;
+      const distanceKm = trim.distanceKm;
       const elevationProfile = createElevationProfile(geometryGeoJson.coordinates);
       const elevationUp = Math.round(distanceKm * 6.2);
       const elevationDown = Math.round(distanceKm * 4.8);
+      const durationHours = Number((distanceKm / 17).toFixed(2));
+      const baseDescription = descriptionWithoutTrimNotice(route.description);
+      const description = `${baseDescription}\nGekuerzt auf km ${trim.startKm.toFixed(1)} bis ${trim.endKm.toFixed(1)} der GPX-Grundroute.`.trim();
+      const appliedStartLocation =
+        startLocationPreview && Math.abs(startLocationPreview.distanceKm - trim.startKm) < 0.05 ? startLocationPreview : null;
 
       const response = await fetch(`/api/routes/${savedRoute.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: `${route.description ?? ""}\nGekuerzt auf km ${validation.startKm.toFixed(1)} bis ${validation.endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
+          description,
           distanceKm,
           elevationUp,
           elevationDown,
@@ -686,8 +790,19 @@ export function PlannerClient({
         distanceKm,
         elevationUp,
         elevationDown,
-        description: payload.route?.description ?? `${route.description ?? ""}\nGekuerzt auf km ${validation.startKm.toFixed(1)} bis ${validation.endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
+        durationHours,
+        description: payload.route?.description ?? description,
         geometryGeoJson,
+        originalGeometryGeoJson: originalRouteGeometry,
+        originalDistanceKm: route.originalDistanceKm ?? Number(originalRouteTotalKm.toFixed(1)),
+        originalElevationUp: route.originalElevationUp ?? route.elevationUp,
+        originalElevationDown: route.originalElevationDown ?? route.elevationDown,
+        originalDurationHours: route.originalDurationHours ?? route.durationHours,
+        originalElevationProfile: route.originalElevationProfile ?? route.elevationProfile,
+        trimStartKmOriginal: trim.startKm,
+        trimEndKmOriginal: trim.endKm,
+        startLocationName: appliedStartLocation?.name,
+        startLocationCoordinate: appliedStartLocation?.coordinate,
         elevationProfile
       };
       setSavedRoute(updatedRoute);
@@ -698,8 +813,111 @@ export function PlannerClient({
               distanceKm,
               elevationUp,
               elevationDown,
+              durationHours,
               description: updatedRoute.description,
               geometryGeoJson,
+              originalGeometryGeoJson: originalRouteGeometry,
+              originalDistanceKm: updatedRoute.originalDistanceKm,
+              originalElevationUp: updatedRoute.originalElevationUp,
+              originalElevationDown: updatedRoute.originalElevationDown,
+              originalDurationHours: updatedRoute.originalDurationHours,
+              originalElevationProfile: updatedRoute.originalElevationProfile,
+              trimStartKmOriginal: trim.startKm,
+              trimEndKmOriginal: trim.endKm,
+              startLocationName: appliedStartLocation?.name,
+              startLocationCoordinate: appliedStartLocation?.coordinate,
+              elevationProfile
+            }
+          : current
+      );
+      setStages([]);
+      setPois([]);
+      setSelectedPoi(null);
+      setStageBreakpoints([]);
+      setStageFeedback({});
+      setTrimStartKm(trim.startKm);
+      setTrimEndKm(trim.endKm);
+      setStatus(`Route gekuerzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
+      setPlannerStep("stages");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Route konnte nicht gekuerzt werden.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function resetRouteTrim() {
+    if (!savedRoute?.id || !route || !originalRouteGeometry) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const distanceKm = route.originalDistanceKm ?? Number(originalRouteTotalKm.toFixed(1));
+    const elevationUp = route.originalElevationUp ?? Math.round(distanceKm * 6.2);
+    const elevationDown = route.originalElevationDown ?? Math.round(distanceKm * 4.8);
+    const durationHours = route.originalDurationHours ?? Number((distanceKm / 17).toFixed(2));
+    const elevationProfile = route.originalElevationProfile ?? createElevationProfile(originalRouteGeometry.coordinates);
+    const baseDescription = descriptionWithoutTrimNotice(route.description);
+    const description = baseDescription || null;
+
+    setIsBusy(true);
+    try {
+      const response = await fetch(`/api/routes/${savedRoute.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description,
+          distanceKm,
+          elevationUp,
+          elevationDown,
+          geometryGeoJson: originalRouteGeometry
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Kuerzung konnte nicht zurueckgesetzt werden.");
+
+      const updatedRoute: SavedRoute = {
+        ...savedRoute,
+        distanceKm,
+        elevationUp,
+        elevationDown,
+        durationHours,
+        description: payload.route?.description ?? description,
+        geometryGeoJson: originalRouteGeometry,
+        originalGeometryGeoJson: originalRouteGeometry,
+        originalDistanceKm: distanceKm,
+        originalElevationUp: elevationUp,
+        originalElevationDown: elevationDown,
+        originalDurationHours: durationHours,
+        originalElevationProfile: elevationProfile,
+        trimStartKmOriginal: 0,
+        trimEndKmOriginal: originalRouteTotalKm,
+        startLocationName: undefined,
+        startLocationCoordinate: undefined,
+        elevationProfile
+      };
+
+      setSavedRoute(updatedRoute);
+      setCalculation((current) =>
+        current
+          ? {
+              ...current,
+              distanceKm,
+              elevationUp,
+              elevationDown,
+              durationHours,
+              description: updatedRoute.description,
+              geometryGeoJson: originalRouteGeometry,
+              originalGeometryGeoJson: originalRouteGeometry,
+              originalDistanceKm: distanceKm,
+              originalElevationUp: elevationUp,
+              originalElevationDown: elevationDown,
+              originalDurationHours: durationHours,
+              originalElevationProfile: elevationProfile,
+              trimStartKmOriginal: 0,
+              trimEndKmOriginal: originalRouteTotalKm,
+              startLocationName: undefined,
+              startLocationCoordinate: undefined,
               elevationProfile
             }
           : current
@@ -710,11 +928,13 @@ export function PlannerClient({
       setStageBreakpoints([]);
       setStageFeedback({});
       setTrimStartKm(0);
-      setTrimEndKm(distanceKm);
-      setStatus(`Route gekuerzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
+      setTrimEndKm(Number(originalRouteTotalKm.toFixed(1)));
+      setTrimStartLocationName("");
+      setStartLocationPreview(null);
+      setStatus("Kuerzung zurueckgesetzt. Die vollstaendige Original-GPX-Route ist wieder sichtbar; Etappen und POI bitte neu erzeugen.");
       setPlannerStep("stages");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Route konnte nicht gekuerzt werden.");
+      setStatus(error instanceof Error ? error.message : "Kuerzung konnte nicht zurueckgesetzt werden.");
     } finally {
       setIsBusy(false);
     }
@@ -744,18 +964,19 @@ export function PlannerClient({
       const calculated = await calculateResponse.json();
       if (!calculateResponse.ok) throw new Error(calculated.error ?? "Routing fehlgeschlagen.");
 
-      setCalculation(calculated);
+      const calculatedRoute = routeWithOriginalGeometry(calculated);
+      setCalculation(calculatedRoute);
       setStatus("Route berechnet, Arbeitsroute wird gespeichert.");
 
       const saveResponse = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(calculated)
+        body: JSON.stringify(calculatedRoute)
       });
       const saved = await saveResponse.json();
       if (!saveResponse.ok) throw new Error(saved.error ?? "Route konnte nicht gespeichert werden.");
 
-      const savedData: SavedRoute = { ...calculated, id: saved.route.id };
+      const savedData: SavedRoute = { ...calculatedRoute, id: saved.route.id };
       setSavedRoute(savedData);
       const generatedStages = await generateStages(saved.route.id, values.targetKm);
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
@@ -796,16 +1017,17 @@ export function PlannerClient({
       plannerForm.setValue("start", imported.startName ?? "GPX Start", { shouldDirty: true });
       plannerForm.setValue("end", imported.endName ?? "GPX Ziel", { shouldDirty: true });
       setWaypoints([]);
-      setCalculation(imported);
+      const importedRoute = routeWithOriginalGeometry(imported);
+      setCalculation(importedRoute);
       const saveResponse = await fetch("/api/routes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(imported)
+        body: JSON.stringify(importedRoute)
       });
       const saved = await saveResponse.json();
       if (!saveResponse.ok) throw new Error(saved.error ?? "Importierte Route konnte nicht gespeichert werden.");
 
-      const savedData: SavedRoute = { ...imported, id: saved.route.id };
+      const savedData: SavedRoute = { ...importedRoute, id: saved.route.id };
       setSavedRoute(savedData);
       const generatedStages = await generateStages(saved.route.id, plannerForm.getValues("targetKm"));
       const poiPayload = await loadPois(saved.route.id, plannerForm.getValues("corridorKm"));
@@ -816,7 +1038,7 @@ export function PlannerClient({
           : "";
       setStatus(
         `GPX-Route importiert: ${imported.pointCount ?? savedData.geometryGeoJson.coordinates.length} Punkte, ${
-          imported.elevationSource === "gpx" ? "Hoehenprofil aus Datei" : "Hoehenprofil geschaetzt"
+          imported.elevationSource === "gpx" ? "Höhenprofil aus Datei" : "Höhenprofil geschaetzt"
         }. ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI sind bereit.${correctionNotice}${poiNotice}`
       );
       setPlannerStep("overview");
@@ -1515,7 +1737,7 @@ export function PlannerClient({
                   }}
                 >
                   <Activity className="h-4 w-4" />
-                  Hoehenprofil
+                  Höhenprofil
                 </button>
               </div>
             </div>
@@ -1684,7 +1906,7 @@ export function PlannerClient({
                     <div>
                       <div className="font-semibold">Route kuerzen</div>
                       <p className="text-sm text-muted-foreground">
-                        Start und Ende der GPX-Grundroute entlang der vorhandenen Linie verschieben. Ziel-km muss groesser als Start-km sein.
+                        Start und Ende werden immer aus der unveraenderten Original-GPX-Route berechnet. Original-Laenge: {formatKm(originalRouteTotalKm)}.
                       </p>
                     </div>
                     {routeTrimSummary && (
@@ -1693,23 +1915,57 @@ export function PlannerClient({
                         {routeTrimSummary.endKm.toFixed(1)}.
                       </div>
                     )}
+                    <div className="grid gap-2 rounded-md border bg-muted p-3">
+                      <Label htmlFor="trimStartLocation">Startort suchen</Label>
+                      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                        <Input
+                          id="trimStartLocation"
+                          placeholder="z. B. Magdeburg"
+                          value={trimStartLocationName}
+                          onChange={(event) => {
+                            setTrimStartLocationName(event.target.value);
+                            setStartLocationPreview(null);
+                          }}
+                        />
+                        <Button type="button" variant="outline" onClick={previewTrimStartLocation}>
+                          Pruefen
+                        </Button>
+                      </div>
+                      {startLocationPreview && (
+                        <div className="grid gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+                          <div>
+                            {startLocationPreview.name}: {startLocationPreview.distanceToRouteKm.toFixed(1)} km zur GPX-Route, Vorschlag GPX-km{" "}
+                            {startLocationPreview.distanceKm.toFixed(1)}.
+                          </div>
+                          <Button className="w-full" type="button" variant="secondary" onClick={applyTrimStartLocationPreview}>
+                            Startort uebernehmen
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Der Ort verschiebt die Route nicht. Er sucht nur den naechstgelegenen Punkt auf der Original-GPX-Route.
+                      </p>
+                    </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="trimStartKm">Start ab km</Label>
+                      <Label htmlFor="trimStartKm">Start ab Original-km</Label>
                       <Input
                         id="trimStartKm"
-                        max={routeTotalKm || undefined}
+                        max={originalRouteTotalKm || undefined}
                         min="0"
                         step="0.1"
                         type="number"
                         value={trimStartKm}
-                        onChange={(event) => setTrimStartKm(Number(event.target.value))}
+                        onChange={(event) => {
+                          setTrimStartKm(Number(event.target.value));
+                          setStartLocationPreview(null);
+                        }}
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="trimEndKm">Ende bei km</Label>
+                      <Label htmlFor="trimEndKm">Ende bei Original-km</Label>
                       <Input
                         id="trimEndKm"
-                        max={routeTotalKm || undefined}
+                        max={originalRouteTotalKm || undefined}
                         min="0"
                         step="0.1"
                         type="number"
@@ -1717,12 +1973,15 @@ export function PlannerClient({
                         onChange={(event) => setTrimEndKm(Number(event.target.value))}
                       />
                     </div>
-                    <Button className="w-full" disabled={!savedRoute || routeTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
+                    <Button className="w-full" disabled={!savedRoute || originalRouteTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
                       <Route className="h-4 w-4" />
                       GPX-Route kuerzen
                     </Button>
+                    <Button className="w-full" disabled={!savedRoute || !routeTrimSummary || isBusy} type="button" variant="outline" onClick={resetRouteTrim}>
+                      Kuerzung zuruecksetzen
+                    </Button>
                     <p className="text-xs text-muted-foreground">
-                      Nach dem Kuerzen werden Etappen und POI zurueckgesetzt und muessen neu berechnet werden.
+                      Jede Korrektur wird neu aus der Original-GPX-Route abgeleitet. Nach dem Kuerzen oder Zuruecksetzen werden Etappen und POI zurueckgesetzt.
                     </p>
                   </div>
                 </CardContent>

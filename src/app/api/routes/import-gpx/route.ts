@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       name: routeName,
-      description: `GPX-Import mit ${coordinates.length} Punkten (${parsedGpx.pointType}), Hoehenprofil: ${
+      description: `GPX-Import mit ${coordinates.length} Punkten (${parsedGpx.pointType}), Höhenprofil: ${
         parsedGpx.hasElevation ? "aus GPX-Datei" : "geschaetzt"
       }.`,
       startName: "GPX Start",

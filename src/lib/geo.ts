@@ -251,6 +251,24 @@ export function normalizeRouteTrimBounds(totalDistanceKm: number, startKm: numbe
   return validateStageSliceBounds(totalDistanceKm, startKm, normalizedEndKm);
 }
 
+export function createTrimmedRouteFromOriginal(geometry: LineStringGeoJson, startKm: number, endKm: number) {
+  const totalDistance = routeDistanceKm(geometry.coordinates);
+  const validation = normalizeRouteTrimBounds(totalDistance, startKm, endKm);
+  if (!validation.ok) {
+    return validation;
+  }
+
+  const trimmedGeometry = trimRouteGeometry(geometry, validation.startKm, validation.endKm);
+
+  return {
+    ok: true as const,
+    startKm: Number(validation.startKm.toFixed(1)),
+    endKm: Number(validation.endKm.toFixed(1)),
+    distanceKm: Number(routeDistanceKm(trimmedGeometry.coordinates).toFixed(1)),
+    geometryGeoJson: trimmedGeometry
+  };
+}
+
 export function createValidatedStageSliceFromBounds(
   geometry: LineStringGeoJson,
   startKm: number,

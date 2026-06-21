@@ -5,11 +5,14 @@ Stand: 2026-06-21
 ## Bedienlogik
 
 - Die importierte GPX-Route bleibt die feste geometrische Grundlage.
+- Die sichtbare Route ist eine abgeleitete Arbeitsgeometrie aus Original-GPX, Start-km und Ziel-km.
+- Jede Korrektur wird wieder aus der Original-GPX-Route berechnet und nicht auf eine bereits gekuerzte Route angewendet.
 - Start-km bezeichnet den Beginn einer Etappe auf der aktuellen Routengeometrie.
 - Ziel-km bezeichnet das Ende einer Etappe auf der aktuellen Routengeometrie.
 - Laenge setzt das Ziel relativ zum Start-km.
 - Orte dienen im MVP als Etappennamen oder werden auf den naechsten Punkt der bestehenden Route projiziert.
 - Orte verlegen die Route aktuell nicht automatisch und starten keine neue Routing-Abfrage.
+- Ein Startort kann fuer die Kuerzung geprueft werden. Die App zeigt den naechsten Punkt auf der Original-GPX-Route, die Entfernung des Orts zur Route und den vorgeschlagenen GPX-km an; erst nach Uebernahme und Kuerzen wird die Arbeitsroute angepasst.
 
 ## Validierung
 
@@ -19,6 +22,7 @@ Stand: 2026-06-21
 - Laenge darf nicht 0 oder negativ sein.
 - Ungueltige km-Eingaben erzeugen eine Statusmeldung und lassen die bisherige Etappengeometrie unveraendert.
 - Beim Kuerzen wird ein auf eine Nachkommastelle gerundeter End-km-Wert innerhalb der Anzeige-Toleranz auf das echte Routenende normalisiert. Dadurch bleiben grosse Startkuerzungen wie 300 km auch bei gerundeter Anzeige stabil.
+- `Kuerzung zuruecksetzen` stellt die volle Original-GPX-Route wieder her und setzt Etappen/POI zur Neuberechnung zurueck.
 
 ## Sichtbare Rueckmeldungen
 
@@ -26,8 +30,8 @@ Stand: 2026-06-21
 - Die aktuelle gekuerzte Laenge und der urspruengliche GPX-km-Bereich werden angezeigt.
 - Nach manueller Etappenanpassung wird die betroffene Etappe als `Geometrie aktualisiert` markiert.
 - Nach dem Speichern wird die betroffene Etappe als `Gespeichert` markiert.
-- Karte und Hoehenprofil werden im Planer ueber eine gemeinsame Ansichtsauswahl umgeschaltet. Standard ist die Karte.
-- Das Hoehenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
+- Karte und Höhenprofil werden im Planer ueber eine gemeinsame Ansichtsauswahl umgeschaltet. Standard ist die Karte.
+- Das Höhenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
 
 ## Export und erneutes Oeffnen
 

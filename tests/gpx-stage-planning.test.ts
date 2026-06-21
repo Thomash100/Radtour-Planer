@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { parseGpx } from "../src/lib/gpx";
 import {
   closestPointOnRoute,
+  createTrimmedRouteFromOriginal,
   createValidatedStageSliceFromBounds,
   createStageSliceFromBounds,
   cumulativeDistances,
@@ -122,6 +123,30 @@ describe("GPX parsing and stage planning", () => {
     assert.ok(trimmed.coordinates.length >= 2);
     assertClose(routeDistanceKm(trimmed.coordinates), totalKm - 300, 0.2);
     assert.equal(normalizeRouteTrimBounds(totalKm, 300, totalKm + 0.2).ok, false);
+  });
+
+  it("recomputes route trims idempotently from the original route", () => {
+    const totalKm = routeDistanceKm(longRoute.coordinates);
+    const trimFrom300 = createTrimmedRouteFromOriginal(longRoute, 300, totalKm);
+    const trimFrom250 = createTrimmedRouteFromOriginal(longRoute, 250, totalKm);
+    const resetTrim = createTrimmedRouteFromOriginal(longRoute, 0, totalKm);
+    const shorterEnd = createTrimmedRouteFromOriginal(longRoute, 100, 350);
+    const correctedEnd = createTrimmedRouteFromOriginal(longRoute, 100, 400);
+
+    assert.equal(trimFrom300.ok, true);
+    assert.equal(trimFrom250.ok, true);
+    assert.equal(resetTrim.ok, true);
+    assert.equal(shorterEnd.ok, true);
+    assert.equal(correctedEnd.ok, true);
+    if (!trimFrom300.ok || !trimFrom250.ok || !resetTrim.ok || !shorterEnd.ok || !correctedEnd.ok) {
+      return;
+    }
+
+    assertClose(trimFrom300.distanceKm, totalKm - 300, 0.2);
+    assertClose(trimFrom250.distanceKm, totalKm - 250, 0.2);
+    assertClose(resetTrim.distanceKm, totalKm, 0.2);
+    assertClose(shorterEnd.distanceKm, 250, 0.2);
+    assertClose(correctedEnd.distanceKm, 300, 0.2);
   });
 
   it("creates automatic stage suggestions close to the target distance", () => {

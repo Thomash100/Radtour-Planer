@@ -74,9 +74,12 @@ Je nach Aufgabe pruefen:
 - Etappenlinien sind farbig unterscheidbar.
 - Etappen koennen erzeugt, angepasst und gespeichert werden.
 - Ungueltige Etappen-km werden verstaendlich abgelehnt und veraendern die bisherige Geometrie nicht.
+- Wiederholte Routenkuerzungen werden aus der Original-GPX-Route berechnet: Start 300 km, danach 250 km, danach 0 km duerfen nicht kumulativ schrumpfen.
+- `Kuerzung zuruecksetzen` stellt die vollstaendige Originalroute wieder her und setzt Etappen/POI zur Neuberechnung zurueck.
+- Startort-Vorschau zeigt Ort, Abstand zur GPX-Route und vorgeschlagenen GPX-km vor Uebernahme an.
 - Gekuerzte Routen zeigen gekuerzte Laenge und GPX-km-Bereich an.
 - Grosse Startkuerzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
-- Karte ist Standardansicht; Umschalten auf Hoehenprofil funktioniert ohne die Etappenliste seitlich zusammenzudruecken.
+- Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudruecken.
 - Geaenderte Etappen zeigen eine Rueckmeldung zur neu berechneten Geometrie.
 - GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
 - Hoehenprofil passt zur geladenen Route.

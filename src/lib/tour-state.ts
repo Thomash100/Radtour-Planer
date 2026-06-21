@@ -16,6 +16,16 @@ export type StoredRoute = {
   elevationDown: number;
   durationHours: number;
   geometryGeoJson: LineStringGeoJson;
+  originalGeometryGeoJson?: LineStringGeoJson;
+  originalDistanceKm?: number;
+  originalElevationUp?: number;
+  originalElevationDown?: number;
+  originalDurationHours?: number;
+  originalElevationProfile?: Array<{ distanceKm: number; elevationM: number }>;
+  trimStartKmOriginal?: number;
+  trimEndKmOriginal?: number;
+  startLocationName?: string;
+  startLocationCoordinate?: [number, number];
   elevationProfile: Array<{ distanceKm: number; elevationM: number }>;
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
   coordinateCorrections?: string[];
