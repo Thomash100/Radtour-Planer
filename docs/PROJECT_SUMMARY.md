@@ -85,6 +85,7 @@ Details stehen in:
 - Eine Etappe wurde manuell per Start-km, Ziel-km und Laenge geaendert: 0,0 -> 0,5 km, 37,4 -> 38,9 km und 37,4 -> 38,4 km.
 - Distanz, Hoehenmeter und Fahrzeit wurden neu berechnet; Hoehenmeter stiegen im Test von 259 auf 266 Hm.
 - Farbige Etappenlinien, Speichern, erneutes Oeffnen und persistierte Etappengeometrie wurden geprueft.
+- Nach dem Merge wurde ein kurzer RPi-Smoke-Test durchgefuehrt: `/api/health` meldete `ok`, `/planer` oeffnete die Planer-Seite und die gespeicherte Beispielroute `cmqnvfw150043fuiv96ttfpr2` oeffnete mit persistierter Etappe `38.4 km`.
 - Prisma wurde im Rahmen von #29 nicht aktualisiert; der angezeigte Prisma-Update-Hinweis bleibt ein separater technischer Auftrag.
 
 ## Deployment-Struktur
