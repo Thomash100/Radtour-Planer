@@ -202,6 +202,75 @@ export type StageBreakpoint = {
   distanceKm: number;
 };
 
+export type StageSliceValidationResult =
+  | {
+      ok: true;
+      startKm: number;
+      endKm: number;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+export function validateStageSliceBounds(totalDistanceKm: number, startKm: number, endKm: number): StageSliceValidationResult {
+  if (!Number.isFinite(totalDistanceKm) || totalDistanceKm <= 0) {
+    return { ok: false, message: "Die Route hat keine gueltige Laenge." };
+  }
+
+  if (!Number.isFinite(startKm) || !Number.isFinite(endKm)) {
+    return { ok: false, message: "Start-km und Ziel-km muessen gueltige Zahlen sein." };
+  }
+
+  if (startKm < 0) {
+    return { ok: false, message: "Start-km darf nicht kleiner als 0 sein." };
+  }
+
+  if (endKm > totalDistanceKm) {
+    return { ok: false, message: `Ziel-km darf nicht groesser als die Routenlaenge (${totalDistanceKm.toFixed(1)} km) sein.` };
+  }
+
+  if (endKm <= startKm) {
+    return { ok: false, message: "Ziel-km muss groesser als Start-km sein." };
+  }
+
+  return {
+    ok: true,
+    startKm,
+    endKm
+  };
+}
+
+export function createValidatedStageSliceFromBounds(
+  geometry: LineStringGeoJson,
+  startKm: number,
+  endKm: number,
+  stageIndex = 0
+) {
+  const totalDistance = routeDistanceKm(geometry.coordinates);
+  const validation = validateStageSliceBounds(totalDistance, startKm, endKm);
+  if (!validation.ok) {
+    return validation;
+  }
+
+  const stageCoordinates = sliceLineString(geometry.coordinates, validation.startKm, validation.endKm);
+  const stageDistance = routeDistanceKm(stageCoordinates);
+  const elevationFactor = 1 + Math.sin(stageIndex + 0.7) * 0.18;
+
+  return {
+    ok: true as const,
+    startKm: Number(validation.startKm.toFixed(1)),
+    endKm: Number(validation.endKm.toFixed(1)),
+    distanceKm: Number(stageDistance.toFixed(1)),
+    elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+    elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+    geometryGeoJson: {
+      type: "LineString",
+      coordinates: stageCoordinates
+    } satisfies LineStringGeoJson
+  };
+}
+
 export function routeBoundsForStage(routeGeometry: LineStringGeoJson, stageGeometry: LineStringGeoJson) {
   const routeCoordinates = routeGeometry.coordinates;
   const stageCoordinates = stageGeometry.coordinates;

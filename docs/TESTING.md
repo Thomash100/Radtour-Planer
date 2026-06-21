@@ -73,6 +73,10 @@ Je nach Aufgabe pruefen:
 - Vollbildkarte kann geoeffnet und verlassen werden.
 - Etappenlinien sind farbig unterscheidbar.
 - Etappen koennen erzeugt, angepasst und gespeichert werden.
+- Ungueltige Etappen-km werden verstaendlich abgelehnt und veraendern die bisherige Geometrie nicht.
+- Gekuerzte Routen zeigen gekuerzte Laenge und GPX-km-Bereich an.
+- Geaenderte Etappen zeigen eine Rueckmeldung zur neu berechneten Geometrie.
+- GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
 - Hoehenprofil passt zur geladenen Route.
 - POI werden zur aktuellen Route bzw. Etappe angezeigt.
 - Lead-/Partner-/Admin-Flows bleiben erreichbar, wenn betroffen.

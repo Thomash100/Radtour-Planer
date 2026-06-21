@@ -65,6 +65,7 @@ Details stehen in:
 - [AGENTS.md](../AGENTS.md)
 - [docs/CODEX_WORKFLOW.md](CODEX_WORKFLOW.md)
 - [docs/ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)
+- [docs/GPX_STAGE_MVP.md](GPX_STAGE_MVP.md)
 - [docs/TESTING.md](TESTING.md)
 
 ## Aktueller Stand nach #28-Schnitt
@@ -87,6 +88,17 @@ Details stehen in:
 - Farbige Etappenlinien, Speichern, erneutes Oeffnen und persistierte Etappengeometrie wurden geprueft.
 - Nach dem Merge wurde ein kurzer RPi-Smoke-Test durchgefuehrt: `/api/health` meldete `ok`, `/planer` oeffnete die Planer-Seite und die gespeicherte Beispielroute `cmqnvfw150043fuiv96ttfpr2` oeffnete mit persistierter Etappe `38.4 km`.
 - Prisma wurde im Rahmen von #29 nicht aktualisiert; der angezeigte Prisma-Update-Hinweis bleibt ein separater technischer Auftrag.
+
+## Aktueller Stand nach GPX-/Etappen-MVP-Konsolidierung
+
+- Der Planer erklaert direkt im Etappenbereich, dass die GPX-Route die feste Grundlage bleibt.
+- Start-km, Ziel-km und Laenge werden im Arbeitskontext kurz erklaert.
+- Orte dienen im MVP als Etappennamen oder Projektion auf die bestehende Route und verlegen die Route nicht automatisch.
+- Ungueltige km-Eingaben werden abgefangen: Start-km kleiner 0, Ziel-km groesser als Routenlaenge, Ziel-km kleiner/gleich Start-km und Laenge kleiner/gleich 0 erzeugen Statusmeldungen statt kaputter Geometrie.
+- Gekuerzte Routen werden sichtbar markiert; die gekuerzte Laenge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
+- Manuell geaenderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
+- Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollstaendige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
+- Tests decken ungueltige km-Bereiche, ausserhalb der Route liegende Grenzen, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
 
 ## Deployment-Struktur
 

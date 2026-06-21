@@ -39,11 +39,12 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   closestPointOnRoute,
   createElevationProfile,
-  createStageSliceFromBounds,
+  createValidatedStageSliceFromBounds,
   routeBoundsForStage,
   routeDistanceKm,
   toGpx,
   trimRouteGeometry,
+  validateStageSliceBounds,
   type ElevationPoint,
   type LineStringGeoJson,
   type Position,
@@ -274,6 +275,7 @@ export function PlannerClient({
   const [trimStartKm, setTrimStartKm] = useState(0);
   const [trimEndKm, setTrimEndKm] = useState(0);
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
+  const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -304,6 +306,23 @@ export function PlannerClient({
 
   const route = savedRoute ?? calculation;
   const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
+  const routeTrimSummary = useMemo(() => {
+    if (!route?.description) {
+      return null;
+    }
+
+    const matches = [...route.description.matchAll(/Gekuerzt auf km ([0-9]+(?:[.,][0-9]+)?) bis ([0-9]+(?:[.,][0-9]+)?)/g)];
+    const match = matches.at(-1);
+    if (!match) {
+      return null;
+    }
+
+    return {
+      startKm: Number(match[1].replace(",", ".")),
+      endKm: Number(match[2].replace(",", ".")),
+      distanceKm: route.distanceKm
+    };
+  }, [route]);
   const sortedStageBreakpoints = useMemo(
     () => stageBreakpoints.slice().sort((a, b) => a.distanceKm - b.distanceKm),
     [stageBreakpoints]
@@ -412,6 +431,7 @@ export function PlannerClient({
     setTrimStartKm(0);
     setTrimEndKm(Number(routeTotalKm.toFixed(1)));
     setIsPickingStagePoint(false);
+    setStageFeedback({});
   }, [route?.geometryGeoJson, routeTotalKm]);
 
   function addStageBreakpoint() {
@@ -426,7 +446,17 @@ export function PlannerClient({
       return;
     }
 
-    const distanceKm = Math.min(Math.max(Number(newStagePointKm), 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    const distanceKm = Number(newStagePointKm);
+    if (!Number.isFinite(distanceKm)) {
+      setStatus("Etappenpunkt-km muss eine gueltige Zahl sein.");
+      return;
+    }
+
+    if (distanceKm <= 0 || distanceKm >= routeTotalKm) {
+      setStatus(`Etappenpunkt-km muss groesser als 0 und kleiner als die Routenlaenge (${routeTotalKm.toFixed(1)} km) sein.`);
+      return;
+    }
+
     setStageBreakpoints((current) =>
       [...current, { id: crypto.randomUUID(), name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
     );
@@ -481,13 +511,23 @@ export function PlannerClient({
   }
 
   function updateStageBreakpoint(id: string, patch: Partial<StageBreakpoint>) {
+    if (typeof patch.distanceKm === "number") {
+      if (!Number.isFinite(patch.distanceKm)) {
+        setStatus("Etappenpunkt-km muss eine gueltige Zahl sein.");
+        return;
+      }
+
+      if (patch.distanceKm <= 0 || patch.distanceKm >= routeTotalKm) {
+        setStatus(`Etappenpunkt-km muss groesser als 0 und kleiner als die Routenlaenge (${routeTotalKm.toFixed(1)} km) sein.`);
+        return;
+      }
+    }
+
     const normalizedPatch =
       typeof patch.distanceKm === "number"
         ? {
             ...patch,
-            distanceKm: Number(
-              Math.min(Math.max(Number.isFinite(patch.distanceKm) ? patch.distanceKm : 0, 0.5), Math.max(routeTotalKm - 0.5, 0.5)).toFixed(1)
-            )
+            distanceKm: Number(patch.distanceKm.toFixed(1))
           }
         : patch;
 
@@ -569,6 +609,7 @@ export function PlannerClient({
     if (!response.ok) throw new Error(payload.error ?? "Etappen konnten nicht erzeugt werden.");
 
     setStages(payload.stages);
+    setStageFeedback({});
     setStatus(breakpoints.length > 0 ? `${payload.stages.length} individuelle Etappen erzeugt.` : `${payload.stages.length} Tagesetappen erzeugt.`);
     return payload.stages as Stage[];
   }
@@ -602,16 +643,22 @@ export function PlannerClient({
       return;
     }
 
-    const startKm = Math.min(Math.max(Number(trimStartKm), 0), Math.max(routeTotalKm - 1, 0));
-    const endKm = Math.min(Math.max(Number(trimEndKm), startKm + 1), routeTotalKm);
-    if (endKm - startKm < 1) {
+    const startKm = Number(trimStartKm);
+    const endKm = Number(trimEndKm);
+    const validation = validateStageSliceBounds(routeTotalKm, startKm, endKm);
+    if (!validation.ok) {
+      setStatus(`Route konnte nicht gekuerzt werden: ${validation.message}`);
+      return;
+    }
+
+    if (validation.endKm - validation.startKm < 1) {
       setStatus("Der verbleibende Routenabschnitt muss mindestens 1 km lang sein.");
       return;
     }
 
     setIsBusy(true);
     try {
-      const geometryGeoJson = trimRouteGeometry(route.geometryGeoJson, startKm, endKm);
+      const geometryGeoJson = trimRouteGeometry(route.geometryGeoJson, validation.startKm, validation.endKm);
       const distanceKm = Number(routeDistanceKm(geometryGeoJson.coordinates).toFixed(1));
       const elevationProfile = createElevationProfile(geometryGeoJson.coordinates);
       const elevationUp = Math.round(distanceKm * 6.2);
@@ -621,7 +668,7 @@ export function PlannerClient({
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: `${route.description ?? ""}\nGekuerzt auf km ${startKm.toFixed(1)} bis ${endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
+          description: `${route.description ?? ""}\nGekuerzt auf km ${validation.startKm.toFixed(1)} bis ${validation.endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
           distanceKm,
           elevationUp,
           elevationDown,
@@ -636,6 +683,7 @@ export function PlannerClient({
         distanceKm,
         elevationUp,
         elevationDown,
+        description: payload.route?.description ?? `${route.description ?? ""}\nGekuerzt auf km ${validation.startKm.toFixed(1)} bis ${validation.endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
         geometryGeoJson,
         elevationProfile
       };
@@ -647,6 +695,7 @@ export function PlannerClient({
               distanceKm,
               elevationUp,
               elevationDown,
+              description: updatedRoute.description,
               geometryGeoJson,
               elevationProfile
             }
@@ -656,6 +705,7 @@ export function PlannerClient({
       setPois([]);
       setSelectedPoi(null);
       setStageBreakpoints([]);
+      setStageFeedback({});
       setTrimStartKm(0);
       setTrimEndKm(distanceKm);
       setStatus(`Route gekuerzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
@@ -673,6 +723,7 @@ export function PlannerClient({
     setCalculation(null);
     setSavedRoute(null);
     setStages([]);
+    setStageFeedback({});
     setPois([]);
     setSelectedPoi(null);
     try {
@@ -723,6 +774,7 @@ export function PlannerClient({
     setCalculation(null);
     setSavedRoute(null);
     setStages([]);
+    setStageFeedback({});
     setPois([]);
     setSelectedPoi(null);
     try {
@@ -889,28 +941,52 @@ export function PlannerClient({
       return;
     }
 
+    const stage = stages.find((item) => item.id === stageId);
+    if (!stage) {
+      return;
+    }
+
+    const currentBounds = stageKilometers(stage);
+    const startKm = patch.startKm ?? currentBounds.startKm;
+    let endKm = patch.endKm ?? currentBounds.endKm;
+
+    if (typeof patch.distanceKm === "number") {
+      if (!Number.isFinite(patch.distanceKm)) {
+        setStatus(`Etappe ${stage.dayNumber}: Laenge muss eine gueltige Zahl sein.`);
+        return;
+      }
+
+      if (patch.distanceKm <= 0) {
+        setStatus(`Etappe ${stage.dayNumber}: Laenge darf nicht 0 oder negativ sein.`);
+        return;
+      }
+
+      endKm = startKm + patch.distanceKm;
+    }
+
+    const slice = createValidatedStageSliceFromBounds(route.geometryGeoJson, startKm, endKm, stage.dayNumber - 1);
+    if (!slice.ok) {
+      setStatus(`Etappe ${stage.dayNumber}: ${slice.message}`);
+      return;
+    }
+
     setStages((current) =>
-      current.map((stage) => {
-        if (stage.id !== stageId) {
-          return stage;
-        }
-
-        const currentBounds = stageKilometers(stage);
-        const startKm = patch.startKm ?? currentBounds.startKm;
-        const endKm = typeof patch.distanceKm === "number" ? startKm + patch.distanceKm : patch.endKm ?? currentBounds.endKm;
-        const slice = createStageSliceFromBounds(route.geometryGeoJson, startKm, endKm, stage.dayNumber - 1);
-
-        return {
-          ...stage,
-          routeStartKm: slice.startKm,
-          routeEndKm: slice.endKm,
-          distanceKm: slice.distanceKm,
-          elevationUp: slice.elevationUp,
-          elevationDown: slice.elevationDown,
-          geometryGeoJson: slice.geometryGeoJson
-        };
-      })
+      current.map((item) =>
+        item.id === stageId
+          ? {
+              ...item,
+              routeStartKm: slice.startKm,
+              routeEndKm: slice.endKm,
+              distanceKm: slice.distanceKm,
+              elevationUp: slice.elevationUp,
+              elevationDown: slice.elevationDown,
+              geometryGeoJson: slice.geometryGeoJson
+            }
+          : item
+      )
     );
+    setStageFeedback((current) => ({ ...current, [stageId]: "Geometrie aktualisiert" }));
+    setStatus(`Etappe ${stage.dayNumber}: Geometrie neu berechnet (${formatKm(slice.distanceKm)}). Bitte speichern, um die Aenderung dauerhaft zu uebernehmen.`);
   }
 
   async function saveStage(stage: Stage) {
@@ -943,6 +1019,7 @@ export function PlannerClient({
           : item
       )
     );
+    setStageFeedback((current) => ({ ...current, [stage.id]: "Gespeichert" }));
     setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
   }
 
@@ -1181,6 +1258,15 @@ export function PlannerClient({
               <Metric label="Fahrzeit" value={formatHours(route.durationHours)} />
               <Metric label="Eingabe" value={modeLabel} />
             </div>
+            {routeTrimSummary && (
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                <Badge variant="outline">Route gekuerzt</Badge>
+                <span>
+                  Aktuelle Laenge {formatKm(routeTrimSummary.distanceKm)} aus GPX-km {routeTrimSummary.startKm.toFixed(1)} bis{" "}
+                  {routeTrimSummary.endKm.toFixed(1)}.
+                </span>
+              </div>
+            )}
             <RouteMap pois={pois} route={route.geometryGeoJson} selectedPoiId={selectedPoi?.id} stages={stages} waypoints={route.waypoints} onSelectPoi={setSelectedPoi} />
           </div>
           <Card>
@@ -1388,6 +1474,15 @@ export function PlannerClient({
             <Metric label="Fahrzeit" value={route ? formatHours(route.durationHours) : "-"} />
             <Metric label="Etappen" value={stages.length ? String(stages.length) : "-"} />
           </div>
+          {routeTrimSummary && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+              <Badge variant="outline">Route gekuerzt</Badge>
+              <span>
+                Aktuelle Laenge {formatKm(routeTrimSummary.distanceKm)} aus GPX-km {routeTrimSummary.startKm.toFixed(1)} bis{" "}
+                {routeTrimSummary.endKm.toFixed(1)}.
+              </span>
+            </div>
+          )}
           <RouteMap
             pois={pois}
             route={route?.geometryGeoJson}
@@ -1403,29 +1498,34 @@ export function PlannerClient({
             onRoutePointSelect={addRouteStageBreakpoint}
           />
           {savedRoute && (
-            <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-3 shadow-sm">
-              <Button asChild>
-                <Link href={`/reiseplan/${savedRoute.id}`}>
-                  <FileText className="h-4 w-4" />
-                  Reiseplan oeffnen
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href={`/route/${savedRoute.id}`}>
-                  <MapPinned className="h-4 w-4" />
-                  Route ansehen
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/planer/karte">
-                  <Map className="h-4 w-4" />
-                  Vollbildkarte
-                </Link>
-              </Button>
-              <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
-                <ArrowDownToLine className="h-4 w-4" />
-                GPX exportieren
-              </Button>
+            <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
+              <div className="flex flex-wrap gap-2">
+                <Button asChild>
+                  <Link href={`/reiseplan/${savedRoute.id}`}>
+                    <FileText className="h-4 w-4" />
+                    Reiseplan oeffnen
+                  </Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href={`/route/${savedRoute.id}`}>
+                    <MapPinned className="h-4 w-4" />
+                    Route ansehen
+                  </Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/planer/karte">
+                    <Map className="h-4 w-4" />
+                    Vollbildkarte
+                  </Link>
+                </Button>
+                <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
+                  <ArrowDownToLine className="h-4 w-4" />
+                  GPX exportieren
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                GPX exportiert aktuell die bearbeitete Routengeometrie. Etappennamen, Etappenfarben und manuelle Etappenschnitte werden in der gespeicherten Tour geladen, aber noch nicht in die GPX-Datei geschrieben.
+              </p>
             </div>
           )}
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
@@ -1433,10 +1533,15 @@ export function PlannerClient({
               <Card className="xl:col-span-2">
                 <CardHeader>
                   <CardTitle>Etappen frei planen</CardTitle>
-                  <CardDescription>Etappenpunkte bleiben auf der GPX-Grundroute. Orte werden als Zielname oder Projektion auf die Route behandelt.</CardDescription>
+                  <CardDescription>
+                    Die GPX-Route bleibt die feste Grundlage. Orte dienen aktuell als Etappennamen oder werden auf den naechsten Punkt der bestehenden Route projiziert; sie verlegen die Route nicht automatisch.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
                   <div className="space-y-4">
+                    <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
+                      Start-km ist der Beginn der Etappe auf der aktuellen Routengeometrie, Ziel-km ist ihr Ende, Laenge setzt das Ziel relativ zum Start. Werte ausserhalb der Route werden abgelehnt.
+                    </div>
                     <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto_auto]">
                       <div className="grid gap-1">
                         <Label htmlFor="stagePointName">Ort oder Etappenziel</Label>
@@ -1534,8 +1639,16 @@ export function PlannerClient({
                   <div className="space-y-3 rounded-md border bg-white p-4">
                     <div>
                       <div className="font-semibold">Route kuerzen</div>
-                      <p className="text-sm text-muted-foreground">Start und Ende der GPX-Grundroute verschieben.</p>
+                      <p className="text-sm text-muted-foreground">
+                        Start und Ende der GPX-Grundroute entlang der vorhandenen Linie verschieben. Ziel-km muss groesser als Start-km sein.
+                      </p>
                     </div>
+                    {routeTrimSummary && (
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                        Bereits gekuerzt: {formatKm(routeTrimSummary.distanceKm)} aus GPX-km {routeTrimSummary.startKm.toFixed(1)} bis{" "}
+                        {routeTrimSummary.endKm.toFixed(1)}.
+                      </div>
+                    )}
                     <div className="grid gap-2">
                       <Label htmlFor="trimStartKm">Start ab km</Label>
                       <Input
@@ -1595,9 +1708,16 @@ export function PlannerClient({
                   const stageKmBounds = stageKilometers(stage);
 
                   return (
-                    <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
-                      <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
-                        Tag {stage.dayNumber}
+                    <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[150px_minmax(0,1fr)] 2xl:grid-cols-[150px_minmax(0,1fr)_auto]">
+                      <div className="flex flex-wrap items-start gap-2 xl:block">
+                        <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
+                          Tag {stage.dayNumber}
+                        </div>
+                        {stageFeedback[stage.id] && (
+                          <Badge className="mt-0 xl:mt-2" variant={stageFeedback[stage.id] === "Gespeichert" ? "secondary" : "outline"}>
+                            {stageFeedback[stage.id]}
+                          </Badge>
+                        )}
                       </div>
                       <div className="grid min-w-0 gap-3">
                         <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
