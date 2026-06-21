@@ -125,6 +125,36 @@ export function distancePointToLineKm(point: Position, coordinates: Position[]) 
   return minDistance;
 }
 
+export function closestPointOnRoute(point: Position, coordinates: Position[]) {
+  const cumulative = cumulativeDistances(coordinates);
+  let best = {
+    coordinate: coordinates[0] ?? point,
+    distanceKm: 0,
+    distanceToRouteKm: coordinates[0] ? haversineKm(point, coordinates[0]) : Number.POSITIVE_INFINITY
+  };
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const a = coordinates[index - 1];
+    const b = coordinates[index];
+    const p = projectToKm(point, a);
+    const end = projectToKm(b, a);
+    const lengthSquared = end.x * end.x + end.y * end.y;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1, (p.x * end.x + p.y * end.y) / lengthSquared));
+    const projected = interpolatePosition(a, b, t);
+    const distanceToRouteKm = haversineKm(point, projected);
+
+    if (distanceToRouteKm < best.distanceToRouteKm) {
+      best = {
+        coordinate: projected,
+        distanceKm: (cumulative[index - 1] ?? 0) + haversineKm(a, projected),
+        distanceToRouteKm
+      };
+    }
+  }
+
+  return best;
+}
+
 export function createElevationProfile(coordinates: Position[]) {
   const cumulative = cumulativeDistances(coordinates);
   return coordinates.map((coordinate, index) => {
@@ -165,6 +195,105 @@ export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: numb
   }
 
   return stages;
+}
+
+export type StageBreakpoint = {
+  name: string;
+  distanceKm: number;
+};
+
+export function routeBoundsForStage(routeGeometry: LineStringGeoJson, stageGeometry: LineStringGeoJson) {
+  const routeCoordinates = routeGeometry.coordinates;
+  const stageCoordinates = stageGeometry.coordinates;
+  const first = stageCoordinates[0];
+  const last = stageCoordinates[stageCoordinates.length - 1];
+
+  if (!first || !last || routeCoordinates.length < 2) {
+    return { startKm: 0, endKm: 0 };
+  }
+
+  const start = closestPointOnRoute(first, routeCoordinates).distanceKm;
+  const end = closestPointOnRoute(last, routeCoordinates).distanceKm;
+
+  return {
+    startKm: Number(Math.min(start, end).toFixed(1)),
+    endKm: Number(Math.max(start, end).toFixed(1))
+  };
+}
+
+export function createStageSliceFromBounds(
+  geometry: LineStringGeoJson,
+  startKm: number,
+  endKm: number,
+  stageIndex = 0
+) {
+  const totalDistance = routeDistanceKm(geometry.coordinates);
+  const start = Math.min(Math.max(Number.isFinite(startKm) ? startKm : 0, 0), Math.max(totalDistance - 0.1, 0));
+  const end = Math.min(Math.max(Number.isFinite(endKm) ? endKm : start + 0.1, start + 0.1), totalDistance);
+  const stageCoordinates = sliceLineString(geometry.coordinates, start, end);
+  const stageDistance = routeDistanceKm(stageCoordinates);
+  const elevationFactor = 1 + Math.sin(stageIndex + 0.7) * 0.18;
+
+  return {
+    startKm: Number(start.toFixed(1)),
+    endKm: Number(end.toFixed(1)),
+    distanceKm: Number(stageDistance.toFixed(1)),
+    elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+    elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+    geometryGeoJson: {
+      type: "LineString",
+      coordinates: stageCoordinates
+    } satisfies LineStringGeoJson
+  };
+}
+
+export function splitRouteByBreakpoints(geometry: LineStringGeoJson, breakpoints: StageBreakpoint[]) {
+  const coordinates = geometry.coordinates;
+  const totalDistance = routeDistanceKm(coordinates);
+  const sortedBreakpoints = breakpoints
+    .map((breakpoint) => ({
+      name: breakpoint.name.trim() || "Etappenpunkt",
+      distanceKm: Math.min(Math.max(breakpoint.distanceKm, 0), totalDistance)
+    }))
+    .filter((breakpoint) => breakpoint.distanceKm > 0 && breakpoint.distanceKm < totalDistance)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const distinctBreakpoints = sortedBreakpoints.filter(
+    (breakpoint, index) => index === 0 || Math.abs(breakpoint.distanceKm - sortedBreakpoints[index - 1].distanceKm) >= 0.5
+  );
+  const splitPoints = [0, ...distinctBreakpoints.map((breakpoint) => breakpoint.distanceKm), totalDistance];
+  const names = ["Start", ...distinctBreakpoints.map((breakpoint) => breakpoint.name), "Ziel"];
+
+  return splitPoints.slice(0, -1).map((startKm, index) => {
+    const endKm = splitPoints[index + 1];
+    const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
+    const stageDistance = routeDistanceKm(stageCoordinates);
+    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+
+    return {
+      dayNumber: index + 1,
+      startName: names[index],
+      endName: names[index + 1],
+      distanceKm: Number(stageDistance.toFixed(1)),
+      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      geometryGeoJson: {
+        type: "LineString",
+        coordinates: stageCoordinates
+      } satisfies LineStringGeoJson
+    };
+  });
+}
+
+export function trimRouteGeometry(geometry: LineStringGeoJson, startKm: number, endKm: number) {
+  const totalDistance = routeDistanceKm(geometry.coordinates);
+  const start = Math.min(Math.max(startKm, 0), totalDistance);
+  const end = Math.min(Math.max(endKm, start + 1), totalDistance);
+
+  return {
+    type: "LineString",
+    coordinates: sliceLineString(geometry.coordinates, start, end)
+  } satisfies LineStringGeoJson;
 }
 
 export function toGpx(geometry: LineStringGeoJson, name: string) {

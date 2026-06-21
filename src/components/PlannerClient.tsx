@@ -15,6 +15,7 @@ import {
   GripVertical,
   Map,
   MapPinned,
+  MousePointer2,
   Route,
   Save,
   Search,
@@ -35,7 +36,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { toGpx, type ElevationPoint, type LineStringGeoJson } from "@/lib/geo";
+import {
+  closestPointOnRoute,
+  createElevationProfile,
+  createStageSliceFromBounds,
+  routeBoundsForStage,
+  routeDistanceKm,
+  toGpx,
+  trimRouteGeometry,
+  type ElevationPoint,
+  type LineStringGeoJson,
+  type Position,
+  type StageBreakpoint
+} from "@/lib/geo";
 import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type TourInputMode } from "@/lib/tour-state";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
@@ -68,6 +81,8 @@ type Stage = {
   elevationUp: number;
   elevationDown: number;
   geometryGeoJson: LineStringGeoJson;
+  routeStartKm?: number;
+  routeEndKm?: number;
 };
 
 type Poi = {
@@ -146,6 +161,42 @@ const profileLabels: Record<string, string> = {
   sportive: "sportlich"
 };
 
+const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Position }> = [
+  { name: "Hamburg", coordinate: [9.9937, 53.5511] },
+  { name: "Luebeck", aliases: ["Lubeck"], coordinate: [10.6866, 53.8655] },
+  { name: "Schwerin", coordinate: [11.4075, 53.6355] },
+  { name: "Wismar", coordinate: [11.462, 53.8912] },
+  { name: "Lueneburg", aliases: ["Luneburg"], coordinate: [10.4079, 53.2464] },
+  { name: "Uelzen", coordinate: [10.5589, 52.9657] },
+  { name: "Salzwedel", coordinate: [11.1537, 52.8516] },
+  { name: "Stendal", coordinate: [11.8587, 52.6069] },
+  { name: "Magdeburg", coordinate: [11.6276, 52.1205] },
+  { name: "Dessau", coordinate: [12.2429, 51.8306] },
+  { name: "Wittenberg", coordinate: [12.6464, 51.8667] },
+  { name: "Leipzig", coordinate: [12.3731, 51.3397] },
+  { name: "Halle", coordinate: [11.9688, 51.4969] },
+  { name: "Chemnitz", coordinate: [12.9253, 50.8278] },
+  { name: "Dresden", coordinate: [13.7373, 51.0504] },
+  { name: "Pirna", coordinate: [13.9407, 50.9625] },
+  { name: "Prag", aliases: ["Praha"], coordinate: [14.4378, 50.0755] },
+  { name: "Muenchen", aliases: ["Munchen", "Munich"], coordinate: [11.582, 48.1351] },
+  { name: "Salzburg", coordinate: [13.055, 47.8095] }
+];
+
+function normalizeCity(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u00df/g, "ss");
+}
+
+function findCityAnchor(value: string) {
+  const normalized = normalizeCity(value);
+  return cityAnchors.find((city) => [city.name, ...(city.aliases ?? [])].some((name) => normalizeCity(name) === normalized));
+}
+
 function leadTypeForPoi(category: string) {
   if (category === "ACCOMMODATION") return "ACCOMMODATION";
   if (category === "LUGGAGE_TRANSFER") return "LUGGAGE_TRANSFER";
@@ -217,6 +268,12 @@ export function PlannerClient({
   const [status, setStatus] = useState("Bereit fuer die erste Route.");
   const [isBusy, setIsBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
+  const [stageBreakpoints, setStageBreakpoints] = useState<Array<StageBreakpoint & { id: string }>>([]);
+  const [newStagePointName, setNewStagePointName] = useState("");
+  const [newStagePointKm, setNewStagePointKm] = useState(0);
+  const [trimStartKm, setTrimStartKm] = useState(0);
+  const [trimEndKm, setTrimEndKm] = useState(0);
+  const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -246,6 +303,41 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
+  const sortedStageBreakpoints = useMemo(
+    () => stageBreakpoints.slice().sort((a, b) => a.distanceKm - b.distanceKm),
+    [stageBreakpoints]
+  );
+  const effectiveStageBreakpoints = useMemo(() => {
+    if (routeTotalKm <= 0) {
+      return [];
+    }
+
+    const normalized = sortedStageBreakpoints
+      .map((breakpoint) => ({
+        ...breakpoint,
+        name: breakpoint.name.trim() || "Etappenpunkt",
+        distanceKm: Math.min(Math.max(Number(breakpoint.distanceKm), 0), routeTotalKm)
+      }))
+      .filter((breakpoint) => Number.isFinite(breakpoint.distanceKm) && breakpoint.distanceKm > 0 && breakpoint.distanceKm < routeTotalKm)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    return normalized.filter((breakpoint, index) => index === 0 || Math.abs(breakpoint.distanceKm - normalized[index - 1].distanceKm) >= 0.5);
+  }, [routeTotalKm, sortedStageBreakpoints]);
+  const stagePlanPreview = useMemo(() => {
+    if (!route || routeTotalKm <= 0) {
+      return [];
+    }
+
+    const splitPoints = [0, ...effectiveStageBreakpoints.map((breakpoint) => breakpoint.distanceKm), routeTotalKm];
+    const names = ["Start", ...effectiveStageBreakpoints.map((breakpoint) => breakpoint.name), "Ziel"];
+    return splitPoints.slice(0, -1).map((startKm, index) => ({
+      dayNumber: index + 1,
+      startName: names[index],
+      endName: names[index + 1],
+      distanceKm: Number((splitPoints[index + 1] - startKm).toFixed(1))
+    }));
+  }, [effectiveStageBreakpoints, route, routeTotalKm]);
   const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
   const quickFilters = [
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
@@ -314,6 +406,102 @@ export function PlannerClient({
     );
   }, [inputMode, pois, route, selectedPoi?.id, stages, status]);
 
+  useEffect(() => {
+    setStageBreakpoints([]);
+    setNewStagePointKm(routeTotalKm > 0 ? Number(Math.min(50, routeTotalKm).toFixed(1)) : 0);
+    setTrimStartKm(0);
+    setTrimEndKm(Number(routeTotalKm.toFixed(1)));
+    setIsPickingStagePoint(false);
+  }, [route?.geometryGeoJson, routeTotalKm]);
+
+  function addStageBreakpoint() {
+    if (!route || routeTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const name = newStagePointName.trim();
+    if (!name) {
+      setStatus("Bitte einen Ort oder Etappennamen eintragen.");
+      return;
+    }
+
+    const distanceKm = Math.min(Math.max(Number(newStagePointKm), 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    setStageBreakpoints((current) =>
+      [...current, { id: crypto.randomUUID(), name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+    setNewStagePointName("");
+    setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
+  }
+
+  function addRouteStageBreakpoint(selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) {
+    if (!route || routeTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    if (selection.distanceToRouteKm > 20) {
+      setStatus(`Klick liegt ${selection.distanceToRouteKm.toFixed(1)} km von der Route entfernt. Bitte naeher an die Route klicken.`);
+      return;
+    }
+
+    const distanceKm = Math.min(Math.max(selection.distanceKm, 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    const name = newStagePointName.trim() || `Etappenpunkt ${stageBreakpoints.length + 1}`;
+    setStageBreakpoints((current) =>
+      [...current, { id: crypto.randomUUID(), name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+    setNewStagePointName("");
+    setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
+    setIsPickingStagePoint(false);
+    setPlannerStep("stages");
+    setStatus(`${name} wurde per Kartenklick bei km ${distanceKm.toFixed(1)} auf die GPX-Route gesetzt.`);
+  }
+
+  function addCityStageBreakpoint() {
+    if (!route || routeTotalKm <= 0) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const city = findCityAnchor(newStagePointName);
+    if (!city) {
+      setStatus("Stadt nicht in der lokalen Testliste gefunden. Bitte km-Position manuell setzen.");
+      return;
+    }
+
+    const closest = closestPointOnRoute(city.coordinate, route.geometryGeoJson.coordinates);
+    const distanceKm = Math.min(Math.max(closest.distanceKm, 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    setStageBreakpoints((current) =>
+      [...current, { id: crypto.randomUUID(), name: city.name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+    setNewStagePointName("");
+    setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
+    setPlannerStep("stages");
+    setStatus(`${city.name} wurde auf den naechsten Routenpunkt bei km ${distanceKm.toFixed(1)} gesetzt (${closest.distanceToRouteKm.toFixed(1)} km vom Stadtzentrum).`);
+  }
+
+  function updateStageBreakpoint(id: string, patch: Partial<StageBreakpoint>) {
+    const normalizedPatch =
+      typeof patch.distanceKm === "number"
+        ? {
+            ...patch,
+            distanceKm: Number(
+              Math.min(Math.max(Number.isFinite(patch.distanceKm) ? patch.distanceKm : 0, 0.5), Math.max(routeTotalKm - 0.5, 0.5)).toFixed(1)
+            )
+          }
+        : patch;
+
+    setStageBreakpoints((current) =>
+      current
+        .map((breakpoint) => (breakpoint.id === id ? { ...breakpoint, ...normalizedPatch } : breakpoint))
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+    );
+  }
+
+  function removeStageBreakpoint(id: string) {
+    setStageBreakpoints((current) => current.filter((breakpoint) => breakpoint.id !== id));
+  }
+
   const loadPois = useCallback(
     async (routeId = savedRoute?.id, corridorKm = plannerForm.getValues("corridorKm")) => {
       if (!routeId) {
@@ -362,23 +550,121 @@ export function PlannerClient({
     ]
   );
 
-  async function generateStages(routeId = savedRoute?.id, targetKm = plannerForm.getValues("targetKm")) {
+  async function generateStages(
+    routeId = savedRoute?.id,
+    targetKm = plannerForm.getValues("targetKm"),
+    breakpoints: StageBreakpoint[] = []
+  ) {
     if (!routeId) {
-        setStatus("Bitte zuerst eine Route planen.");
-        return [];
+      setStatus("Bitte zuerst eine Route planen.");
+      return [];
     }
 
     const response = await fetch(`/api/routes/${routeId}/stages/auto-generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ targetKm })
+      body: JSON.stringify(breakpoints.length > 0 ? { breakpoints } : { targetKm })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error ?? "Etappen konnten nicht erzeugt werden.");
 
     setStages(payload.stages);
-    setStatus(`${payload.stages.length} Tagesetappen erzeugt.`);
+    setStatus(breakpoints.length > 0 ? `${payload.stages.length} individuelle Etappen erzeugt.` : `${payload.stages.length} Tagesetappen erzeugt.`);
     return payload.stages as Stage[];
+  }
+
+  async function generateCustomStages() {
+    if (!savedRoute?.id) {
+      setStatus("Bitte zuerst eine Route speichern oder GPX importieren.");
+      return;
+    }
+
+    const breakpoints = effectiveStageBreakpoints.map(({ name, distanceKm }) => ({ name, distanceKm }));
+    if (breakpoints.length === 0) {
+      setStatus("Bitte zuerst mindestens einen Etappenpunkt anlegen.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      await generateStages(savedRoute.id, plannerForm.getValues("targetKm"), breakpoints);
+      setPlannerStep("stages");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Individuelle Etappen konnten nicht erzeugt werden.");
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function applyRouteTrim() {
+    if (!savedRoute?.id || !route) {
+      setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
+      return;
+    }
+
+    const startKm = Math.min(Math.max(Number(trimStartKm), 0), Math.max(routeTotalKm - 1, 0));
+    const endKm = Math.min(Math.max(Number(trimEndKm), startKm + 1), routeTotalKm);
+    if (endKm - startKm < 1) {
+      setStatus("Der verbleibende Routenabschnitt muss mindestens 1 km lang sein.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      const geometryGeoJson = trimRouteGeometry(route.geometryGeoJson, startKm, endKm);
+      const distanceKm = Number(routeDistanceKm(geometryGeoJson.coordinates).toFixed(1));
+      const elevationProfile = createElevationProfile(geometryGeoJson.coordinates);
+      const elevationUp = Math.round(distanceKm * 6.2);
+      const elevationDown = Math.round(distanceKm * 4.8);
+
+      const response = await fetch(`/api/routes/${savedRoute.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: `${route.description ?? ""}\nGekuerzt auf km ${startKm.toFixed(1)} bis ${endKm.toFixed(1)} der GPX-Grundroute.`.trim(),
+          distanceKm,
+          elevationUp,
+          elevationDown,
+          geometryGeoJson
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Route konnte nicht gekuerzt werden.");
+
+      const updatedRoute: SavedRoute = {
+        ...savedRoute,
+        distanceKm,
+        elevationUp,
+        elevationDown,
+        geometryGeoJson,
+        elevationProfile
+      };
+      setSavedRoute(updatedRoute);
+      setCalculation((current) =>
+        current
+          ? {
+              ...current,
+              distanceKm,
+              elevationUp,
+              elevationDown,
+              geometryGeoJson,
+              elevationProfile
+            }
+          : current
+      );
+      setStages([]);
+      setPois([]);
+      setSelectedPoi(null);
+      setStageBreakpoints([]);
+      setTrimStartKm(0);
+      setTrimEndKm(distanceKm);
+      setStatus(`Route gekuerzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
+      setPlannerStep("stages");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Route konnte nicht gekuerzt werden.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function planRoute(values: PlannerForm, routeWaypoints = waypoints) {
@@ -452,6 +738,9 @@ export function PlannerClient({
       const imported = await importResponse.json();
       if (!importResponse.ok) throw new Error(imported.error ?? "GPX-Import fehlgeschlagen.");
 
+      plannerForm.setValue("start", imported.startName ?? "GPX Start", { shouldDirty: true });
+      plannerForm.setValue("end", imported.endName ?? "GPX Ziel", { shouldDirty: true });
+      setWaypoints([]);
       setCalculation(imported);
       const saveResponse = await fetch("/api/routes", {
         method: "POST",
@@ -577,6 +866,53 @@ export function PlannerClient({
     setStages((current) => current.map((stage) => (stage.id === stageId ? { ...stage, ...patch } : stage)));
   }
 
+  function stageKilometers(stage: Stage) {
+    if (typeof stage.routeStartKm === "number" && typeof stage.routeEndKm === "number") {
+      return {
+        startKm: stage.routeStartKm,
+        endKm: stage.routeEndKm
+      };
+    }
+
+    if (!route) {
+      return {
+        startKm: 0,
+        endKm: stage.distanceKm
+      };
+    }
+
+    return routeBoundsForStage(route.geometryGeoJson, stage.geometryGeoJson);
+  }
+
+  function updateStageRouteSlice(stageId: string, patch: { startKm?: number; endKm?: number; distanceKm?: number }) {
+    if (!route || routeTotalKm <= 0) {
+      return;
+    }
+
+    setStages((current) =>
+      current.map((stage) => {
+        if (stage.id !== stageId) {
+          return stage;
+        }
+
+        const currentBounds = stageKilometers(stage);
+        const startKm = patch.startKm ?? currentBounds.startKm;
+        const endKm = typeof patch.distanceKm === "number" ? startKm + patch.distanceKm : patch.endKm ?? currentBounds.endKm;
+        const slice = createStageSliceFromBounds(route.geometryGeoJson, startKm, endKm, stage.dayNumber - 1);
+
+        return {
+          ...stage,
+          routeStartKm: slice.startKm,
+          routeEndKm: slice.endKm,
+          distanceKm: slice.distanceKm,
+          elevationUp: slice.elevationUp,
+          elevationDown: slice.elevationDown,
+          geometryGeoJson: slice.geometryGeoJson
+        };
+      })
+    );
+  }
+
   async function saveStage(stage: Stage) {
     const response = await fetch(`/api/stages/${stage.id}`, {
       method: "PATCH",
@@ -586,7 +922,8 @@ export function PlannerClient({
         endName: stage.endName,
         distanceKm: stage.distanceKm,
         elevationUp: stage.elevationUp,
-        elevationDown: stage.elevationDown
+        elevationDown: stage.elevationDown,
+        geometryGeoJson: stage.geometryGeoJson
       })
     });
     const payload = await response.json();
@@ -595,7 +932,17 @@ export function PlannerClient({
       return;
     }
 
-    setStages((current) => current.map((item) => (item.id === stage.id ? payload.stage : item)));
+    setStages((current) =>
+      current.map((item) =>
+        item.id === stage.id
+          ? {
+              ...payload.stage,
+              routeStartKm: stage.routeStartKm,
+              routeEndKm: stage.routeEndKm
+            }
+          : item
+      )
+    );
     setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
   }
 
@@ -1044,10 +1391,16 @@ export function PlannerClient({
           <RouteMap
             pois={pois}
             route={route?.geometryGeoJson}
+            routePointSelection={{
+              enabled: isPickingStagePoint,
+              label: "Auf die Route klicken, um einen Etappenpunkt zu setzen."
+            }}
             selectedPoiId={selectedPoi?.id}
             stages={stages}
+            stageBreakpoints={effectiveStageBreakpoints}
             waypoints={route?.waypoints}
             onSelectPoi={setSelectedPoi}
+            onRoutePointSelect={addRouteStageBreakpoint}
           />
           {savedRoute && (
             <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-3 shadow-sm">
@@ -1076,6 +1429,148 @@ export function PlannerClient({
             </div>
           )}
           <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+            {plannerStep === "stages" && (
+              <Card className="xl:col-span-2">
+                <CardHeader>
+                  <CardTitle>Etappen frei planen</CardTitle>
+                  <CardDescription>Etappenpunkte bleiben auf der GPX-Grundroute. Orte werden als Zielname oder Projektion auf die Route behandelt.</CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_auto_auto]">
+                      <div className="grid gap-1">
+                        <Label htmlFor="stagePointName">Ort oder Etappenziel</Label>
+                        <Input
+                          id="stagePointName"
+                          placeholder="z. B. Magdeburg"
+                          value={newStagePointName}
+                          onChange={(event) => setNewStagePointName(event.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-1">
+                        <Label htmlFor="stagePointKm">km</Label>
+                        <Input
+                          id="stagePointKm"
+                          max={routeTotalKm || undefined}
+                          min="0"
+                          step="0.1"
+                          type="number"
+                          value={newStagePointKm}
+                          onChange={(event) => setNewStagePointKm(Number(event.target.value))}
+                        />
+                      </div>
+                      <Button className="self-end" type="button" variant="outline" onClick={addStageBreakpoint}>
+                        <CirclePlus className="h-4 w-4" />
+                        Punkt
+                      </Button>
+                      <Button className="self-end" type="button" variant="secondary" onClick={addCityStageBreakpoint}>
+                        <MapPinned className="h-4 w-4" />
+                        An Route
+                      </Button>
+                    </div>
+                    <Button
+                      className="w-full md:w-auto"
+                      type="button"
+                      variant={isPickingStagePoint ? "default" : "outline"}
+                      onClick={() => setIsPickingStagePoint((current) => !current)}
+                    >
+                      <MousePointer2 className="h-4 w-4" />
+                      Punkt aus Karte
+                    </Button>
+
+                    {effectiveStageBreakpoints.length > 0 ? (
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                        {effectiveStageBreakpoints.map((breakpoint) => (
+                          <div key={breakpoint.id} className="grid gap-2 rounded-md border bg-white p-3">
+                            <Input
+                              aria-label="Etappenpunktname"
+                              value={breakpoint.name}
+                              onChange={(event) => updateStageBreakpoint(breakpoint.id, { name: event.target.value })}
+                            />
+                            <div className="flex gap-2">
+                              <Input
+                                aria-label="Etappenpunkt-Kilometer"
+                                max={routeTotalKm || undefined}
+                                min="0"
+                                step="0.1"
+                                type="number"
+                                value={breakpoint.distanceKm}
+                                onChange={(event) => updateStageBreakpoint(breakpoint.id, { distanceKm: Number(event.target.value) })}
+                              />
+                              <Button aria-label="Etappenpunkt entfernen" size="icon" type="button" variant="outline" onClick={() => removeStageBreakpoint(breakpoint.id)}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="rounded-md border bg-white p-5 text-sm text-muted-foreground">
+                        Noch keine Etappenpunkte gesetzt. Der Start und das Ziel der GPX-Route bleiben automatisch erhalten.
+                      </div>
+                    )}
+
+                    <div className="rounded-md border bg-muted p-3">
+                      <div className="text-sm font-semibold">Ergebnisvorschau: {stagePlanPreview.length || "-"} Etappen</div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {stagePlanPreview.map((stage) => (
+                          <div key={stage.dayNumber} className="rounded-md bg-white p-3 text-sm">
+                            <div className="font-semibold">Tag {stage.dayNumber}</div>
+                            <div className="text-muted-foreground">
+                              {stage.startName} - {stage.endName}
+                            </div>
+                            <div>{formatKm(stage.distanceKm)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <Button className="w-full" disabled={!savedRoute || effectiveStageBreakpoints.length === 0 || isBusy} type="button" onClick={generateCustomStages}>
+                      <Save className="h-4 w-4" />
+                      Individuelle Etappen erzeugen
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3 rounded-md border bg-white p-4">
+                    <div>
+                      <div className="font-semibold">Route kuerzen</div>
+                      <p className="text-sm text-muted-foreground">Start und Ende der GPX-Grundroute verschieben.</p>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="trimStartKm">Start ab km</Label>
+                      <Input
+                        id="trimStartKm"
+                        max={routeTotalKm || undefined}
+                        min="0"
+                        step="0.1"
+                        type="number"
+                        value={trimStartKm}
+                        onChange={(event) => setTrimStartKm(Number(event.target.value))}
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="trimEndKm">Ende bei km</Label>
+                      <Input
+                        id="trimEndKm"
+                        max={routeTotalKm || undefined}
+                        min="0"
+                        step="0.1"
+                        type="number"
+                        value={trimEndKm}
+                        onChange={(event) => setTrimEndKm(Number(event.target.value))}
+                      />
+                    </div>
+                    <Button className="w-full" disabled={!savedRoute || routeTotalKm <= 0 || isBusy} type="button" variant="secondary" onClick={applyRouteTrim}>
+                      <Route className="h-4 w-4" />
+                      GPX-Route kuerzen
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Nach dem Kuerzen werden Etappen und POI zurueckgesetzt und muessen neu berechnet werden.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <Card>
               <CardHeader className="space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -1096,80 +1591,108 @@ export function PlannerClient({
                 <CardDescription className="leading-relaxed">{status}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                {stages.map((stage) => (
-                  <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
-                    <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
-                      Tag {stage.dayNumber}
-                    </div>
-                    <div className="grid min-w-0 gap-3">
-                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
-                          <Input
-                            id={`stage-${stage.id}-start`}
-                            value={stage.startName}
-                            onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
-                          <Input
-                            id={`stage-${stage.id}-end`}
-                            value={stage.endName}
-                            onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
-                          />
-                        </div>
+                {stages.map((stage) => {
+                  const stageKmBounds = stageKilometers(stage);
+
+                  return (
+                    <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[72px_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(0,1fr)_auto]">
+                      <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
+                        Tag {stage.dayNumber}
                       </div>
-                      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
-                          <Input
-                            id={`stage-${stage.id}-distance`}
-                            min="0"
-                            step="0.1"
-                            type="number"
-                            value={stage.distanceKm}
-                            onChange={(event) => updateStage(stage.id, { distanceKm: Number(event.target.value) })}
-                          />
+                      <div className="grid min-w-0 gap-3">
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(130px,1fr))]">
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-start`}>Start</Label>
+                            <Input
+                              id={`stage-${stage.id}-start`}
+                              value={stage.startName}
+                              onChange={(event) => updateStage(stage.id, { startName: event.target.value })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-end`}>Ziel</Label>
+                            <Input
+                              id={`stage-${stage.id}-end`}
+                              value={stage.endName}
+                              onChange={(event) => updateStage(stage.id, { endName: event.target.value })}
+                            />
+                          </div>
                         </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
-                          <Input
-                            id={`stage-${stage.id}-up`}
-                            min="0"
-                            type="number"
-                            value={stage.elevationUp}
-                            onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
-                          <Input
-                            id={`stage-${stage.id}-down`}
-                            min="0"
-                            type="number"
-                            value={stage.elevationDown}
-                            onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-1">
-                          <span className="text-sm font-medium leading-none">Fahrzeit</span>
-                          <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
-                            {formatHours(stage.distanceKm / 17)}
+                        <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(96px,1fr))]">
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-start-km`}>Start-km</Label>
+                            <Input
+                              id={`stage-${stage.id}-start-km`}
+                              max={routeTotalKm || undefined}
+                              min="0"
+                              step="0.1"
+                              type="number"
+                              value={stageKmBounds.startKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { startKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-end-km`}>Ziel-km</Label>
+                            <Input
+                              id={`stage-${stage.id}-end-km`}
+                              max={routeTotalKm || undefined}
+                              min="0"
+                              step="0.1"
+                              type="number"
+                              value={stageKmBounds.endKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { endKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-distance`}>km</Label>
+                            <Input
+                              id={`stage-${stage.id}-distance`}
+                              min="0.1"
+                              step="0.1"
+                              type="number"
+                              value={stage.distanceKm}
+                              onChange={(event) => updateStageRouteSlice(stage.id, { distanceKm: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-up`}>Hm auf</Label>
+                            <Input
+                              id={`stage-${stage.id}-up`}
+                              min="0"
+                              type="number"
+                              value={stage.elevationUp}
+                              onChange={(event) => updateStage(stage.id, { elevationUp: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <Label htmlFor={`stage-${stage.id}-down`}>Hm ab</Label>
+                            <Input
+                              id={`stage-${stage.id}-down`}
+                              min="0"
+                              type="number"
+                              value={stage.elevationDown}
+                              onChange={(event) => updateStage(stage.id, { elevationDown: Number(event.target.value) })}
+                            />
+                          </div>
+                          <div className="grid min-w-0 gap-1">
+                            <span className="text-sm font-medium leading-none">Fahrzeit</span>
+                            <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
+                              {formatHours(stage.distanceKm / 17)}
+                            </div>
                           </div>
                         </div>
                       </div>
+                      <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-1 2xl:flex-col">
+                        <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
+                          Unterkunft finden
+                        </Button>
+                        <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
+                          Speichern
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 xl:col-span-2 2xl:col-span-1 2xl:flex-col">
-                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
-                        Unterkunft finden
-                      </Button>
-                      <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
-                        Speichern
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {stages.length === 0 && (
                   <div className="rounded-md border bg-white p-6 text-sm text-muted-foreground">
                     Nach dem Planen werden hier automatisch Tagesetappen vorgeschlagen.
