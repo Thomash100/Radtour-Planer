@@ -7,6 +7,7 @@ import {
   createValidatedStageSliceFromBounds,
   createStageSliceFromBounds,
   cumulativeDistances,
+  normalizeRouteTrimBounds,
   routeDistanceKm,
   routeBoundsForStage,
   splitRouteByBreakpoints,
@@ -24,6 +25,17 @@ const straightRoute: LineStringGeoJson = {
     [11.5, 52],
     [12, 52],
     [12.5, 52]
+  ]
+};
+
+const longRoute: LineStringGeoJson = {
+  type: "LineString",
+  coordinates: [
+    [0, 0],
+    [1, 0],
+    [2, 0],
+    [3, 0],
+    [4, 0]
   ]
 };
 
@@ -94,6 +106,22 @@ describe("GPX parsing and stage planning", () => {
     assertClose(last[0], 12.125, 0.01);
     assertClose(last[1], 52, 0.001);
     assertClose(routeDistanceKm(trimmed.coordinates), totalKm * 0.5, 0.25);
+  });
+
+  it("keeps a large 300 km start trim on a long route reliable", () => {
+    const totalKm = routeDistanceKm(longRoute.coordinates);
+    const roundedEndKm = Number(totalKm.toFixed(1));
+    const validation = normalizeRouteTrimBounds(totalKm, 300, roundedEndKm);
+
+    assert.equal(validation.ok, true);
+    if (!validation.ok) {
+      return;
+    }
+
+    const trimmed = trimRouteGeometry(longRoute, validation.startKm, validation.endKm);
+    assert.ok(trimmed.coordinates.length >= 2);
+    assertClose(routeDistanceKm(trimmed.coordinates), totalKm - 300, 0.2);
+    assert.equal(normalizeRouteTrimBounds(totalKm, 300, totalKm + 0.2).ok, false);
   });
 
   it("creates automatic stage suggestions close to the target distance", () => {

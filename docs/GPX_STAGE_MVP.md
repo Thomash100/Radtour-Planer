@@ -18,6 +18,7 @@ Stand: 2026-06-21
 - Ziel-km muss groesser als Start-km sein.
 - Laenge darf nicht 0 oder negativ sein.
 - Ungueltige km-Eingaben erzeugen eine Statusmeldung und lassen die bisherige Etappengeometrie unveraendert.
+- Beim Kuerzen wird ein auf eine Nachkommastelle gerundeter End-km-Wert innerhalb der Anzeige-Toleranz auf das echte Routenende normalisiert. Dadurch bleiben grosse Startkuerzungen wie 300 km auch bei gerundeter Anzeige stabil.
 
 ## Sichtbare Rueckmeldungen
 
@@ -25,6 +26,8 @@ Stand: 2026-06-21
 - Die aktuelle gekuerzte Laenge und der urspruengliche GPX-km-Bereich werden angezeigt.
 - Nach manueller Etappenanpassung wird die betroffene Etappe als `Geometrie aktualisiert` markiert.
 - Nach dem Speichern wird die betroffene Etappe als `Gespeichert` markiert.
+- Karte und Hoehenprofil werden im Planer ueber eine gemeinsame Ansichtsauswahl umgeschaltet. Standard ist die Karte.
+- Das Hoehenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
 
 ## Export und erneutes Oeffnen
 

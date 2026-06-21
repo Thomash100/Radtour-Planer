@@ -241,6 +241,16 @@ export function validateStageSliceBounds(totalDistanceKm: number, startKm: numbe
   };
 }
 
+export function normalizeRouteTrimBounds(totalDistanceKm: number, startKm: number, endKm: number): StageSliceValidationResult {
+  const displayRoundingToleranceKm = 0.1;
+  const normalizedEndKm =
+    Number.isFinite(endKm) && endKm > totalDistanceKm && endKm - totalDistanceKm <= displayRoundingToleranceKm
+      ? totalDistanceKm
+      : endKm;
+
+  return validateStageSliceBounds(totalDistanceKm, startKm, normalizedEndKm);
+}
+
 export function createValidatedStageSliceFromBounds(
   geometry: LineStringGeoJson,
   startKm: number,

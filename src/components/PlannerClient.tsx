@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  Activity,
   ArrowDownToLine,
   ArrowRight,
   BadgeEuro,
@@ -40,11 +41,11 @@ import {
   closestPointOnRoute,
   createElevationProfile,
   createValidatedStageSliceFromBounds,
+  normalizeRouteTrimBounds,
   routeBoundsForStage,
   routeDistanceKm,
   toGpx,
   trimRouteGeometry,
-  validateStageSliceBounds,
   type ElevationPoint,
   type LineStringGeoJson,
   type Position,
@@ -135,6 +136,7 @@ const leadSchema = z.object({
 type PlannerForm = z.infer<typeof plannerSchema>;
 type LeadForm = z.infer<typeof leadSchema>;
 type PlannerStep = "mode" | "direct" | "gpx" | "overview" | "edit" | "stages";
+type VisualizationMode = "map" | "elevation";
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
@@ -276,6 +278,7 @@ export function PlannerClient({
   const [trimEndKm, setTrimEndKm] = useState(0);
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
+  const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -645,7 +648,7 @@ export function PlannerClient({
 
     const startKm = Number(trimStartKm);
     const endKm = Number(trimEndKm);
-    const validation = validateStageSliceBounds(routeTotalKm, startKm, endKm);
+    const validation = normalizeRouteTrimBounds(routeTotalKm, startKm, endKm);
     if (!validation.ok) {
       setStatus(`Route konnte nicht gekuerzt werden: ${validation.message}`);
       return;
@@ -1483,20 +1486,58 @@ export function PlannerClient({
               </span>
             </div>
           )}
-          <RouteMap
-            pois={pois}
-            route={route?.geometryGeoJson}
-            routePointSelection={{
-              enabled: isPickingStagePoint,
-              label: "Auf die Route klicken, um einen Etappenpunkt zu setzen."
-            }}
-            selectedPoiId={selectedPoi?.id}
-            stages={stages}
-            stageBreakpoints={effectiveStageBreakpoints}
-            waypoints={route?.waypoints}
-            onSelectPoi={setSelectedPoi}
-            onRoutePointSelect={addRouteStageBreakpoint}
-          />
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-white p-2 shadow-sm">
+              <div className="text-sm font-semibold">Ansicht</div>
+              <div className="inline-flex rounded-md border bg-white p-1">
+                <button
+                  aria-pressed={visualizationMode === "map"}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
+                    visualizationMode === "map" ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+                  )}
+                  type="button"
+                  onClick={() => setVisualizationMode("map")}
+                >
+                  <Map className="h-4 w-4" />
+                  Karte
+                </button>
+                <button
+                  aria-pressed={visualizationMode === "elevation"}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
+                    visualizationMode === "elevation" ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+                  )}
+                  type="button"
+                  onClick={() => {
+                    setIsPickingStagePoint(false);
+                    setVisualizationMode("elevation");
+                  }}
+                >
+                  <Activity className="h-4 w-4" />
+                  Hoehenprofil
+                </button>
+              </div>
+            </div>
+            {visualizationMode === "map" ? (
+              <RouteMap
+                pois={pois}
+                route={route?.geometryGeoJson}
+                routePointSelection={{
+                  enabled: isPickingStagePoint,
+                  label: "Auf die Route klicken, um einen Etappenpunkt zu setzen."
+                }}
+                selectedPoiId={selectedPoi?.id}
+                stages={stages}
+                stageBreakpoints={effectiveStageBreakpoints}
+                waypoints={route?.waypoints}
+                onSelectPoi={setSelectedPoi}
+                onRoutePointSelect={addRouteStageBreakpoint}
+              />
+            ) : (
+              <ElevationProfile points={route?.elevationProfile ?? []} />
+            )}
+          </div>
           {savedRoute && (
             <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
               <div className="flex flex-wrap gap-2">
@@ -1528,9 +1569,9 @@ export function PlannerClient({
               </p>
             </div>
           )}
-          <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
+          <div className="grid gap-4">
             {plannerStep === "stages" && (
-              <Card className="xl:col-span-2">
+              <Card>
                 <CardHeader>
                   <CardTitle>Etappen frei planen</CardTitle>
                   <CardDescription>
@@ -1577,7 +1618,10 @@ export function PlannerClient({
                       className="w-full md:w-auto"
                       type="button"
                       variant={isPickingStagePoint ? "default" : "outline"}
-                      onClick={() => setIsPickingStagePoint((current) => !current)}
+                      onClick={() => {
+                        setVisualizationMode("map");
+                        setIsPickingStagePoint((current) => !current);
+                      }}
                     >
                       <MousePointer2 className="h-4 w-4" />
                       Punkt aus Karte
@@ -1820,7 +1864,6 @@ export function PlannerClient({
                 )}
               </CardContent>
             </Card>
-            <ElevationProfile points={route?.elevationProfile ?? []} />
           </div>
         </section>
 

@@ -75,6 +75,8 @@ Je nach Aufgabe pruefen:
 - Etappen koennen erzeugt, angepasst und gespeichert werden.
 - Ungueltige Etappen-km werden verstaendlich abgelehnt und veraendern die bisherige Geometrie nicht.
 - Gekuerzte Routen zeigen gekuerzte Laenge und GPX-km-Bereich an.
+- Grosse Startkuerzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
+- Karte ist Standardansicht; Umschalten auf Hoehenprofil funktioniert ohne die Etappenliste seitlich zusammenzudruecken.
 - Geaenderte Etappen zeigen eine Rueckmeldung zur neu berechneten Geometrie.
 - GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
 - Hoehenprofil passt zur geladenen Route.

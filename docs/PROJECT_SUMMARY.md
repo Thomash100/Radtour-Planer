@@ -96,6 +96,8 @@ Details stehen in:
 - Orte dienen im MVP als Etappennamen oder Projektion auf die bestehende Route und verlegen die Route nicht automatisch.
 - Ungueltige km-Eingaben werden abgefangen: Start-km kleiner 0, Ziel-km groesser als Routenlaenge, Ziel-km kleiner/gleich Start-km und Laenge kleiner/gleich 0 erzeugen Statusmeldungen statt kaputter Geometrie.
 - Gekuerzte Routen werden sichtbar markiert; die gekuerzte Laenge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
+- Grosse Startkuerzungen wie 300 km bleiben stabil, wenn das End-km-Feld durch die Anzeige auf eine Nachkommastelle gerundet ist.
+- Karte und Hoehenprofil sind im Planer umschaltbar; die Etappenbearbeitung wird nicht mehr dauerhaft durch das Hoehenprofil in eine schmale Spalte gedrueckt.
 - Manuell geaenderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
 - Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollstaendige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
 - Tests decken ungueltige km-Bereiche, ausserhalb der Route liegende Grenzen, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
