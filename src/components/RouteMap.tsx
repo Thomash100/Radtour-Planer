@@ -82,7 +82,7 @@ type RouteMapProps = {
   onRoutePointSelect?: (selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) => void;
 };
 
-const stageColors = ["#0f766e", "#2563eb", "#d97706", "#7c3aed", "#dc2626", "#0891b2"];
+const stageColors = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#16a34a"];
 const maxFitJumpKm = 120;
 const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
@@ -441,9 +441,31 @@ function ensureRouteLayers(map: maplibregl.Map) {
       id: "route-line",
       type: "line",
       source: "route",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round"
+      },
       paint: {
-        "line-color": "#0f766e",
-        "line-width": 5
+        "line-color": "#334155",
+        "line-opacity": 0.34,
+        "line-width": 4
+      }
+    });
+  }
+
+  if (!map.getLayer("stage-lines-casing")) {
+    map.addLayer({
+      id: "stage-lines-casing",
+      type: "line",
+      source: "stages",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      paint: {
+        "line-color": "#ffffff",
+        "line-opacity": 0.86,
+        "line-width": 10
       }
     });
   }
@@ -453,10 +475,14 @@ function ensureRouteLayers(map: maplibregl.Map) {
       id: "stage-lines",
       type: "line",
       source: "stages",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round"
+      },
       paint: {
         "line-color": ["get", "color"],
-        "line-opacity": 0.94,
-        "line-width": 4
+        "line-opacity": 0.98,
+        "line-width": 7
       }
     });
   }
@@ -599,6 +625,7 @@ export function RouteMap({
   const [autoFitRoute, setAutoFitRoute] = useState(true);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
+  const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages).features.length, [stages]);
   const routePointSelectionEnabled = Boolean(routePointSelection?.enabled && routeValidation.line && onRoutePointSelect);
 
   const fitRouteToBounds = useCallback(
@@ -1023,6 +1050,7 @@ export function RouteMap({
         </div>
       )}
       <div
+        data-stage-layer-features={stageLayerFeatureCount}
         className={cn(
           "relative overflow-hidden rounded-lg border bg-slate-100",
           isFullscreenMap && "min-h-0 flex-1 rounded-md",
@@ -1061,7 +1089,8 @@ export function RouteMap({
               <div className="flex items-center gap-2 font-semibold">
                 <span
                   aria-hidden="true"
-                  className="h-2.5 w-2.5 rounded-full"
+                  className="route-stage-swatch h-2.5 w-2.5 rounded-full"
+                  data-stage-color={stageColors[index % stageColors.length]}
                   style={{ background: stageColors[index % stageColors.length] }}
                 />
                 Tag {stage.dayNumber}

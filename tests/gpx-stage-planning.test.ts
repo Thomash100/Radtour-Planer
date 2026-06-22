@@ -173,6 +173,8 @@ describe("GPX parsing and stage planning", () => {
       0.4
     );
     assert.ok(stages.every((stage) => stage.distanceKm > 0));
+    assert.ok(stages.every((stage) => stage.geometryGeoJson.type === "LineString"));
+    assert.ok(stages.every((stage) => stage.geometryGeoJson.coordinates.length >= 2));
   });
 
   it("creates automatic stage suggestions close to the target distance", () => {
@@ -189,6 +191,10 @@ describe("GPX parsing and stage planning", () => {
       0.3
     );
     stages.forEach((stage) => assertClose(stage.distanceKm, totalKm / 3, 0.3));
+    stages.forEach((stage) => {
+      assert.equal(stage.geometryGeoJson.type, "LineString");
+      assert.ok(stage.geometryGeoJson.coordinates.length >= 2);
+    });
   });
 
   it("uses sorted manual breakpoints and removes duplicate or out-of-range stage targets", () => {
@@ -271,6 +277,7 @@ describe("GPX parsing and stage planning", () => {
     assertClose(slice.distanceKm, totalKm * 0.25, 0.3);
     assert.ok(slice.geometryGeoJson.coordinates.length >= 2);
     assert.deepEqual(straightRoute.coordinates, originalCoordinates);
+    assert.notDeepEqual(slice.geometryGeoJson, straightRoute);
   });
 
   it("keeps edited stage geometry through a JSON save/load shaped roundtrip", () => {
