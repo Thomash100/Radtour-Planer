@@ -408,6 +408,75 @@ function stageFeatureCollection(stages: Stage[]) {
   };
 }
 
+function applyRouteLayerStyle(map: maplibregl.Map) {
+  if (map.getLayer("route-shadow")) {
+    map.setPaintProperty("route-shadow", "line-color", "#0f172a");
+    map.setPaintProperty("route-shadow", "line-opacity", 0.16);
+    map.setPaintProperty("route-shadow", "line-width", 8);
+  }
+
+  if (map.getLayer("route-line")) {
+    map.setLayoutProperty("route-line", "line-cap", "round");
+    map.setLayoutProperty("route-line", "line-join", "round");
+    map.setPaintProperty("route-line", "line-color", "#334155");
+    map.setPaintProperty("route-line", "line-opacity", 0.28);
+    map.setPaintProperty("route-line", "line-width", 3);
+  }
+
+  if (map.getLayer("stage-lines-casing")) {
+    map.setLayoutProperty("stage-lines-casing", "line-cap", "round");
+    map.setLayoutProperty("stage-lines-casing", "line-join", "round");
+    map.setPaintProperty("stage-lines-casing", "line-color", "#ffffff");
+    map.setPaintProperty("stage-lines-casing", "line-opacity", 0.92);
+    map.setPaintProperty("stage-lines-casing", "line-width", 12);
+  }
+
+  if (map.getLayer("stage-lines")) {
+    map.setLayoutProperty("stage-lines", "line-cap", "round");
+    map.setLayoutProperty("stage-lines", "line-join", "round");
+    map.setPaintProperty("stage-lines", "line-color", ["get", "color"]);
+    map.setPaintProperty("stage-lines", "line-opacity", 1);
+    map.setPaintProperty("stage-lines", "line-width", 8);
+  }
+}
+
+function enforceRouteLayerOrder(map: maplibregl.Map) {
+  ["route-shadow", "route-line", "stage-lines-casing", "stage-lines"].forEach((layerId) => {
+    if (!map.getLayer(layerId)) {
+      return;
+    }
+
+    try {
+      map.moveLayer(layerId);
+    } catch {
+      // MapLibre can reject moves while a style update is in progress; the next ensure call retries.
+    }
+  });
+}
+
+function routeLayerDebug(map: maplibregl.Map) {
+  const layerIds = map.getStyle().layers?.map((layer) => layer.id) ?? [];
+  const orderedLayerIds = ["route-shadow", "route-line", "stage-lines-casing", "stage-lines"];
+  const paintValue = (layerId: string, property: string) => {
+    if (!map.getLayer(layerId)) {
+      return "missing";
+    }
+
+    const value = map.getPaintProperty(layerId, property);
+    return typeof value === "string" || typeof value === "number" ? String(value) : JSON.stringify(value);
+  };
+
+  return {
+    order: orderedLayerIds.map((layerId) => `${layerId}:${layerIds.indexOf(layerId)}`).join("|"),
+    routeWidth: paintValue("route-line", "line-width"),
+    routeOpacity: paintValue("route-line", "line-opacity"),
+    casingWidth: paintValue("stage-lines-casing", "line-width"),
+    stageWidth: paintValue("stage-lines", "line-width"),
+    stageOpacity: paintValue("stage-lines", "line-opacity"),
+    stageColor: paintValue("stage-lines", "line-color")
+  };
+}
+
 function ensureRouteLayers(map: maplibregl.Map) {
   if (!map.getSource("route")) {
     map.addSource("route", {
@@ -430,8 +499,8 @@ function ensureRouteLayers(map: maplibregl.Map) {
       source: "route",
       paint: {
         "line-color": "#0f172a",
-        "line-opacity": 0.22,
-        "line-width": 10
+        "line-opacity": 0.16,
+        "line-width": 8
       }
     });
   }
@@ -447,8 +516,8 @@ function ensureRouteLayers(map: maplibregl.Map) {
       },
       paint: {
         "line-color": "#334155",
-        "line-opacity": 0.34,
-        "line-width": 4
+        "line-opacity": 0.28,
+        "line-width": 3
       }
     });
   }
@@ -464,8 +533,8 @@ function ensureRouteLayers(map: maplibregl.Map) {
       },
       paint: {
         "line-color": "#ffffff",
-        "line-opacity": 0.86,
-        "line-width": 10
+        "line-opacity": 0.92,
+        "line-width": 12
       }
     });
   }
@@ -481,11 +550,14 @@ function ensureRouteLayers(map: maplibregl.Map) {
       },
       paint: {
         "line-color": ["get", "color"],
-        "line-opacity": 0.98,
-        "line-width": 7
+        "line-opacity": 1,
+        "line-width": 8
       }
     });
   }
+
+  applyRouteLayerStyle(map);
+  enforceRouteLayerOrder(map);
 }
 
 function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
@@ -624,6 +696,15 @@ export function RouteMap({
   const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
   const [autoFitRoute, setAutoFitRoute] = useState(true);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
+  const [layerDebug, setLayerDebug] = useState({
+    order: "",
+    routeWidth: "",
+    routeOpacity: "",
+    casingWidth: "",
+    stageWidth: "",
+    stageOpacity: "",
+    stageColor: ""
+  });
   const routeValidation = useMemo(() => validateRoute(route), [route]);
   const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages).features.length, [stages]);
   const routePointSelectionEnabled = Boolean(routePointSelection?.enabled && routeValidation.line && onRoutePointSelect);
@@ -753,6 +834,7 @@ export function RouteMap({
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
     map.on("load", () => {
       ensureRouteLayers(map);
+      setLayerDebug(routeLayerDebug(map));
       setMapError("");
     });
     const handleMapError = () => {
@@ -830,6 +912,7 @@ export function RouteMap({
 
       if (!line) {
         const cameraLimits = resetRouteCameraLimits(map);
+        setLayerDebug(routeLayerDebug(map));
         if (process.env.NODE_ENV !== "production") {
           console.debug("RouteMap camera limits", {
             container: containerDebug(containerRef.current),
@@ -880,6 +963,7 @@ export function RouteMap({
       if (autoFitRoute) {
         fitRouteToBounds(false);
       }
+      setLayerDebug(routeLayerDebug(map));
       map.resize();
     };
 
@@ -895,6 +979,7 @@ export function RouteMap({
     const update = () => {
       const source = map.getSource("stages") as GeoJSONSource | undefined;
       source?.setData(stageFeatureCollection(stages));
+      setLayerDebug(routeLayerDebug(map));
     };
 
     return runWhenMapReady(map, update);
@@ -1051,6 +1136,13 @@ export function RouteMap({
       )}
       <div
         data-stage-layer-features={stageLayerFeatureCount}
+        data-route-layer-order={layerDebug.order}
+        data-route-line-width={layerDebug.routeWidth}
+        data-route-line-opacity={layerDebug.routeOpacity}
+        data-stage-casing-width={layerDebug.casingWidth}
+        data-stage-line-width={layerDebug.stageWidth}
+        data-stage-line-opacity={layerDebug.stageOpacity}
+        data-stage-line-color={layerDebug.stageColor}
         className={cn(
           "relative overflow-hidden rounded-lg border bg-slate-100",
           isFullscreenMap && "min-h-0 flex-1 rounded-md",
