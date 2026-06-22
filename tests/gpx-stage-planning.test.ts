@@ -120,8 +120,15 @@ describe("GPX parsing and stage planning", () => {
     }
 
     const trimmed = trimRouteGeometry(longRoute, validation.startKm, validation.endKm);
+    const firstVisiblePoint = trimmed.coordinates[0];
+    const firstVisibleKm = closestPointOnRoute(firstVisiblePoint, longRoute.coordinates).distanceKm;
+
     assert.ok(trimmed.coordinates.length >= 2);
     assertClose(routeDistanceKm(trimmed.coordinates), totalKm - 300, 0.2);
+    assertClose(firstVisibleKm, 300, 0.2);
+    trimmed.coordinates.slice(1).forEach((coordinate) => {
+      assert.ok(closestPointOnRoute(coordinate, longRoute.coordinates).distanceKm >= 300);
+    });
     assert.equal(normalizeRouteTrimBounds(totalKm, 300, totalKm + 0.2).ok, false);
   });
 
@@ -147,6 +154,25 @@ describe("GPX parsing and stage planning", () => {
     assertClose(resetTrim.distanceKm, totalKm, 0.2);
     assertClose(shorterEnd.distanceKm, 250, 0.2);
     assertClose(correctedEnd.distanceKm, 300, 0.2);
+  });
+
+  it("creates stage suggestions along a route that was trimmed from the original", () => {
+    const totalKm = routeDistanceKm(longRoute.coordinates);
+    const trimmed = createTrimmedRouteFromOriginal(longRoute, 300, totalKm);
+
+    assert.equal(trimmed.ok, true);
+    if (!trimmed.ok) {
+      return;
+    }
+
+    const stages = splitRouteIntoStages(trimmed.geometryGeoJson, 70);
+    assert.ok(stages.length >= 2);
+    assertClose(
+      stages.reduce((sum, stage) => sum + stage.distanceKm, 0),
+      trimmed.distanceKm,
+      0.4
+    );
+    assert.ok(stages.every((stage) => stage.distanceKm > 0));
   });
 
   it("creates automatic stage suggestions close to the target distance", () => {

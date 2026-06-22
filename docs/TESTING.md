@@ -63,26 +63,28 @@ Die Artefakte liegen lokal unter `artifacts/` und werden nicht committed.
 
 ## Manuelle UI-Pruefung
 
-Je nach Aufgabe pruefen:
+Je nach Aufgabe prüfen:
 
-- Startseite oeffnet ohne automatische Demo-Route.
-- `/planer` oeffnet ohne sichtbare Fehler.
+- Startseite öffnet ohne automatische Demo-Route.
+- `/planer` öffnet ohne sichtbare Fehler.
 - GPX-Import zeigt die importierte Route.
 - Start/Ziel stammen nach GPX-Import nicht aus Demo-Werten.
 - Karte springt nicht unkontrolliert.
-- Vollbildkarte kann geoeffnet und verlassen werden.
+- Vollbildkarte kann geöffnet und verlassen werden.
 - Etappenlinien sind farbig unterscheidbar.
-- Etappen koennen erzeugt, angepasst und gespeichert werden.
-- Ungueltige Etappen-km werden verstaendlich abgelehnt und veraendern die bisherige Geometrie nicht.
-- Wiederholte Routenkuerzungen werden aus der Original-GPX-Route berechnet: Start 300 km, danach 250 km, danach 0 km duerfen nicht kumulativ schrumpfen.
-- `Kuerzung zuruecksetzen` stellt die vollstaendige Originalroute wieder her und setzt Etappen/POI zur Neuberechnung zurueck.
-- Startort-Vorschau zeigt Ort, Abstand zur GPX-Route und vorgeschlagenen GPX-km vor Uebernahme an.
-- Gekuerzte Routen zeigen gekuerzte Laenge und GPX-km-Bereich an.
-- Grosse Startkuerzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
-- Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudruecken.
-- Geaenderte Etappen zeigen eine Rueckmeldung zur neu berechneten Geometrie.
+- Etappen können erzeugt, angepasst und gespeichert werden.
+- Ungültige Etappen-km werden verständlich abgelehnt und verändern die bisherige Geometrie nicht.
+- Wiederholte Routenkürzungen werden aus der Original-GPX-Route berechnet: Start 300 km, danach 250 km, danach 0 km dürfen nicht kumulativ schrumpfen.
+- `Kürzung zurücksetzen` stellt die vollständige Originalroute wieder her und setzt Etappen/POI zur Neuberechnung zurück.
+- Startortsuche ist im GPX-Kürzungsworkflow deaktiviert oder zeigt den Hinweis auf Start-km statt automatischer Routenänderung.
+- Gekürzte Routen zeigen gekürzte Länge und GPX-km-Bereich an.
+- Große Startkürzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
+- Änderung der Etappenlänge erzeugt Vorschläge neu; bestehende Etappen werden nur nach Bestätigung ersetzt.
+- Versehentliche direkte Routenplanung bei geladener GPX-Route zeigt eine Bestätigung und erhält die GPX-Route bei Abbruch.
+- Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudrücken.
+- Geänderte Etappen zeigen eine Rückmeldung zur neu berechneten Geometrie.
 - GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
-- Hoehenprofil passt zur geladenen Route.
+- Höhenprofil passt zur geladenen Route.
 - POI werden zur aktuellen Route bzw. Etappe angezeigt.
 - Lead-/Partner-/Admin-Flows bleiben erreichbar, wenn betroffen.
 

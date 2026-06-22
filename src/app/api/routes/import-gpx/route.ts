@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const coordinates = parsedGpx.coordinates;
     if (coordinates.length < 2) {
       return NextResponse.json(
-        { error: "GPX-Datei enthaelt keine gueltige Track- oder Routen-Geometrie." },
+        { error: "GPX-Datei enthält keine gültige Track- oder Routen-Geometrie." },
         { status: 400 }
       );
     }
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       name: routeName,
       description: `GPX-Import mit ${coordinates.length} Punkten (${parsedGpx.pointType}), Höhenprofil: ${
-        parsedGpx.hasElevation ? "aus GPX-Datei" : "geschaetzt"
+        parsedGpx.hasElevation ? "aus GPX-Datei" : "geschätzt"
       }.`,
       startName: "GPX Start",
       endName: "GPX Ziel",

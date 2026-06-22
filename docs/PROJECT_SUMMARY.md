@@ -38,7 +38,7 @@ P0-Fokus:
 
 - Modularer Monolith vor Microservices.
 - Feature-Slices statt breiter Umbauten.
-- Route, Etappen, Karte und Hoehenprofil muessen dieselbe Routengrundlage nutzen.
+- Route, Etappen, Karte und Höhenprofil müssen dieselbe Routengrundlage nutzen.
 - GPX-Import bleibt eine zentrale Grundlage fuer die erste echte Testplanung.
 - Oeffentliche OSM-/Overpass-/Geocoding-Dienste duerfen nicht als dauerhaftes Produktionsbackend verwendet werden.
 - Datenquellen, Lizenzen und Attribution muessen sichtbar bleiben.
@@ -71,7 +71,7 @@ Details stehen in:
 ## Aktueller Stand nach #28-Schnitt
 
 - Startseite zeigt keine Salzburg-/Muenchen-Vorbelegung mehr.
-- `/planer` trennt Eingabeart, direkte Route, GPX-Import, Uebersicht, Bearbeitung und Etappen als Workflow-Schritte.
+- `/planer` trennt Eingabeart, direkte Route, GPX-Import, Übersicht, Bearbeitung und Etappen als Workflow-Schritte.
 - Explizite Demo-Tour bleibt verfuegbar, wird aber nicht automatisch geladen.
 - Lokaler TourState speichert Route, Etappen und POI fuer Ruecksprung und Vollbildkarte.
 - `/planer/karte` ist ein eigener Kartenarbeitsbereich mit Ruecksprung zur Bearbeitung und Etappenplanung.
@@ -83,27 +83,30 @@ Details stehen in:
 - Im Browser wurde eine echte GPX-Datei aus `gps-touring/sample-gpx` geladen und vollstaendig angezeigt.
 - GPX-Start und -Ende wurden entlang der Route getrimmt: km 2,0 bis km 76,8.
 - Nach dem Trim wurden 2 Etappen nach km erzeugt.
-- Eine Etappe wurde manuell per Start-km, Ziel-km und Laenge geaendert: 0,0 -> 0,5 km, 37,4 -> 38,9 km und 37,4 -> 38,4 km.
-- Distanz, Hoehenmeter und Fahrzeit wurden neu berechnet; Hoehenmeter stiegen im Test von 259 auf 266 Hm.
+- Eine Etappe wurde manuell per Start-km, Ziel-km und Länge geändert: 0,0 -> 0,5 km, 37,4 -> 38,9 km und 37,4 -> 38,4 km.
+- Distanz, Höhenmeter und Fahrzeit wurden neu berechnet; Höhenmeter stiegen im Test von 259 auf 266 Hm.
 - Farbige Etappenlinien, Speichern, erneutes Oeffnen und persistierte Etappengeometrie wurden geprueft.
 - Nach dem Merge wurde ein kurzer RPi-Smoke-Test durchgefuehrt: `/api/health` meldete `ok`, `/planer` oeffnete die Planer-Seite und die gespeicherte Beispielroute `cmqnvfw150043fuiv96ttfpr2` oeffnete mit persistierter Etappe `38.4 km`.
 - Prisma wurde im Rahmen von #29 nicht aktualisiert; der angezeigte Prisma-Update-Hinweis bleibt ein separater technischer Auftrag.
 
 ## Aktueller Stand nach GPX-/Etappen-MVP-Konsolidierung
 
-- Der Planer erklaert direkt im Etappenbereich, dass die GPX-Route die feste Grundlage bleibt.
-- Start-km, Ziel-km und Laenge werden im Arbeitskontext kurz erklaert.
+- Der Planer trennt Route kürzen, Etappen erzeugen und Etappen bearbeiten in eigene Workflow-Schritte.
+- Der Planer erklärt direkt im GPX-/Etappenbereich, dass die GPX-Route die feste Grundlage bleibt.
+- Start-km, Ziel-km und Länge werden im Arbeitskontext kurz erklärt.
 - Orte dienen im MVP als Etappennamen oder Projektion auf die bestehende Route und verlegen die Route nicht automatisch.
-- Ungueltige km-Eingaben werden abgefangen: Start-km kleiner 0, Ziel-km groesser als Routenlaenge, Ziel-km kleiner/gleich Start-km und Laenge kleiner/gleich 0 erzeugen Statusmeldungen statt kaputter Geometrie.
-- Gekuerzte Routen werden sichtbar markiert; die gekuerzte Laenge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
-- Kuerzungen werden idempotent aus der unveraenderten Original-GPX-Geometrie abgeleitet; nachtraegliche Korrekturen kuerzen nicht erneut die bereits gekuerzte Arbeitsroute.
-- `Kuerzung zuruecksetzen` stellt die vollstaendige Original-GPX-Route wieder her.
-- Startort-Vorschau ist vorbereitet: lokaler Ort wird auf den naechsten Punkt der Original-GPX-Route projiziert und muss vor dem Kuerzen uebernommen werden.
-- Grosse Startkuerzungen wie 300 km bleiben stabil, wenn das End-km-Feld durch die Anzeige auf eine Nachkommastelle gerundet ist.
-- Karte und Höhenprofil sind im Planer umschaltbar; die Etappenbearbeitung wird nicht mehr dauerhaft durch das Höhenprofil in eine schmale Spalte gedrueckt.
-- Manuell geaenderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
-- Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollstaendige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
-- Tests decken ungueltige km-Bereiche, ausserhalb der Route liegende Grenzen, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
+- Ungültige km-Eingaben werden abgefangen: Start-km kleiner 0, Ziel-km größer als Routenlänge, Ziel-km kleiner/gleich Start-km und Länge kleiner/gleich 0 erzeugen Statusmeldungen statt kaputter Geometrie.
+- Gekürzte Routen werden sichtbar markiert; die gekürzte Länge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
+- Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet; nachträgliche Korrekturen kürzen nicht erneut die bereits gekürzte Arbeitsroute.
+- `Kürzung zurücksetzen` stellt die vollständige Original-GPX-Route wieder her.
+- Startortsuche für GPX-Kürzungen ist deaktiviert, bis ein zuverlässiger Geocoder vorhanden ist; die UI verweist auf Start-km.
+- Etappenlänge erzeugt Vorschläge entlang der aktuellen GPX-Arbeitsroute; bestehende Etappen werden nur nach Bestätigung ersetzt.
+- Direkte Routenplanung verwirft eine geladene GPX-Route nur nach Bestätigung.
+- Große Startkürzungen wie 300 km bleiben stabil, wenn das End-km-Feld durch die Anzeige auf eine Nachkommastelle gerundet ist.
+- Karte und Höhenprofil sind im Planer umschaltbar; die Etappenbearbeitung wird nicht mehr dauerhaft durch das Höhenprofil in eine schmale Spalte gedrückt.
+- Manuell geänderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
+- Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollständige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
+- Tests decken ungültige km-Bereiche, außerhalb der Route liegende Grenzen, große 300-km-Startkürzung, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
 
 ## Deployment-Struktur
 
