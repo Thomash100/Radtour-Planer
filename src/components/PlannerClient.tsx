@@ -24,7 +24,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -305,6 +305,7 @@ export function PlannerClient({
   const [calculation, setCalculation] = useState<RouteCalculation | null>(null);
   const [savedRoute, setSavedRoute] = useState<SavedRoute | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null);
   const [pois, setPois] = useState<Poi[]>([]);
   const [selectedPoi, setSelectedPoi] = useState<Poi | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([
@@ -339,6 +340,7 @@ export function PlannerClient({
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
+  const stageCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -449,6 +451,46 @@ export function PlannerClient({
   const selectedCategoryQuery = useMemo(
     () => (selectedCategories.length > 0 ? selectedCategories.join(",") : ""),
     [selectedCategories]
+  );
+
+  useEffect(() => {
+    if (!selectedStageId) {
+      return;
+    }
+
+    if (!stages.some((stage) => stage.id === selectedStageId)) {
+      setSelectedStageId(null);
+    }
+  }, [selectedStageId, stages]);
+
+  useEffect(() => {
+    if (!selectedStageId || plannerStep !== "stage-edit") {
+      return;
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      const selectedCard = stageCardRefs.current[selectedStageId];
+      selectedCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+      selectedCard?.focus({ preventScroll: true });
+    }, 80);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, [plannerStep, selectedStageId]);
+
+  const selectStageForEditing = useCallback(
+    (stageId: string) => {
+      const stage = stages.find((item) => item.id === stageId);
+      if (!stage) {
+        return;
+      }
+
+      setSelectedStageId(stageId);
+      setPlannerStep("stage-edit");
+      setVisualizationMode("map");
+      setIsPickingStagePoint(false);
+      setStatus(`Etappe ${stage.dayNumber} ausgewählt. Bearbeitungsfelder sind geöffnet.`);
+    },
+    [stages]
   );
 
   useEffect(() => {
@@ -1613,7 +1655,17 @@ export function PlannerClient({
                 </span>
               </div>
             )}
-            <RouteMap pois={pois} route={route.geometryGeoJson} selectedPoiId={selectedPoi?.id} stages={stages} waypoints={route.waypoints} onSelectPoi={setSelectedPoi} />
+            <RouteMap
+              pois={pois}
+              route={route.geometryGeoJson}
+              selectedPoiId={selectedPoi?.id}
+              selectedStageId={selectedStageId}
+              stages={stages}
+              waypoints={route.waypoints}
+              onEditStage={selectStageForEditing}
+              onSelectPoi={setSelectedPoi}
+              onSelectStage={selectStageForEditing}
+            />
           </div>
           <Card>
             <CardHeader>
@@ -1872,10 +1924,13 @@ export function PlannerClient({
                   label: "Auf die Route klicken, um einen Etappenpunkt zu setzen."
                 }}
                 selectedPoiId={selectedPoi?.id}
+                selectedStageId={selectedStageId}
                 stages={stages}
                 stageBreakpoints={effectiveStageBreakpoints}
                 waypoints={route?.waypoints}
+                onEditStage={selectStageForEditing}
                 onSelectPoi={setSelectedPoi}
+                onSelectStage={selectStageForEditing}
                 onRoutePointSelect={addRouteStageBreakpoint}
               />
             ) : (
@@ -2130,13 +2185,32 @@ export function PlannerClient({
               <CardContent className="space-y-3">
                 {stages.map((stage) => {
                   const stageKmBounds = stageKilometers(stage);
+                  const isSelectedStage = selectedStageId === stage.id;
 
                   return (
-                    <div key={stage.id} className="grid gap-4 rounded-lg border bg-white p-4 xl:grid-cols-[150px_minmax(0,1fr)] 2xl:grid-cols-[150px_minmax(0,1fr)_auto]">
+                    <div
+                      key={stage.id}
+                      ref={(element) => {
+                        stageCardRefs.current[stage.id] = element;
+                      }}
+                      className={cn(
+                        "grid gap-4 rounded-lg border bg-white p-4 outline-none transition xl:grid-cols-[150px_minmax(0,1fr)] 2xl:grid-cols-[150px_minmax(0,1fr)_auto]",
+                        isSelectedStage && "border-primary bg-primary/5 ring-2 ring-primary/25"
+                      )}
+                      data-selected={isSelectedStage ? "true" : "false"}
+                      data-stage-card-id={stage.id}
+                      tabIndex={-1}
+                      onFocusCapture={() => setSelectedStageId(stage.id)}
+                    >
                       <div className="flex flex-wrap items-start gap-2 xl:block">
                         <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
                           Tag {stage.dayNumber}
                         </div>
+                        {isSelectedStage && (
+                          <Badge className="mt-0 xl:mt-2" variant="secondary">
+                            Ausgewählt
+                          </Badge>
+                        )}
                         {stageFeedback[stage.id] && (
                           <Badge className="mt-0 xl:mt-2" variant={stageFeedback[stage.id] === "Gespeichert" ? "secondary" : "outline"}>
                             {stageFeedback[stage.id]}
