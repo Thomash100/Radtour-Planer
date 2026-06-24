@@ -41,7 +41,7 @@ import {
   closestPointOnRoute,
   createElevationProfile,
   createTrimmedRouteFromOriginal,
-  createValidatedStageSliceFromBounds,
+  rebuildContiguousStageSlices,
   routeBoundsForStage,
   routeDistanceKm,
   toGpx,
@@ -158,25 +158,25 @@ type PendingStageGeneration = {
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
-  { value: "LUGGAGE_TRANSFER", label: "Gepaeck" },
+  { value: "LUGGAGE_TRANSFER", label: "Gepäck" },
   { value: "BIKE_REPAIR", label: "Werkstatt" },
   { value: "BIKE_SHOP", label: "Radladen" },
   { value: "RESTAURANT", label: "Restaurant" },
-  { value: "CAFE", label: "Cafe" },
+  { value: "CAFE", label: "Café" },
   { value: "SUPERMARKET", label: "Supermarkt" },
   { value: "PHARMACY", label: "Apotheke" },
   { value: "TRAIN_STATION", label: "Bahnhof" },
-  { value: "PUBLIC_TRANSPORT", label: "OePNV" },
+  { value: "PUBLIC_TRANSPORT", label: "ÖPNV" },
   { value: "DRINKING_WATER", label: "Wasser" },
   { value: "PUBLIC_TOILET", label: "Toilette" },
   { value: "SWIMMING", label: "Badestelle" },
   { value: "EBIKE_CHARGING", label: "E-Bike-Laden" },
-  { value: "SIGHT", label: "Sehenswuerdig" }
+  { value: "SIGHT", label: "Sehenswürdig" }
 ];
 
 const profileLabels: Record<string, string> = {
   balanced: "ausgewogen",
-  cycleways: "moeglichst Fahrradwege",
+  cycleways: "möglichst Fahrradwege",
   low_elevation: "wenig Steigung",
   touristic: "touristisch",
   sportive: "sportlich"
@@ -184,10 +184,10 @@ const profileLabels: Record<string, string> = {
 
 const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Position }> = [
   { name: "Hamburg", coordinate: [9.9937, 53.5511] },
-  { name: "Luebeck", aliases: ["Lubeck"], coordinate: [10.6866, 53.8655] },
+  { name: "Lübeck", aliases: ["Lubeck", "Luebeck"], coordinate: [10.6866, 53.8655] },
   { name: "Schwerin", coordinate: [11.4075, 53.6355] },
   { name: "Wismar", coordinate: [11.462, 53.8912] },
-  { name: "Lueneburg", aliases: ["Luneburg"], coordinate: [10.4079, 53.2464] },
+  { name: "Lüneburg", aliases: ["Luneburg", "Lueneburg"], coordinate: [10.4079, 53.2464] },
   { name: "Uelzen", coordinate: [10.5589, 52.9657] },
   { name: "Salzwedel", coordinate: [11.1537, 52.8516] },
   { name: "Stendal", coordinate: [11.8587, 52.6069] },
@@ -200,7 +200,7 @@ const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Positio
   { name: "Dresden", coordinate: [13.7373, 51.0504] },
   { name: "Pirna", coordinate: [13.9407, 50.9625] },
   { name: "Prag", aliases: ["Praha"], coordinate: [14.4378, 50.0755] },
-  { name: "Muenchen", aliases: ["Munchen", "Munich"], coordinate: [11.582, 48.1351] },
+  { name: "München", aliases: ["Munchen", "Muenchen", "Munich"], coordinate: [11.582, 48.1351] },
   { name: "Salzburg", coordinate: [13.055, 47.8095] }
 ];
 
@@ -327,7 +327,7 @@ export function PlannerClient({
   const [restaurantInHouse, setRestaurantInHouse] = useState(false);
   const [bikeParking, setBikeParking] = useState(false);
   const [minRating, setMinRating] = useState("0");
-  const [status, setStatus] = useState("Bereit fuer die erste Route.");
+  const [status, setStatus] = useState("Bereit für die erste Route.");
   const [isBusy, setIsBusy] = useState(false);
   const [leadStatus, setLeadStatus] = useState("");
   const [stageBreakpoints, setStageBreakpoints] = useState<Array<StageBreakpoint & { id: string }>>([]);
@@ -365,7 +365,7 @@ export function PlannerClient({
       persons: 2,
       bikes: 2,
       luggageItems: 2,
-      message: "Bitte um Rueckmeldung zur Verfuegbarkeit fuer diese Etappe."
+      message: "Bitte um Rückmeldung zur Verfügbarkeit für diese Etappe."
     }
   });
 
@@ -442,7 +442,7 @@ export function PlannerClient({
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
     { label: "E-Bike", active: ebikeFriendly, setActive: setEbikeFriendly },
     { label: "Garage", active: bikeGarage, setActive: setBikeGarage },
-    { label: "Gepaeck", active: luggageAccepted, setActive: setLuggageAccepted },
+    { label: "Gepäck", active: luggageAccepted, setActive: setLuggageAccepted },
     { label: "Hunde", active: dogsAllowed, setActive: setDogsAllowed },
     { label: "Restaurant", active: restaurantInHouse, setActive: setRestaurantInHouse },
     { label: "Stellplatz", active: bikeParking, setActive: setBikeParking }
@@ -574,7 +574,7 @@ export function PlannerClient({
     }
 
     if (distanceKm <= 0 || distanceKm >= routeTotalKm) {
-      setStatus(`Etappenpunkt-km muss groesser als 0 und kleiner als die Routenlaenge (${routeTotalKm.toFixed(1)} km) sein.`);
+      setStatus(`Etappenpunkt-km muss größer als 0 und kleiner als die Routenlänge (${routeTotalKm.toFixed(1)} km) sein.`);
       return;
     }
 
@@ -592,7 +592,7 @@ export function PlannerClient({
     }
 
     if (selection.distanceToRouteKm > 20) {
-      setStatus(`Klick liegt ${selection.distanceToRouteKm.toFixed(1)} km von der Route entfernt. Bitte naeher an die Route klicken.`);
+      setStatus(`Klick liegt ${selection.distanceToRouteKm.toFixed(1)} km von der Route entfernt. Bitte näher an die Route klicken.`);
       return;
     }
 
@@ -639,7 +639,7 @@ export function PlannerClient({
       }
 
       if (patch.distanceKm <= 0 || patch.distanceKm >= routeTotalKm) {
-        setStatus(`Etappenpunkt-km muss groesser als 0 und kleiner als die Routenlaenge (${routeTotalKm.toFixed(1)} km) sein.`);
+        setStatus(`Etappenpunkt-km muss größer als 0 und kleiner als die Routenlänge (${routeTotalKm.toFixed(1)} km) sein.`);
         return;
       }
     }
@@ -773,7 +773,7 @@ export function PlannerClient({
     const request = { targetKm, breakpoints };
     if (stages.length > 0) {
       setPendingStageGeneration(request);
-      setStatus("Bestehende Etappen werden erst nach Bestätigung neu erzeugt.");
+      setStatus("Etappen neu aus Länge berechnen: Bestehende manuelle Etappenänderungen werden erst nach Bestätigung verworfen.");
       return;
     }
 
@@ -1137,7 +1137,7 @@ export function PlannerClient({
   async function startDemoTour() {
     const demoValues = {
       ...plannerForm.getValues(),
-      start: "Muenchen",
+      start: "München",
       end: "Salzburg",
       profile: "balanced" as const
     };
@@ -1251,86 +1251,82 @@ export function PlannerClient({
       return;
     }
 
-    const stage = stages.find((item) => item.id === stageId);
-    if (!stage) {
+    const stageIndex = stages.findIndex((item) => item.id === stageId);
+    if (stageIndex < 0) {
       return;
     }
 
-    const currentBounds = stageKilometers(stage);
-    const startKm = patch.startKm ?? currentBounds.startKm;
-    let endKm = patch.endKm ?? currentBounds.endKm;
-
-    if (typeof patch.distanceKm === "number") {
-      if (!Number.isFinite(patch.distanceKm)) {
-        setStatus(`Etappe ${stage.dayNumber}: Länge muss eine gültige Zahl sein.`);
-        return;
-      }
-
-      if (patch.distanceKm <= 0) {
-        setStatus(`Etappe ${stage.dayNumber}: Länge darf nicht 0 oder negativ sein.`);
-        return;
-      }
-
-      endKm = startKm + patch.distanceKm;
-    }
-
-    const slice = createValidatedStageSliceFromBounds(route.geometryGeoJson, startKm, endKm, stage.dayNumber - 1);
-    if (!slice.ok) {
-      setStatus(`Etappe ${stage.dayNumber}: ${slice.message}`);
+    const result = rebuildContiguousStageSlices(route.geometryGeoJson, stages, stageIndex, patch);
+    if (!result.ok) {
+      setStatus(result.message);
       return;
     }
 
-    setStages((current) =>
-      current.map((item) =>
-        item.id === stageId
-          ? {
-              ...item,
-              routeStartKm: slice.startKm,
-              routeEndKm: slice.endKm,
-              distanceKm: slice.distanceKm,
-              elevationUp: slice.elevationUp,
-              elevationDown: slice.elevationDown,
-              geometryGeoJson: slice.geometryGeoJson
-            }
-          : item
-      )
+    const affectedIds = result.affectedStageNumbers
+      .map((dayNumber) => result.stages.find((stage) => stage.dayNumber === dayNumber)?.id)
+      .filter((id): id is string => Boolean(id));
+    setStages(result.stages);
+    setSelectedStageId(stageId);
+    setStageFeedback((current) => ({
+      ...current,
+      ...Object.fromEntries(affectedIds.map((id) => [id, "Geometrie aktualisiert"]))
+    }));
+    const affectedNotice =
+      result.affectedStageNumbers.length > 1 ? ` Betroffene Etappen: ${result.affectedStageNumbers.join(", ")}.` : "";
+    setStatus(
+      `Etappe ${result.changedStage.dayNumber}: Änderung übernommen, Folgeetappen konsistent angepasst (${formatKm(
+        result.changedStage.distanceKm
+      )}).${affectedNotice} Bitte speichern, um die Änderung dauerhaft zu übernehmen.`
     );
-    setStageFeedback((current) => ({ ...current, [stageId]: "Geometrie aktualisiert" }));
-    setStatus(`Etappe ${stage.dayNumber}: Geometrie neu berechnet (${formatKm(slice.distanceKm)}). Bitte speichern, um die Änderung dauerhaft zu übernehmen.`);
   }
 
   async function saveStage(stage: Stage) {
-    const response = await fetch(`/api/stages/${stage.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        startName: stage.startName,
-        endName: stage.endName,
-        distanceKm: stage.distanceKm,
-        elevationUp: stage.elevationUp,
-        elevationDown: stage.elevationDown,
-        geometryGeoJson: stage.geometryGeoJson
-      })
-    });
-    const payload = await response.json();
-    if (!response.ok) {
-      setStatus(payload.error ?? "Etappe konnte nicht gespeichert werden.");
-      return;
+    const stagesToSave = stages.filter((item) => item.id === stage.id || stageFeedback[item.id] === "Geometrie aktualisiert");
+    const savedStages: Stage[] = [];
+
+    for (const item of stagesToSave) {
+      const response = await fetch(`/api/stages/${item.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          startName: item.startName,
+          endName: item.endName,
+          distanceKm: item.distanceKm,
+          elevationUp: item.elevationUp,
+          elevationDown: item.elevationDown,
+          geometryGeoJson: item.geometryGeoJson
+        })
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        setStatus(payload.error ?? "Etappe konnte nicht gespeichert werden.");
+        return;
+      }
+
+      savedStages.push({
+        ...payload.stage,
+        routeStartKm: item.routeStartKm,
+        routeEndKm: item.routeEndKm
+      });
     }
 
+    const savedIds = new Set(savedStages.map((item) => item.id));
     setStages((current) =>
-      current.map((item) =>
-        item.id === stage.id
-          ? {
-              ...payload.stage,
-              routeStartKm: stage.routeStartKm,
-              routeEndKm: stage.routeEndKm
-            }
-          : item
-      )
+      current.map((item) => {
+        const savedStage = savedStages.find((saved) => saved.id === item.id);
+        return savedStage ?? item;
+      })
     );
-    setStageFeedback((current) => ({ ...current, [stage.id]: "Gespeichert" }));
-    setStatus(`Etappe ${payload.stage.dayNumber} wurde aktualisiert.`);
+    setStageFeedback((current) => ({
+      ...current,
+      ...Object.fromEntries(Array.from(savedIds).map((id) => [id, "Gespeichert"]))
+    }));
+    const savedDayNumbers = savedStages.map((item) => item.dayNumber).sort((a, b) => a - b);
+    setStatus(
+      savedDayNumbers.length > 1
+        ? `Etappen ${savedDayNumbers.join(", ")} wurden aktualisiert.`
+        : `Etappe ${savedDayNumbers[0]} wurde aktualisiert.`
+    );
   }
 
   const workflowHeader = (
@@ -1485,9 +1481,9 @@ export function PlannerClient({
   const stageGenerationConfirmationCard = pendingStageGeneration ? (
     <Card className="border-amber-300 bg-amber-50">
       <CardHeader>
-        <CardTitle>Bestehende Etappen ersetzen?</CardTitle>
+        <CardTitle>Etappen neu aus Länge berechnen?</CardTitle>
         <CardDescription className="text-amber-950">
-          Die neue Etappenlänge oder die gesetzten Etappenpunkte erzeugen neue Vorschläge entlang der aktuellen GPX-Arbeitsroute. Bestehende manuelle Etappen werden nicht still überschrieben.
+          Das erzeugt alle Etappen anhand der Etappenlänge oder gesetzter Etappenpunkte neu. Bestehende manuelle Etappenänderungen werden verworfen.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-2 sm:grid-cols-2">
@@ -2410,8 +2406,8 @@ export function PlannerClient({
                       </div>
                       <div className="grid grid-cols-3 gap-2">
                         <Input aria-label="Personen" type="number" {...leadForm.register("persons")} />
-                        <Input aria-label="Fahrraeder" type="number" {...leadForm.register("bikes")} />
-                        <Input aria-label="Gepaeck" type="number" {...leadForm.register("luggageItems")} />
+                        <Input aria-label="Fahrräder" type="number" {...leadForm.register("bikes")} />
+                        <Input aria-label="Gepäck" type="number" {...leadForm.register("luggageItems")} />
                       </div>
                       <div className="grid gap-2">
                         <Input aria-label="Abholort" placeholder="Abholort" {...leadForm.register("pickupLocation")} />
@@ -2437,8 +2433,8 @@ export function PlannerClient({
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       {Boolean(selectedPoi.tagsJson?.testData)
-                        ? "Dieser Eintrag ist ein markierter Test-POI fuer die GPX-Abnahme. Buchungsanfragen sind nur fuer echte Partnerbetriebe aktiv."
-                        : "Anfragen sind im MVP fuer freigeschaltete Partner verfuegbar."}
+                        ? "Dieser Eintrag ist ein markierter Test-POI für die GPX-Abnahme. Buchungsanfragen sind nur für echte Partnerbetriebe aktiv."
+                        : "Anfragen sind im MVP für freigeschaltete Partner verfügbar."}
                     </p>
                   )}
                 </>

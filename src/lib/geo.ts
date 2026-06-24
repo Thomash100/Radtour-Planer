@@ -215,11 +215,11 @@ export type StageSliceValidationResult =
 
 export function validateStageSliceBounds(totalDistanceKm: number, startKm: number, endKm: number): StageSliceValidationResult {
   if (!Number.isFinite(totalDistanceKm) || totalDistanceKm <= 0) {
-    return { ok: false, message: "Die Route hat keine gueltige Laenge." };
+    return { ok: false, message: "Die Route hat keine gültige Länge." };
   }
 
   if (!Number.isFinite(startKm) || !Number.isFinite(endKm)) {
-    return { ok: false, message: "Start-km und Ziel-km muessen gueltige Zahlen sein." };
+    return { ok: false, message: "Start-km und Ziel-km müssen gültige Zahlen sein." };
   }
 
   if (startKm < 0) {
@@ -227,11 +227,11 @@ export function validateStageSliceBounds(totalDistanceKm: number, startKm: numbe
   }
 
   if (endKm > totalDistanceKm) {
-    return { ok: false, message: `Ziel-km darf nicht groesser als die Routenlaenge (${totalDistanceKm.toFixed(1)} km) sein.` };
+    return { ok: false, message: `Ziel-km darf nicht größer als die Routenlänge (${totalDistanceKm.toFixed(1)} km) sein.` };
   }
 
   if (endKm <= startKm) {
-    return { ok: false, message: "Ziel-km muss groesser als Start-km sein." };
+    return { ok: false, message: "Ziel-km muss größer als Start-km sein." };
   }
 
   return {
@@ -276,7 +276,7 @@ export function createValidatedStageSliceFromBounds(
   stageIndex = 0
 ) {
   const totalDistance = routeDistanceKm(geometry.coordinates);
-  const validation = validateStageSliceBounds(totalDistance, startKm, endKm);
+  const validation = normalizeRouteTrimBounds(totalDistance, startKm, endKm);
   if (!validation.ok) {
     return validation;
   }
@@ -296,6 +296,168 @@ export function createValidatedStageSliceFromBounds(
       type: "LineString",
       coordinates: stageCoordinates
     } satisfies LineStringGeoJson
+  };
+}
+
+export type ContiguousStageSliceInput = {
+  dayNumber: number;
+  distanceKm?: number;
+  elevationUp?: number;
+  elevationDown?: number;
+  geometryGeoJson: LineStringGeoJson;
+  routeStartKm?: number;
+  routeEndKm?: number;
+};
+
+export type ContiguousStageSlicePatch = {
+  startKm?: number;
+  endKm?: number;
+  distanceKm?: number;
+};
+
+export function rebuildContiguousStageSlices<T extends ContiguousStageSliceInput>(
+  routeGeometry: LineStringGeoJson,
+  stages: T[],
+  changedStageIndex: number,
+  patch: ContiguousStageSlicePatch
+):
+  | {
+      ok: true;
+      stages: Array<
+        T & {
+          distanceKm: number;
+          elevationUp: number;
+          elevationDown: number;
+          routeStartKm: number;
+          routeEndKm: number;
+          geometryGeoJson: LineStringGeoJson;
+        }
+      >;
+      changedStage: T & {
+        distanceKm: number;
+        elevationUp: number;
+        elevationDown: number;
+        routeStartKm: number;
+        routeEndKm: number;
+        geometryGeoJson: LineStringGeoJson;
+      };
+      affectedStageNumbers: number[];
+    }
+  | {
+      ok: false;
+      message: string;
+    } {
+  if (changedStageIndex < 0 || changedStageIndex >= stages.length) {
+    return { ok: false, message: "Etappe wurde nicht gefunden." };
+  }
+
+  const totalDistance = routeDistanceKm(routeGeometry.coordinates);
+  if (!Number.isFinite(totalDistance) || totalDistance <= 0) {
+    return { ok: false, message: "Die Route hat keine gültige Länge." };
+  }
+
+  const changedStage = stages[changedStageIndex];
+  const currentBounds = stages.map((stage) => {
+    if (typeof stage.routeStartKm === "number" && typeof stage.routeEndKm === "number") {
+      return {
+        startKm: stage.routeStartKm,
+        endKm: stage.routeEndKm
+      };
+    }
+
+    return routeBoundsForStage(routeGeometry, stage.geometryGeoJson);
+  });
+  const nextBounds = currentBounds.map((bounds) => ({ ...bounds }));
+  const baseBounds = nextBounds[changedStageIndex];
+  let startKm = patch.startKm ?? baseBounds.startKm;
+  let endKm = patch.endKm ?? baseBounds.endKm;
+
+  if (typeof patch.startKm === "number" && !Number.isFinite(patch.startKm)) {
+    return { ok: false, message: `Etappe ${changedStage.dayNumber}: Start-km muss eine gültige Zahl sein.` };
+  }
+
+  if (typeof patch.endKm === "number" && !Number.isFinite(patch.endKm)) {
+    return { ok: false, message: `Etappe ${changedStage.dayNumber}: Ziel-km muss eine gültige Zahl sein.` };
+  }
+
+  if (typeof patch.distanceKm === "number") {
+    if (!Number.isFinite(patch.distanceKm)) {
+      return { ok: false, message: `Etappe ${changedStage.dayNumber}: Länge muss eine gültige Zahl sein.` };
+    }
+
+    if (patch.distanceKm <= 0) {
+      return { ok: false, message: `Etappe ${changedStage.dayNumber}: Länge darf nicht 0 oder negativ sein.` };
+    }
+
+    endKm = startKm + patch.distanceKm;
+  }
+
+  startKm = Number(startKm.toFixed(3));
+  endKm = Number(endKm.toFixed(3));
+  nextBounds[changedStageIndex] = { startKm, endKm };
+
+  if (typeof patch.startKm === "number" && changedStageIndex > 0) {
+    nextBounds[changedStageIndex - 1] = {
+      ...nextBounds[changedStageIndex - 1],
+      endKm: startKm
+    };
+  }
+
+  if ((typeof patch.endKm === "number" || typeof patch.distanceKm === "number") && changedStageIndex < stages.length - 1) {
+    nextBounds[changedStageIndex + 1] = {
+      ...nextBounds[changedStageIndex + 1],
+      startKm: endKm
+    };
+  }
+
+  const affectedIndexes = new Set([changedStageIndex]);
+  if (typeof patch.startKm === "number" && changedStageIndex > 0) {
+    affectedIndexes.add(changedStageIndex - 1);
+  }
+  if ((typeof patch.endKm === "number" || typeof patch.distanceKm === "number") && changedStageIndex < stages.length - 1) {
+    affectedIndexes.add(changedStageIndex + 1);
+  }
+
+  const rebuiltStages = stages.map((stage, index) => {
+    const bounds = nextBounds[index];
+    const rebuilt = createValidatedStageSliceFromBounds(routeGeometry, bounds.startKm, bounds.endKm, index);
+    if (!rebuilt.ok) {
+      return {
+        ok: false as const,
+        message: `Etappe ${stage.dayNumber}: ${rebuilt.message}`
+      };
+    }
+
+    return {
+      ok: true as const,
+      stage: {
+        ...stage,
+        routeStartKm: rebuilt.startKm,
+        routeEndKm: rebuilt.endKm,
+        distanceKm: rebuilt.distanceKm,
+        elevationUp: rebuilt.elevationUp,
+        elevationDown: rebuilt.elevationDown,
+        geometryGeoJson: rebuilt.geometryGeoJson
+      }
+    };
+  });
+  const failedStage = rebuiltStages.find((result) => !result.ok);
+  if (failedStage && !failedStage.ok) {
+    return {
+      ok: false,
+      message: failedStage.message
+    };
+  }
+
+  const nextStages = rebuiltStages.map((result) => (result.ok ? result.stage : null)).filter((stage): stage is NonNullable<typeof stage> => stage !== null);
+
+  return {
+    ok: true,
+    stages: nextStages,
+    changedStage: nextStages[changedStageIndex],
+    affectedStageNumbers: Array.from(affectedIndexes)
+      .sort((a, b) => a - b)
+      .map((index) => stages[index].dayNumber)
   };
 }
 

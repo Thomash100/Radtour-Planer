@@ -22,7 +22,7 @@ import {
   Waves,
   Wrench
 } from "lucide-react";
-import maplibregl, { type GeoJSONSource, type MapLayerMouseEvent, type Marker } from "maplibre-gl";
+import maplibregl, { type GeoJSONSource, type MapMouseEvent, type Marker } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 import { closestPointOnRoute, haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
@@ -95,7 +95,14 @@ type RouteMapTestWindow = Window & {
 const stageColors = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#16a34a"];
 const selectedStageCasingWidth = 16;
 const selectedStageLineWidth = 12;
-const stageHitAreaWidth = 28;
+const stageHitAreaWidth = 36;
+const stageClickSearchRadiusPx = 18;
+const stageHitLayerId = "stage-lines-hit";
+const stageQueryableLayerIds = [stageHitLayerId, "selected-stage-line", "stage-lines"];
+const emptyPois: MapPoi[] = [];
+const emptyStages: Stage[] = [];
+const emptyStageBreakpoints: Array<{ name: string; distanceKm: number }> = [];
+const emptyWaypoints: MapWaypoint[] = [];
 const maxFitJumpKm = 120;
 const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
@@ -310,12 +317,12 @@ function validateRoute(line?: LineStringGeoJson | null) {
   const warnings: string[] = [];
 
   if (discardedCoordinates > 0) {
-    warnings.push(`${discardedCoordinates} ungueltige Koordinaten wurden ignoriert.`);
+    warnings.push(`${discardedCoordinates} ungültige Koordinaten wurden ignoriert.`);
   }
 
   const corrected = maybeCorrectSwappedCoordinates(validCoordinates);
   if (corrected.corrected) {
-    warnings.push("Offensichtlich vertauschte Lat/Lon-Koordinaten wurden fuer die Kartenanzeige korrigiert.");
+    warnings.push("Offensichtlich vertauschte Lat/Lon-Koordinaten wurden für die Kartenanzeige korrigiert.");
   }
 
   const coordinates = corrected.coordinates;
@@ -337,7 +344,7 @@ function validateRoute(line?: LineStringGeoJson | null) {
   const fitCoordinates = coordinatesForViewport(coordinates);
   const ignoredFitCoordinates = coordinates.length - fitCoordinates.length;
   if (ignoredFitCoordinates > 0) {
-    warnings.push(`${ignoredFitCoordinates} Ausreisser werden beim Zentrieren ignoriert.`);
+    warnings.push(`${ignoredFitCoordinates} Ausreißer werden beim Zentrieren ignoriert.`);
   }
 
   const bounds = boundsInfo(fitCoordinates);
@@ -347,17 +354,17 @@ function validateRoute(line?: LineStringGeoJson | null) {
   } else {
     if (bounds.width > maxWarningWidthDeg || bounds.height > maxWarningHeightDeg) {
       warnings.push(
-        `Die Route hat eine grosse Bounding Box (${bounds.width.toFixed(1)} x ${bounds.height.toFixed(1)} Grad). Bitte GPX-Ausreisser pruefen.`
+        `Die Route hat eine große Bounding Box (${bounds.width.toFixed(1)} x ${bounds.height.toFixed(1)} Grad). Bitte GPX-Ausreißer prüfen.`
       );
     }
 
     if (blockFit) {
-      warnings.push("Automatisches Zentrieren wurde fuer diese unplausiblen Grenzen deaktiviert.");
+      warnings.push("Automatisches Zentrieren wurde für diese unplausiblen Grenzen deaktiviert.");
     }
 
     if (europeRatio(fitCoordinates) < 0.8) {
       warnings.push(
-        `Die Route liegt grob bei ${bounds.center.lat.toFixed(2)}, ${bounds.center.lon.toFixed(2)}. Wenn deine Tour in Europa liegen soll, bitte GPX-Datei pruefen.`
+        `Die Route liegt grob bei ${bounds.center.lat.toFixed(2)}, ${bounds.center.lon.toFixed(2)}. Wenn deine Tour in Europa liegen soll, bitte GPX-Datei prüfen.`
       );
     }
   }
@@ -433,6 +440,78 @@ function stageColorForId(stages: Stage[], stageId?: string | null) {
   return stageIndex >= 0 ? stageColors[stageIndex % stageColors.length] : stageColors[0];
 }
 
+function stageIdFromProperties(properties?: Record<string, unknown> | null) {
+  const stageId = properties?.stageId;
+  return typeof stageId === "string" ? stageId : null;
+}
+
+function clickToleranceKmFromMapEvent(map: maplibregl.Map, event: MapMouseEvent) {
+  const center = event.lngLat.toArray() as Position;
+  const edge = map.unproject([event.point.x + stageClickSearchRadiusPx, event.point.y]).toArray() as Position;
+  return Math.max(0.15, haversineKm(center, edge) * 1.5);
+}
+
+function nearestStageIdForCoordinate(stages: Stage[], coordinate: Position, stageIds?: Set<string>) {
+  let nearest: { stageId: string; distanceKm: number } | null = null;
+
+  for (const stage of stages) {
+    const currentStageId = stageKey(stage);
+    if (stageIds && !stageIds.has(currentStageId)) {
+      continue;
+    }
+
+    const coordinates = stage.geometryGeoJson.coordinates;
+    if (coordinates.length < 2) {
+      continue;
+    }
+
+    const distanceKm = closestPointOnRoute(coordinate, coordinates).distanceToRouteKm;
+    if (!nearest || distanceKm < nearest.distanceKm) {
+      nearest = {
+        stageId: currentStageId,
+        distanceKm
+      };
+    }
+  }
+
+  return nearest;
+}
+
+function stageIdNearMapEvent(map: maplibregl.Map, event: MapMouseEvent, stages: Stage[]) {
+  const layerIds = stageQueryableLayerIds.filter((layerId) => map.getLayer(layerId));
+  const clickCoordinate = event.lngLat.toArray() as Position;
+
+  if (layerIds.length > 0) {
+    const { x, y } = event.point;
+    const searchBox: [[number, number], [number, number]] = [
+      [x - stageClickSearchRadiusPx, y - stageClickSearchRadiusPx],
+      [x + stageClickSearchRadiusPx, y + stageClickSearchRadiusPx]
+    ];
+
+    try {
+      const featureStageIds = new Set(
+        map
+          .queryRenderedFeatures(searchBox, { layers: layerIds })
+          .map((feature) => stageIdFromProperties(feature.properties))
+          .filter((stageId): stageId is string => Boolean(stageId))
+      );
+      const nearestRenderedStage = nearestStageIdForCoordinate(stages, clickCoordinate, featureStageIds);
+      if (nearestRenderedStage) {
+        return nearestRenderedStage.stageId;
+      }
+    } catch {
+      // Fall back to the geometry distance below.
+    }
+  }
+
+  const nearestStage = nearestStageIdForCoordinate(stages, clickCoordinate);
+  if (!nearestStage || nearestStage.distanceKm > clickToleranceKmFromMapEvent(map, event)) {
+    return null;
+  }
+
+  return nearestStage.stageId;
+}
+
 function applyRouteLayerStyle(map: maplibregl.Map) {
   if (map.getLayer("route-shadow")) {
     map.setPaintProperty("route-shadow", "line-color", "#0f172a");
@@ -482,12 +561,12 @@ function applyRouteLayerStyle(map: maplibregl.Map) {
     map.setPaintProperty("selected-stage-line", "line-width", selectedStageLineWidth);
   }
 
-  if (map.getLayer("stage-hit-area")) {
-    map.setLayoutProperty("stage-hit-area", "line-cap", "round");
-    map.setLayoutProperty("stage-hit-area", "line-join", "round");
-    map.setPaintProperty("stage-hit-area", "line-color", "#000000");
-    map.setPaintProperty("stage-hit-area", "line-opacity", 0.01);
-    map.setPaintProperty("stage-hit-area", "line-width", stageHitAreaWidth);
+  if (map.getLayer(stageHitLayerId)) {
+    map.setLayoutProperty(stageHitLayerId, "line-cap", "round");
+    map.setLayoutProperty(stageHitLayerId, "line-join", "round");
+    map.setPaintProperty(stageHitLayerId, "line-color", "#000000");
+    map.setPaintProperty(stageHitLayerId, "line-opacity", 0.01);
+    map.setPaintProperty(stageHitLayerId, "line-width", stageHitAreaWidth);
   }
 }
 
@@ -499,7 +578,7 @@ function enforceRouteLayerOrder(map: maplibregl.Map) {
     "stage-lines",
     "selected-stage-casing",
     "selected-stage-line",
-    "stage-hit-area"
+    stageHitLayerId
   ].forEach((layerId) => {
     if (!map.getLayer(layerId)) {
       return;
@@ -522,7 +601,7 @@ function routeLayerDebug(map: maplibregl.Map) {
     "stage-lines",
     "selected-stage-casing",
     "selected-stage-line",
-    "stage-hit-area"
+    stageHitLayerId
   ];
   const paintValue = (layerId: string, property: string) => {
     if (!map.getLayer(layerId)) {
@@ -543,8 +622,25 @@ function routeLayerDebug(map: maplibregl.Map) {
     stageColor: paintValue("stage-lines", "line-color"),
     selectedCasingWidth: paintValue("selected-stage-casing", "line-width"),
     selectedStageWidth: paintValue("selected-stage-line", "line-width"),
-    hitAreaWidth: paintValue("stage-hit-area", "line-width")
+    hitAreaWidth: paintValue(stageHitLayerId, "line-width")
   };
+}
+
+type RouteLayerDebug = ReturnType<typeof routeLayerDebug>;
+
+function sameRouteLayerDebug(a: RouteLayerDebug, b: RouteLayerDebug) {
+  return (
+    a.order === b.order &&
+    a.routeWidth === b.routeWidth &&
+    a.routeOpacity === b.routeOpacity &&
+    a.casingWidth === b.casingWidth &&
+    a.stageWidth === b.stageWidth &&
+    a.stageOpacity === b.stageOpacity &&
+    a.stageColor === b.stageColor &&
+    a.selectedCasingWidth === b.selectedCasingWidth &&
+    a.selectedStageWidth === b.selectedStageWidth &&
+    a.hitAreaWidth === b.hitAreaWidth
+  );
 }
 
 function ensureRouteLayers(map: maplibregl.Map) {
@@ -662,9 +758,9 @@ function ensureRouteLayers(map: maplibregl.Map) {
     });
   }
 
-  if (!map.getLayer("stage-hit-area")) {
+  if (!map.getLayer(stageHitLayerId)) {
     map.addLayer({
-      id: "stage-hit-area",
+      id: stageHitLayerId,
       type: "line",
       source: "stages",
       layout: {
@@ -684,10 +780,14 @@ function ensureRouteLayers(map: maplibregl.Map) {
 }
 
 function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
-  if (map.loaded()) {
-    ensureRouteLayers(map);
-    callback();
-    return () => {};
+  try {
+    if (map.loaded() || map.isStyleLoaded() || (map.getSource("route") && map.getSource("stages"))) {
+      ensureRouteLayers(map);
+      callback();
+      return () => {};
+    }
+  } catch {
+    // MapLibre can briefly be between style teardown and setup; wait for load below.
   }
 
   let cancelled = false;
@@ -796,10 +896,10 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
 
 export function RouteMap({
   route,
-  pois = [],
-  stages = [],
-  stageBreakpoints = [],
-  waypoints = [],
+  pois = emptyPois,
+  stages = emptyStages,
+  stageBreakpoints = emptyStageBreakpoints,
+  waypoints = emptyWaypoints,
   selectedPoiId,
   selectedStageId,
   variant = "embedded",
@@ -835,6 +935,10 @@ export function RouteMap({
     selectedStageWidth: "",
     hitAreaWidth: ""
   });
+  const updateLayerDebug = useCallback((map: maplibregl.Map) => {
+    const nextDebug = routeLayerDebug(map);
+    setLayerDebug((currentDebug) => (sameRouteLayerDebug(currentDebug, nextDebug) ? currentDebug : nextDebug));
+  }, []);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
   const selectedStage = useMemo(() => stages.find((stage) => stageKey(stage) === selectedStageId) ?? null, [selectedStageId, stages]);
   const selectedStageColor = useMemo(() => stageColorForId(stages, selectedStageId), [selectedStageId, stages]);
@@ -969,11 +1073,11 @@ export function RouteMap({
     map.addControl(new maplibregl.ScaleControl({ unit: "metric" }));
     map.on("load", () => {
       ensureRouteLayers(map);
-      setLayerDebug(routeLayerDebug(map));
+      updateLayerDebug(map);
       setMapError("");
     });
     const handleMapError = () => {
-      setMapError("Die Karte konnte nicht vollstaendig geladen werden. Route und Marker bleiben sichtbar, sobald die Basiskarte wieder erreichbar ist.");
+      setMapError("Die Karte konnte nicht vollständig geladen werden. Route und Marker bleiben sichtbar, sobald die Basiskarte wieder erreichbar ist.");
     };
     map.on("error", handleMapError);
 
@@ -1009,7 +1113,7 @@ export function RouteMap({
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [updateLayerDebug]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1050,7 +1154,7 @@ export function RouteMap({
 
       if (!line) {
         const cameraLimits = resetRouteCameraLimits(map);
-        setLayerDebug(routeLayerDebug(map));
+        updateLayerDebug(map);
         if (process.env.NODE_ENV !== "production") {
           console.debug("RouteMap camera limits", {
             container: containerDebug(containerRef.current),
@@ -1101,12 +1205,12 @@ export function RouteMap({
       if (autoFitRoute) {
         fitRouteToBounds(false);
       }
-      setLayerDebug(routeLayerDebug(map));
+      updateLayerDebug(map);
       map.resize();
     };
 
     return runWhenMapReady(map, update);
-  }, [autoFitRoute, fitRouteToBounds, routeValidation, stageBreakpoints, stages.length, waypoints]);
+  }, [autoFitRoute, fitRouteToBounds, routeValidation, stageBreakpoints, stages.length, updateLayerDebug, waypoints]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1117,11 +1221,11 @@ export function RouteMap({
     const update = () => {
       const source = map.getSource("stages") as GeoJSONSource | undefined;
       source?.setData(stageFeatureCollection(stages, selectedStageId));
-      setLayerDebug(routeLayerDebug(map));
+      updateLayerDebug(map);
     };
 
     return runWhenMapReady(map, update);
-  }, [selectedStageId, stages]);
+  }, [selectedStageId, stages, updateLayerDebug]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1129,23 +1233,11 @@ export function RouteMap({
       return;
     }
 
-    const handleStageClick = (event: MapLayerMouseEvent) => {
-      const stageId = event.features?.[0]?.properties?.stageId;
-      if (typeof stageId !== "string") {
-        return;
-      }
-
+    const suppressContainerClick = () => {
       stageClickSuppressRef.current = true;
       window.setTimeout(() => {
         stageClickSuppressRef.current = false;
-      }, 0);
-      event.preventDefault();
-      event.originalEvent.stopPropagation();
-      onSelectStage(stageId);
-    };
-
-    const setPointerCursor = () => {
-      map.getCanvas().style.cursor = "pointer";
+      }, 250);
     };
     const resetPointerCursor = () => {
       try {
@@ -1154,21 +1246,36 @@ export function RouteMap({
         // MapLibre can already be removed during React Strict Mode cleanup.
       }
     };
+    const handleStageClick = (event: MapMouseEvent) => {
+      const stageId = stageIdNearMapEvent(map, event, stages);
+      if (!stageId) {
+        return;
+      }
+
+      suppressContainerClick();
+      event.preventDefault();
+      event.originalEvent.stopPropagation();
+      onSelectStage(stageId);
+    };
+    const handleStagePointerMove = (event: MapMouseEvent) => {
+      try {
+        map.getCanvas().style.cursor = stageIdNearMapEvent(map, event, stages) ? "pointer" : "";
+      } catch {
+        resetPointerCursor();
+      }
+    };
 
     const attachHandlers = () => {
-      map.on("click", "stage-hit-area", handleStageClick);
-      map.on("mouseenter", "stage-hit-area", setPointerCursor);
-      map.on("mouseleave", "stage-hit-area", resetPointerCursor);
+      map.on("click", handleStageClick);
+      map.on("mousemove", handleStagePointerMove);
+      map.on("mouseout", resetPointerCursor);
     };
 
     const detachHandlers = () => {
       try {
-        if (!map.getLayer("stage-hit-area")) {
-          return;
-        }
-        map.off("click", "stage-hit-area", handleStageClick);
-        map.off("mouseenter", "stage-hit-area", setPointerCursor);
-        map.off("mouseleave", "stage-hit-area", resetPointerCursor);
+        map.off("click", handleStageClick);
+        map.off("mousemove", handleStagePointerMove);
+        map.off("mouseout", resetPointerCursor);
       } catch {
         // The map style can be gone when React tears down the map in development.
       } finally {
@@ -1181,7 +1288,7 @@ export function RouteMap({
       cleanupReady();
       detachHandlers();
     };
-  }, [onSelectStage, routePointSelectionEnabled]);
+  }, [onSelectStage, routePointSelectionEnabled, stages]);
 
   useEffect(() => {
     const map = mapRef.current;

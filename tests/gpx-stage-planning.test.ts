@@ -9,6 +9,7 @@ import {
   createStageSliceFromBounds,
   cumulativeDistances,
   normalizeRouteTrimBounds,
+  rebuildContiguousStageSlices,
   routeDistanceKm,
   routeBoundsForStage,
   splitRouteByBreakpoints,
@@ -52,6 +53,32 @@ function routeEndpoints(route: LineStringGeoJson) {
     first: route.coordinates[0],
     last: route.coordinates[route.coordinates.length - 1]
   };
+}
+
+function createContiguousTestStages() {
+  const totalKm = routeDistanceKm(straightRoute.coordinates);
+  const splitPoints = [0, totalKm / 3, (totalKm / 3) * 2, totalKm];
+
+  return splitPoints.slice(0, -1).map((startKm, index) => {
+    const slice = createValidatedStageSliceFromBounds(straightRoute, startKm, splitPoints[index + 1], index);
+    assert.equal(slice.ok, true);
+    if (!slice.ok) {
+      throw new Error("Stage test fixture could not be created.");
+    }
+
+    return {
+      id: `stage-${index + 1}`,
+      dayNumber: index + 1,
+      startName: index === 0 ? "Start" : `Etappenpunkt ${index}`,
+      endName: index === splitPoints.length - 2 ? "Ziel" : `Etappenpunkt ${index + 1}`,
+      routeStartKm: slice.startKm,
+      routeEndKm: slice.endKm,
+      distanceKm: slice.distanceKm,
+      elevationUp: slice.elevationUp,
+      elevationDown: slice.elevationDown,
+      geometryGeoJson: slice.geometryGeoJson
+    };
+  });
 }
 
 describe("GPX parsing and stage planning", () => {
@@ -253,11 +280,11 @@ describe("GPX parsing and stage planning", () => {
     });
     assert.deepEqual(validateStageSliceBounds(totalKm, totalKm * 0.2, totalKm + 0.1), {
       ok: false,
-      message: `Ziel-km darf nicht groesser als die Routenlaenge (${totalKm.toFixed(1)} km) sein.`
+      message: `Ziel-km darf nicht größer als die Routenlänge (${totalKm.toFixed(1)} km) sein.`
     });
     assert.deepEqual(validateStageSliceBounds(totalKm, totalKm * 0.6, totalKm * 0.6), {
       ok: false,
-      message: "Ziel-km muss groesser als Start-km sein."
+      message: "Ziel-km muss größer als Start-km sein."
     });
     assert.equal(createValidatedStageSliceFromBounds(straightRoute, totalKm * 0.5, totalKm * 0.25).ok, false);
   });
@@ -278,6 +305,74 @@ describe("GPX parsing and stage planning", () => {
     assert.ok(slice.geometryGeoJson.coordinates.length >= 2);
     assert.deepEqual(straightRoute.coordinates, originalCoordinates);
     assert.notDeepEqual(slice.geometryGeoJson, straightRoute);
+  });
+
+  it("updates the next stage when a manual target kilometer changes", () => {
+    const stages = createContiguousTestStages();
+    const originalSecondStage = stages[1];
+    const targetKm = stages[0].routeEndKm + 8;
+    const result = rebuildContiguousStageSlices(straightRoute, stages, 0, { endKm: targetKm });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+
+    assertClose(result.stages[0].routeEndKm, targetKm, 0.15);
+    assertClose(result.stages[1].routeStartKm, targetKm, 0.15);
+    assertClose(result.stages[1].routeEndKm, originalSecondStage.routeEndKm, 0.15);
+    assert.ok(result.stages[0].distanceKm > stages[0].distanceKm);
+    assert.ok(result.stages[1].distanceKm < originalSecondStage.distanceKm);
+    assert.notDeepEqual(result.stages[0].geometryGeoJson, stages[0].geometryGeoJson);
+    assert.notDeepEqual(result.stages[1].geometryGeoJson, originalSecondStage.geometryGeoJson);
+
+    const nextBounds = routeBoundsForStage(straightRoute, result.stages[1].geometryGeoJson);
+    assertClose(nextBounds.startKm, targetKm, 0.2);
+    assertClose(nextBounds.endKm, originalSecondStage.routeEndKm, 0.2);
+  });
+
+  it("updates the target kilometer and next stage when a manual length changes", () => {
+    const stages = createContiguousTestStages();
+    const newLength = stages[0].distanceKm + 6;
+    const result = rebuildContiguousStageSlices(straightRoute, stages, 0, { distanceKm: newLength });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+
+    const expectedTargetKm = stages[0].routeStartKm + newLength;
+    assertClose(result.stages[0].routeEndKm, expectedTargetKm, 0.2);
+    assertClose(result.stages[1].routeStartKm, expectedTargetKm, 0.2);
+    assertClose(result.stages[0].distanceKm, newLength, 0.2);
+    assert.deepEqual(result.affectedStageNumbers, [1, 2]);
+  });
+
+  it("updates the previous stage when a middle stage start kilometer changes", () => {
+    const stages = createContiguousTestStages();
+    const newStartKm = stages[1].routeStartKm - 5;
+    const result = rebuildContiguousStageSlices(straightRoute, stages, 1, { startKm: newStartKm });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+
+    assertClose(result.stages[0].routeEndKm, newStartKm, 0.2);
+    assertClose(result.stages[1].routeStartKm, newStartKm, 0.2);
+    assert.ok(result.stages[0].distanceKm < stages[0].distanceKm);
+    assert.ok(result.stages[1].distanceKm > stages[1].distanceKm);
+    assert.deepEqual(result.affectedStageNumbers, [1, 2]);
+  });
+
+  it("rejects manual stage changes that would overlap a following stage completely", () => {
+    const stages = createContiguousTestStages();
+    const result = rebuildContiguousStageSlices(straightRoute, stages, 0, { endKm: stages[1].routeEndKm + 1 });
+
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.message, /Etappe 2/);
+    }
   });
 
   it("keeps edited stage geometry through a JSON save/load shaped roundtrip", () => {
@@ -306,6 +401,24 @@ describe("GPX parsing and stage planning", () => {
     assert.deepEqual(loadedGeometry, slice.geometryGeoJson);
     assertClose(bounds.startKm, totalKm * 0.1, 0.15);
     assertClose(bounds.endKm, totalKm * 0.4, 0.15);
+  });
+
+  it("keeps a manually adjusted contiguous stage sequence through a JSON save/load shaped roundtrip", () => {
+    const stages = createContiguousTestStages();
+    const result = rebuildContiguousStageSlices(straightRoute, stages, 0, { endKm: stages[0].routeEndKm + 8 });
+
+    assert.equal(result.ok, true);
+    if (!result.ok) {
+      return;
+    }
+
+    const savedStages = JSON.parse(JSON.stringify(result.stages));
+    const firstBounds = routeBoundsForStage(straightRoute, savedStages[0].geometryGeoJson);
+    const secondBounds = routeBoundsForStage(straightRoute, savedStages[1].geometryGeoJson);
+
+    assertClose(firstBounds.endKm, secondBounds.startKm, 0.2);
+    assert.deepEqual(savedStages[0].geometryGeoJson, result.stages[0].geometryGeoJson);
+    assert.deepEqual(savedStages[1].geometryGeoJson, result.stages[1].geometryGeoJson);
   });
 
   it("projects a selected off-center target to the nearest existing route position", () => {
