@@ -15,7 +15,7 @@ export function ElevationProfile({ points }: ElevationProfileProps) {
   if (points.length < 2) {
     return (
       <div className="grid h-16 place-items-center rounded-md border bg-white text-sm text-muted-foreground">
-        Noch kein Hoehenprofil
+        Noch kein Höhenprofil
       </div>
     );
   }
@@ -39,7 +39,7 @@ export function ElevationProfile({ points }: ElevationProfileProps) {
     <div className={isExpanded ? "fixed inset-0 z-50 flex flex-col gap-3 bg-white p-4" : "rounded-md border bg-white p-3 shadow-sm"}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold">Hoehenprofil</div>
+          <div className="text-sm font-semibold">Höhenprofil</div>
           <div className="text-xs text-muted-foreground">
             {minElevation} bis {maxElevation} m - {maxDistance.toFixed(1)} km
           </div>
@@ -54,7 +54,7 @@ export function ElevationProfile({ points }: ElevationProfileProps) {
         </button>
       </div>
       <div className={isExpanded ? "min-h-0 flex-1" : ""}>
-        <svg aria-label="Hoehenprofil" className={isExpanded ? "h-full w-full" : "h-20 w-full"} viewBox={`0 0 ${width} ${height}`} role="img">
+        <svg aria-label="Höhenprofil" className={isExpanded ? "h-full w-full" : "h-20 w-full"} viewBox={`0 0 ${width} ${height}`} role="img">
           <path d={`${path} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`} fill="#d9f99d" opacity="0.75" />
           <path d={path} fill="none" stroke="#0f766e" strokeWidth={isExpanded ? 5 : 3} strokeLinecap="round" />
           <line x1={padding} x2={width - padding} y1={height - padding} y2={height - padding} stroke="#cbd5e1" />
