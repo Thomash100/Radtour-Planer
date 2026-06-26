@@ -85,7 +85,7 @@ type RouteMapProps = {
   onSelectPoi?: (poi: MapPoi) => void;
   onSelectStage?: (stageId: string) => void;
   onEditStage?: (stageId: string) => void;
-  onRoutePointSelect?: (selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) => void;
+  onRoutePointSelect?: (selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number; clickCoordinate: Position }) => void;
 };
 
 type RouteMapTestWindow = Window & {
@@ -1348,7 +1348,9 @@ export function RouteMap({
       }
       const bounds = event.currentTarget.getBoundingClientRect();
       const point = mapRef.current.unproject([event.clientX - bounds.left, event.clientY - bounds.top]);
-      onRoutePointSelect(closestPointOnRoute([point.lng, point.lat], routeValidation.line.coordinates));
+      const clickCoordinate = [point.lng, point.lat] satisfies Position;
+      const projected = closestPointOnRoute(clickCoordinate, routeValidation.line.coordinates);
+      onRoutePointSelect({ ...projected, clickCoordinate });
       return;
     }
 
@@ -1484,7 +1486,7 @@ export function RouteMap({
         <div ref={containerRef} className="absolute inset-0" />
         {routePointSelectionEnabled && (
           <div className="pointer-events-none absolute left-3 top-3 z-10 rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white shadow">
-            {routePointSelection?.label ?? "Auf die Route klicken, um einen Etappenpunkt zu setzen."}
+            {routePointSelection?.label ?? "Auf die GPX-Strecke klicken, um einen Routenpunkt zu wählen."}
           </div>
         )}
       </div>
