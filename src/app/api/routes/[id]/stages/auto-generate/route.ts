@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { apiError, readJson } from "@/lib/api";
-import { splitRouteByBreakpoints, splitRouteIntoStages, type LineStringGeoJson } from "@/lib/geo";
+import {
+  routeDistanceKm,
+  splitRouteByBreakpoints,
+  splitRouteIntoStageCount,
+  splitRouteIntoStages,
+  validateTravelDayCount,
+  type LineStringGeoJson
+} from "@/lib/geo";
 import { prisma } from "@/lib/prisma";
 import { autoStageSchema } from "@/lib/validators";
 
@@ -13,14 +20,25 @@ type Context = {
 
 export async function POST(request: Request, { params }: Context) {
   try {
-    const { breakpoints, targetKm } = autoStageSchema.parse(await readJson(request));
+    const { breakpoints, targetKm, travelDays } = autoStageSchema.parse(await readJson(request));
     const route = await prisma.route.findUnique({ where: { id: params.id } });
     if (!route) {
       return NextResponse.json({ error: "Route not found" }, { status: 404 });
     }
 
     const geometry = route.geometryGeoJson as unknown as LineStringGeoJson;
-    const splitStages = breakpoints.length > 0 ? splitRouteByBreakpoints(geometry, breakpoints) : splitRouteIntoStages(geometry, targetKm);
+    const travelDayValidation =
+      typeof travelDays === "number" ? validateTravelDayCount(routeDistanceKm(geometry.coordinates), travelDays) : null;
+    if (travelDayValidation && !travelDayValidation.ok) {
+      return NextResponse.json({ error: travelDayValidation.message }, { status: 400 });
+    }
+
+    const splitStages =
+      breakpoints.length > 0
+        ? splitRouteByBreakpoints(geometry, breakpoints)
+        : travelDayValidation
+          ? splitRouteIntoStageCount(geometry, travelDayValidation.travelDays)
+          : splitRouteIntoStages(geometry, targetKm);
     const generatedStages = splitStages.map((stage, index) => ({
       ...stage,
       startName: index === 0 ? route.startName : stage.startName,

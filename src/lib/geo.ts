@@ -11,6 +11,7 @@ export type ElevationPoint = {
 };
 
 const earthRadiusKm = 6371;
+export const minTravelDayDistanceKm = 5;
 
 function toRad(value: number) {
   return (value * Math.PI) / 180;
@@ -166,6 +167,13 @@ export function projectRouteClick(point: Position, geometry: LineStringGeoJson, 
   };
 }
 
+export function projectLocationToRoute(name: string, coordinate: Position, geometry: LineStringGeoJson, originalStartKm = 0) {
+  return {
+    name: name.trim(),
+    ...projectRouteClick(coordinate, geometry, originalStartKm)
+  };
+}
+
 export function createElevationProfile(coordinates: Position[]) {
   const cumulative = cumulativeDistances(coordinates);
   return coordinates.map((coordinate, index) => {
@@ -206,6 +214,79 @@ export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: numb
   }
 
   return stages;
+}
+
+export type TravelDayValidationResult =
+  | {
+      ok: true;
+      travelDays: number;
+      averageDistanceKm: number;
+    }
+  | {
+      ok: false;
+      message: string;
+    };
+
+export function validateTravelDayCount(totalDistanceKm: number, travelDays: number): TravelDayValidationResult {
+  if (!Number.isFinite(totalDistanceKm) || totalDistanceKm <= 0) {
+    return { ok: false, message: "Die Route hat keine gültige Länge." };
+  }
+
+  if (!Number.isFinite(travelDays)) {
+    return { ok: false, message: "Reisetage müssen eine gültige Zahl sein." };
+  }
+
+  if (!Number.isInteger(travelDays)) {
+    return { ok: false, message: "Reisetage müssen als ganze Zahl angegeben werden." };
+  }
+
+  if (travelDays <= 0) {
+    return { ok: false, message: "Reisetage müssen größer als 0 sein." };
+  }
+
+  const averageDistanceKm = totalDistanceKm / travelDays;
+  if (averageDistanceKm < minTravelDayDistanceKm) {
+    return {
+      ok: false,
+      message: `Für ${travelDays} Reisetage wäre eine Etappe durchschnittlich nur ${averageDistanceKm.toFixed(1)} km lang. Bitte weniger Tage wählen.`
+    };
+  }
+
+  return {
+    ok: true,
+    travelDays,
+    averageDistanceKm: Number(averageDistanceKm.toFixed(1))
+  };
+}
+
+export function splitRouteIntoStageCount(geometry: LineStringGeoJson, travelDays: number) {
+  const coordinates = geometry.coordinates;
+  const totalDistance = routeDistanceKm(coordinates);
+  const validation = validateTravelDayCount(totalDistance, travelDays);
+  if (!validation.ok) {
+    return [];
+  }
+
+  return Array.from({ length: validation.travelDays }, (_, index) => {
+    const startKm = (totalDistance / validation.travelDays) * index;
+    const endKm = index === validation.travelDays - 1 ? totalDistance : (totalDistance / validation.travelDays) * (index + 1);
+    const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
+    const stageDistance = routeDistanceKm(stageCoordinates);
+    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+
+    return {
+      dayNumber: index + 1,
+      startName: index === 0 ? "Start" : `Etappenpunkt ${index}`,
+      endName: index === validation.travelDays - 1 ? "Ziel" : `Etappenpunkt ${index + 1}`,
+      distanceKm: Number(stageDistance.toFixed(1)),
+      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      geometryGeoJson: {
+        type: "LineString",
+        coordinates: stageCoordinates
+      } satisfies LineStringGeoJson
+    };
+  });
 }
 
 export type StageBreakpoint = {

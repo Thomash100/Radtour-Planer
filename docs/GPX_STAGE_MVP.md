@@ -19,9 +19,10 @@ Stand: 2026-06-22
 - Start-km bezeichnet den Beginn einer Etappe auf der aktuellen Arbeitsroute.
 - Ziel-km bezeichnet das Ende einer Etappe auf der aktuellen Arbeitsroute.
 - Länge setzt das Ziel relativ zum Start-km.
-- Orte dienen im MVP als Etappennamen oder, bei Etappenpunkten, als Projektion auf den nächsten Punkt der bestehenden Route.
-- Orte verlegen die Route aktuell nicht automatisch und starten keine neue Routing-Abfrage.
-- Ortssuche für die GPX-Kürzung ist deaktiviert, solange kein zuverlässiger Geocoder vorhanden ist. Startpunkte werden über Start-km gesetzt.
+- Orte dienen im MVP als Etappennamen oder als Projektion auf den nächsten Punkt der bestehenden Route.
+- Die lokale MVP-Ortssuche projiziert bekannte Städte/Orte auf die aktuelle GPX-Arbeitsroute und zeigt Arbeitsroute-km, Original-km und Abstand zur Route.
+- Orte können nach Bestätigung als Start, Ziel oder Etappenpunkt übernommen werden.
+- Orte verlegen die Route nicht automatisch und starten keine neue Routing-Abfrage.
 - Ein Wechsel zur direkten Routenplanung verwirft eine geladene GPX-Route nur nach ausdrücklicher Bestätigung.
 
 ## Validierung
@@ -34,6 +35,7 @@ Stand: 2026-06-22
 - Beim Kürzen wird ein auf eine Nachkommastelle gerundeter End-km-Wert innerhalb der Anzeige-Toleranz auf das echte Routenende normalisiert. Dadurch bleiben große Startkürzungen wie 300 km auch bei gerundeter Anzeige stabil.
 - `Kürzung zurücksetzen` stellt die volle Original-GPX-Route wieder her und setzt Etappen/POI zur Neuberechnung zurück.
 - Etappen-Neuberechnung überschreibt bestehende Etappen nur nach Bestätigung.
+- Reisetage müssen eine positive ganze Zahl sein; zu viele Reisetage mit unbrauchbar kurzen Tagesabschnitten werden abgelehnt.
 
 ## Sichtbare Rückmeldungen
 
@@ -42,20 +44,25 @@ Stand: 2026-06-22
 - Route kürzen, Etappen erzeugen und Etappen bearbeiten sind getrennte Workflow-Schritte.
 - Nach manueller Etappenanpassung wird die betroffene Etappe als `Geometrie aktualisiert` markiert.
 - Nach dem Speichern wird die betroffene Etappe als `Gespeichert` markiert.
+- `Alle Änderungen speichern` ist die eindeutige Aktion für die komplette Tour.
+- Nach erfolgreicher Gesamt-Speicherung zeigt der Planer `Tour gespeichert.` und `Zuletzt gespeichert: HH:MM`.
 - Karte und Höhenprofil werden im Planer über eine gemeinsame Ansichtsauswahl umgeschaltet. Standard ist die Karte.
 - Das Höhenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
+- Etappen können entweder nach gewünschter Etappenlänge oder nach Anzahl Reisetage erzeugt werden.
+- Bei Erzeugung nach Reisetagen zeigt der Planer die berechnete durchschnittliche Etappenlänge an.
 
 ## Export und erneutes Öffnen
 
 - Der GPX-Export schreibt aktuell die bearbeitete Routengeometrie.
 - Etappennamen, Etappenfarben und manuelle Etappenschnitte werden nicht in die GPX-Datei geschrieben.
+- `Alle Änderungen speichern` schreibt den vollständigen Browser-TourState: GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Etappenpunkte und übernommene Orte/Städte.
 - Gespeicherte Touren laden die persistierte `geometryGeoJson` der Etappen über die Datenbank wieder.
 - Der lokale Test deckt den JSON-Save/Load-nahen Roundtrip der Etappengeometrie ab; der Browser-/RPi-Test bleibt der manuelle End-to-End-Prüfpunkt.
 
 ## Bekannte Einschränkungen
 
 - Keine automatische Umleitung durch Ortsnamen.
-- Keine verfügbare Startortsuche für GPX-Kürzungen.
+- Ortssuche nutzt im MVP eine lokale Testliste und noch keinen produktiven externen Geocoder.
 - Keine neue Routing-API.
 - Keine produktive POI-Massenabfrage.
 - Keine Hotelbuchung oder Nutzerkonten.
