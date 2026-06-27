@@ -155,6 +155,17 @@ export function closestPointOnRoute(point: Position, coordinates: Position[]) {
   return best;
 }
 
+export function projectRouteClick(point: Position, geometry: LineStringGeoJson, originalStartKm = 0) {
+  const projected = closestPointOnRoute(point, geometry.coordinates);
+
+  return {
+    coordinate: projected.coordinate,
+    workDistanceKm: Number(projected.distanceKm.toFixed(1)),
+    originalDistanceKm: Number((originalStartKm + projected.distanceKm).toFixed(1)),
+    distanceToRouteKm: Number(projected.distanceToRouteKm.toFixed(3))
+  };
+}
+
 export function createElevationProfile(coordinates: Position[]) {
   const cumulative = cumulativeDistances(coordinates);
   return coordinates.map((coordinate, index) => {
