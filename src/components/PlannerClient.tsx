@@ -155,6 +155,14 @@ type PendingStageGeneration = {
   targetKm: number;
   breakpoints: StageBreakpoint[];
 };
+type PendingRoutePointSelection = {
+  coordinate: Position;
+  workDistanceKm: number;
+  originalDistanceKm: number;
+  distanceToRouteKm: number;
+};
+
+const maxRoutePointClickDistanceKm = 20;
 
 const categoryOptions = [
   { value: "ACCOMMODATION", label: "Unterkunft" },
@@ -336,6 +344,7 @@ export function PlannerClient({
   const [trimStartKm, setTrimStartKm] = useState(0);
   const [trimEndKm, setTrimEndKm] = useState(0);
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
+  const [pendingRoutePointSelection, setPendingRoutePointSelection] = useState<PendingRoutePointSelection | null>(null);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
@@ -552,6 +561,7 @@ export function PlannerClient({
     setTrimStartKm(Number((route?.trimStartKmOriginal ?? 0).toFixed(1)));
     setTrimEndKm(Number((route?.trimEndKmOriginal ?? originalRouteTotalKm).toFixed(1)));
     setIsPickingStagePoint(false);
+    setPendingRoutePointSelection(null);
     setStageFeedback({});
   }, [originalRouteTotalKm, route?.geometryGeoJson, route?.trimEndKmOriginal, route?.trimStartKmOriginal, routeTotalKm]);
 
@@ -585,27 +595,89 @@ export function PlannerClient({
     setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
   }
 
-  function addRouteStageBreakpoint(selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) {
+  function captureRoutePointSelection(selection: { coordinate: Position; distanceKm: number; distanceToRouteKm: number }) {
     if (!route || routeTotalKm <= 0) {
       setStatus("Bitte zuerst eine GPX-Route oder Route laden.");
       return;
     }
 
-    if (selection.distanceToRouteKm > 20) {
+    if (selection.distanceToRouteKm > maxRoutePointClickDistanceKm) {
       setStatus(`Klick liegt ${selection.distanceToRouteKm.toFixed(1)} km von der Route entfernt. Bitte näher an die Route klicken.`);
       return;
     }
 
-    const distanceKm = Math.min(Math.max(selection.distanceKm, 0.5), Math.max(routeTotalKm - 0.5, 0.5));
+    const workDistanceKm = Number(Math.min(Math.max(selection.distanceKm, 0), routeTotalKm).toFixed(1));
+    const originalDistanceKm = Number(((route.trimStartKmOriginal ?? 0) + workDistanceKm).toFixed(1));
+    setPendingRoutePointSelection({
+      coordinate: selection.coordinate,
+      workDistanceKm,
+      originalDistanceKm,
+      distanceToRouteKm: Number(selection.distanceToRouteKm.toFixed(3))
+    });
+    setIsPickingStagePoint(false);
+    setStatus(
+      `Routenpunkt gewählt: Arbeitsroute-km ${workDistanceKm.toFixed(1)}, Original-km ${originalDistanceKm.toFixed(1)}. Aktion wählen.`
+    );
+  }
+
+  function applyRoutePointAsStart() {
+    if (!pendingRoutePointSelection) {
+      return;
+    }
+
+    const endKm = Number(trimEndKm);
+    if (Number.isFinite(endKm) && pendingRoutePointSelection.originalDistanceKm >= endKm - 1) {
+      setStatus("Start-km muss mindestens 1 km vor dem Ziel-km liegen.");
+      return;
+    }
+
+    setTrimStartKm(pendingRoutePointSelection.originalDistanceKm);
+    setPlannerStep("trim");
+    setPendingRoutePointSelection(null);
+    setStatus(
+      `Start-km aus Kartenpunkt übernommen (${pendingRoutePointSelection.originalDistanceKm.toFixed(1)}). GPX-Route kürzen anwenden, um die Arbeitsroute zu aktualisieren.`
+    );
+  }
+
+  function applyRoutePointAsEnd() {
+    if (!pendingRoutePointSelection) {
+      return;
+    }
+
+    const startKm = Number(trimStartKm);
+    if (Number.isFinite(startKm) && pendingRoutePointSelection.originalDistanceKm <= startKm + 1) {
+      setStatus("Ziel-km muss mindestens 1 km nach dem Start-km liegen.");
+      return;
+    }
+
+    setTrimEndKm(pendingRoutePointSelection.originalDistanceKm);
+    setPlannerStep("trim");
+    setPendingRoutePointSelection(null);
+    setStatus(
+      `Ziel-km aus Kartenpunkt übernommen (${pendingRoutePointSelection.originalDistanceKm.toFixed(1)}). GPX-Route kürzen anwenden, um die Arbeitsroute zu aktualisieren.`
+    );
+  }
+
+  function applyRoutePointAsStageBreakpoint() {
+    if (!pendingRoutePointSelection || !route || routeTotalKm <= 0) {
+      return;
+    }
+
+    if (pendingRoutePointSelection.workDistanceKm <= 0 || pendingRoutePointSelection.workDistanceKm >= routeTotalKm) {
+      setStatus("Etappenpunkt muss innerhalb der Arbeitsroute liegen, nicht auf Start oder Ziel.");
+      return;
+    }
+
+    const distanceKm = Math.min(Math.max(pendingRoutePointSelection.workDistanceKm, 0.5), Math.max(routeTotalKm - 0.5, 0.5));
     const name = newStagePointName.trim() || `Etappenpunkt ${stageBreakpoints.length + 1}`;
     setStageBreakpoints((current) =>
       [...current, { id: crypto.randomUUID(), name, distanceKm: Number(distanceKm.toFixed(1)) }].sort((a, b) => a.distanceKm - b.distanceKm)
     );
     setNewStagePointName("");
     setNewStagePointKm(Number(Math.min(distanceKm + 50, routeTotalKm).toFixed(1)));
-    setIsPickingStagePoint(false);
+    setPendingRoutePointSelection(null);
     setPlannerStep("stage-create");
-    setStatus(`${name} wurde per Kartenklick bei km ${distanceKm.toFixed(1)} auf die GPX-Route gesetzt.`);
+    setStatus(`${name} wurde per Kartenklick bei Arbeitsroute-km ${distanceKm.toFixed(1)} gesetzt.`);
   }
 
   function addCityStageBreakpoint() {
@@ -1497,6 +1569,33 @@ export function PlannerClient({
     </Card>
   ) : null;
 
+  const routePointSelectionCard = pendingRoutePointSelection ? (
+    <Card className="border-sky-300 bg-sky-50" data-route-point-selection="true">
+      <CardHeader>
+        <CardTitle>Routenpunkt übernehmen</CardTitle>
+        <CardDescription className="text-sky-950">
+          Arbeitsroute-km {pendingRoutePointSelection.workDistanceKm.toFixed(1)} · Original-km{" "}
+          {pendingRoutePointSelection.originalDistanceKm.toFixed(1)} · Klickabstand{" "}
+          {pendingRoutePointSelection.distanceToRouteKm.toFixed(2)} km
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <Button type="button" variant="secondary" onClick={applyRoutePointAsStart}>
+          Als Start übernehmen
+        </Button>
+        <Button type="button" variant="secondary" onClick={applyRoutePointAsEnd}>
+          Als Ziel übernehmen
+        </Button>
+        <Button type="button" onClick={applyRoutePointAsStageBreakpoint}>
+          Als Etappenpunkt übernehmen
+        </Button>
+        <Button type="button" variant="outline" onClick={() => setPendingRoutePointSelection(null)}>
+          Abbrechen
+        </Button>
+      </CardContent>
+    </Card>
+  ) : null;
+
   if (plannerStep === "mode") {
     return (
       <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
@@ -1917,7 +2016,7 @@ export function PlannerClient({
                 route={route?.geometryGeoJson}
                 routePointSelection={{
                   enabled: isPickingStagePoint,
-                  label: "Auf die Route klicken, um einen Etappenpunkt zu setzen."
+                  label: "Auf die GPX-Strecke klicken, um Start, Ziel oder Etappenpunkt zu übernehmen."
                 }}
                 selectedPoiId={selectedPoi?.id}
                 selectedStageId={selectedStageId}
@@ -1927,11 +2026,12 @@ export function PlannerClient({
                 onEditStage={selectStageForEditing}
                 onSelectPoi={setSelectedPoi}
                 onSelectStage={selectStageForEditing}
-                onRoutePointSelect={addRouteStageBreakpoint}
+                onRoutePointSelect={captureRoutePointSelection}
               />
             ) : (
               <ElevationProfile points={route?.elevationProfile ?? []} />
             )}
+            {routePointSelectionCard}
           </div>
           {savedRoute && (
             <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
@@ -1975,7 +2075,7 @@ export function PlannerClient({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-                    Ortssuche ist im GPX-Modus noch nicht verfügbar. Bitte Start-km und Ziel-km eingeben oder einen Punkt aus der Karte für Etappenpunkte übernehmen. Orte verändern die GPX-Route nicht automatisch.
+                    Ortssuche ist im GPX-Modus noch nicht verfügbar. Bitte Start-km und Ziel-km eingeben oder einen Punkt aus der Karte als Start, Ziel oder Etappenpunkt übernehmen. Orte verändern die GPX-Route nicht automatisch.
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <Metric label="Original-Länge" value={formatKm(originalRouteTotalKm)} />
@@ -2028,6 +2128,20 @@ export function PlannerClient({
                     </Button>
                     <Button className="w-full sm:w-auto" disabled={!savedRoute || !routeTrimSummary || isBusy} type="button" variant="outline" onClick={resetRouteTrim}>
                       Kürzung zurücksetzen
+                    </Button>
+                    <Button
+                      className="w-full sm:w-auto"
+                      disabled={!route}
+                      type="button"
+                      variant={isPickingStagePoint ? "default" : "outline"}
+                      onClick={() => {
+                        setVisualizationMode("map");
+                        setPendingRoutePointSelection(null);
+                        setIsPickingStagePoint((current) => !current);
+                      }}
+                    >
+                      <MousePointer2 className="h-4 w-4" />
+                      Punkt aus Karte wählen
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -2096,11 +2210,12 @@ export function PlannerClient({
                       variant={isPickingStagePoint ? "default" : "outline"}
                       onClick={() => {
                         setVisualizationMode("map");
+                        setPendingRoutePointSelection(null);
                         setIsPickingStagePoint((current) => !current);
                       }}
                     >
                       <MousePointer2 className="h-4 w-4" />
-                      Punkt aus Karte
+                      Punkt aus Karte wählen
                     </Button>
 
                     {effectiveStageBreakpoints.length > 0 ? (

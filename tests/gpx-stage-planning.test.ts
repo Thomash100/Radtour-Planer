@@ -9,6 +9,7 @@ import {
   createStageSliceFromBounds,
   cumulativeDistances,
   normalizeRouteTrimBounds,
+  projectRouteClick,
   rebuildContiguousStageSlices,
   routeDistanceKm,
   routeBoundsForStage,
@@ -429,5 +430,15 @@ describe("GPX parsing and stage planning", () => {
     assertClose(selected.coordinate[1], 52, 0.01);
     assert.ok(selected.distanceToRouteKm > 0);
     assert.deepEqual(straightRoute.coordinates, originalCoordinates);
+  });
+
+  it("projects a route click to working and original route kilometers", () => {
+    const selected = projectRouteClick([11.75, 52.2], straightRoute, 125);
+
+    assertClose(selected.coordinate[0], 11.75, 0.01);
+    assertClose(selected.coordinate[1], 52, 0.01);
+    assertClose(selected.workDistanceKm, routeDistanceKm(straightRoute.coordinates.slice(0, 2)) * 1.5, 0.2);
+    assertClose(selected.originalDistanceKm, 125 + selected.workDistanceKm, 0.1);
+    assert.ok(selected.distanceToRouteKm > 0);
   });
 });
