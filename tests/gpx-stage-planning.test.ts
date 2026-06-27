@@ -23,6 +23,7 @@ import {
   type LineStringGeoJson,
   type Position
 } from "../src/lib/geo";
+import { parseStoredTourState } from "../src/lib/tour-state";
 
 const straightRoute: LineStringGeoJson = {
   type: "LineString",
@@ -473,6 +474,56 @@ describe("GPX parsing and stage planning", () => {
     assertClose(firstBounds.endKm, secondBounds.startKm, 0.2);
     assert.deepEqual(savedStages[0].geometryGeoJson, result.stages[0].geometryGeoJson);
     assert.deepEqual(savedStages[1].geometryGeoJson, result.stages[1].geometryGeoJson);
+  });
+
+  it("keeps package two tour settings through a stored tour roundtrip", () => {
+    const stages = createContiguousTestStages();
+    const rawState = JSON.stringify({
+      inputMode: "gpx",
+      route: {
+        id: "route-1",
+        name: "GPX Testtour",
+        description: "Gekürzt und in Tage aufgeteilt",
+        startName: "Start",
+        endName: "Ziel",
+        profile: "balanced",
+        distanceKm: routeDistanceKm(straightRoute.coordinates),
+        elevationUp: 120,
+        elevationDown: 90,
+        durationHours: 4.5,
+        geometryGeoJson: straightRoute,
+        originalGeometryGeoJson: longRoute,
+        originalDistanceKm: routeDistanceKm(longRoute.coordinates),
+        trimStartKmOriginal: 300,
+        trimEndKmOriginal: 520,
+        elevationProfile: [],
+        waypoints: []
+      },
+      stages,
+      pois: [],
+      selectedStageId: stages[1].id,
+      stageGenerationMode: "days",
+      targetKm: 62,
+      travelDays: 5,
+      stageBreakpoints: [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }],
+      status: "Tour gespeichert.",
+      lastSavedAt: "2026-06-27T12:30:00.000Z",
+      updatedAt: "2026-06-27T12:30:00.000Z"
+    });
+
+    const stored = parseStoredTourState(rawState);
+
+    assert.ok(stored);
+    assert.equal(stored.inputMode, "gpx");
+    assert.equal(stored.stageGenerationMode, "days");
+    assert.equal(stored.targetKm, 62);
+    assert.equal(stored.travelDays, 5);
+    assert.equal(stored.selectedStageId, stages[1].id);
+    assert.equal(stored.lastSavedAt, "2026-06-27T12:30:00.000Z");
+    assert.deepEqual(stored.stageBreakpoints, [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }]);
+    assert.deepEqual(stored.stages[0].geometryGeoJson, stages[0].geometryGeoJson);
+    assert.deepEqual(stored.route?.geometryGeoJson, straightRoute);
+    assert.deepEqual(stored.route?.originalGeometryGeoJson, longRoute);
   });
 
   it("projects a selected off-center target to the nearest existing route position", () => {

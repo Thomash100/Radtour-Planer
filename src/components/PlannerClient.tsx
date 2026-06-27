@@ -53,7 +53,7 @@ import {
   type Position,
   type StageBreakpoint
 } from "@/lib/geo";
-import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type TourInputMode } from "@/lib/tour-state";
+import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type StoredTourState, type TourInputMode } from "@/lib/tour-state";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 type RouteCalculation = {
@@ -297,6 +297,19 @@ function descriptionWithoutTrimNotice(description?: string | null) {
     .trim();
 }
 
+function formatSavedTime(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function PlannerClient({
   initialStart = "",
   initialEnd = "",
@@ -358,6 +371,7 @@ export function PlannerClient({
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
   const [pendingRoutePointSelection, setPendingRoutePointSelection] = useState<PendingRoutePointSelection | null>(null);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
+  const [lastTourSavedAt, setLastTourSavedAt] = useState<string | null>(null);
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -373,6 +387,7 @@ export function PlannerClient({
       corridorKm: 5
     }
   });
+  const targetKmValue = plannerForm.watch("targetKm");
 
   const leadForm = useForm<LeadForm>({
     resolver: zodResolver(leadSchema),
@@ -478,6 +493,71 @@ export function PlannerClient({
     }));
   }, [effectiveStageBreakpoints, route, routeTotalKm, stageGenerationMode, travelDayValidation]);
   const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
+  const lastTourSavedLabel = useMemo(() => formatSavedTime(lastTourSavedAt), [lastTourSavedAt]);
+
+  const buildStoredTourState = useCallback(
+    ({
+      routeValue = route,
+      stagesValue = stages,
+      statusValue = status,
+      lastSavedAtValue = lastTourSavedAt
+    }: {
+      routeValue?: RouteCalculation | SavedRoute | null;
+      stagesValue?: Stage[];
+      statusValue?: string;
+      lastSavedAtValue?: string | null;
+    } = {}): StoredTourState | null => {
+      if (!routeValue) {
+        return null;
+      }
+
+      const targetKm = Number(targetKmValue);
+      const safeTravelDays = Number(travelDays);
+
+      return {
+        inputMode,
+        route: routeValue,
+        stages: stagesValue,
+        pois,
+        selectedPoiId: selectedPoi?.id ?? null,
+        selectedStageId,
+        stageGenerationMode,
+        targetKm: Number.isFinite(targetKm) ? targetKm : undefined,
+        travelDays: Number.isFinite(safeTravelDays) ? safeTravelDays : undefined,
+        stageBreakpoints: stageBreakpoints.map((breakpoint) => ({
+          id: breakpoint.id,
+          name: breakpoint.name,
+          distanceKm: Number(breakpoint.distanceKm)
+        })),
+        status: statusValue,
+        lastSavedAt: lastSavedAtValue,
+        updatedAt: new Date().toISOString()
+      };
+    },
+    [
+      inputMode,
+      lastTourSavedAt,
+      pois,
+      route,
+      selectedPoi?.id,
+      selectedStageId,
+      stageBreakpoints,
+      stageGenerationMode,
+      stages,
+      status,
+      targetKmValue,
+      travelDays
+    ]
+  );
+
+  const persistStoredTourState = useCallback((state: StoredTourState | null) => {
+    if (!state) {
+      return;
+    }
+
+    window.localStorage.setItem(TOUR_STATE_STORAGE_KEY, JSON.stringify(state));
+  }, []);
+
   const quickFilters = [
     { label: "Partner", active: partnerOnly, setActive: setPartnerOnly },
     { label: "E-Bike", active: ebikeFriendly, setActive: setEbikeFriendly },
@@ -550,6 +630,26 @@ export function PlannerClient({
         setStages(stored.stages as Stage[]);
         setPois(stored.pois as Poi[]);
         setSelectedPoi(stored.pois.find((poi) => poi.id === stored.selectedPoiId) ?? stored.pois[0] ?? null);
+        setSelectedStageId(stored.selectedStageId ?? null);
+        if (stored.stageGenerationMode === "distance" || stored.stageGenerationMode === "days") {
+          setStageGenerationMode(stored.stageGenerationMode);
+        }
+        if (typeof stored.targetKm === "number") {
+          plannerForm.setValue("targetKm", stored.targetKm);
+        }
+        if (typeof stored.travelDays === "number") {
+          setTravelDays(stored.travelDays);
+        }
+        if (Array.isArray(stored.stageBreakpoints)) {
+          setStageBreakpoints(
+            stored.stageBreakpoints.map((breakpoint, index) => ({
+              id: breakpoint.id ?? `stored-breakpoint-${index + 1}`,
+              name: breakpoint.name,
+              distanceKm: Number(breakpoint.distanceKm)
+            }))
+          );
+        }
+        setLastTourSavedAt(stored.lastSavedAt ?? null);
         setPlannerStep(urlStep ?? "overview");
         setStatus(stored.status ? `Gespeicherte Tour geladen. ${stored.status}` : "Gespeicherte Tour geladen.");
         return;
@@ -565,29 +665,13 @@ export function PlannerClient({
     if (urlStep) {
       setPlannerStep(urlStep);
     }
-  }, [initialMode, initialStep, openLast]);
+  }, [initialMode, initialStep, openLast, plannerForm]);
 
   useEffect(() => {
-    if (!route) {
-      return;
-    }
-
-    window.localStorage.setItem(
-      TOUR_STATE_STORAGE_KEY,
-      JSON.stringify({
-        inputMode,
-        route,
-        stages,
-        pois,
-        selectedPoiId: selectedPoi?.id ?? null,
-        status,
-        updatedAt: new Date().toISOString()
-      })
-    );
-  }, [inputMode, pois, route, selectedPoi?.id, stages, status]);
+    persistStoredTourState(buildStoredTourState());
+  }, [buildStoredTourState, persistStoredTourState]);
 
   useEffect(() => {
-    setStageBreakpoints([]);
     setNewStagePointKm(routeTotalKm > 0 ? Number(Math.min(50, routeTotalKm).toFixed(1)) : 0);
     setTrimStartKm(Number((route?.trimStartKmOriginal ?? 0).toFixed(1)));
     setTrimEndKm(Number((route?.trimEndKmOriginal ?? originalRouteTotalKm).toFixed(1)));
@@ -1093,6 +1177,7 @@ export function PlannerClient({
       setSelectedPoi(null);
       setStageBreakpoints([]);
       setStageFeedback({});
+      setLastTourSavedAt(null);
       setTrimStartKm(trim.startKm);
       setTrimEndKm(trim.endKm);
       setStatus(`Route gekürzt: ${formatKm(distanceKm)} verbleiben. Etappen und POI bitte neu erzeugen.`);
@@ -1185,6 +1270,7 @@ export function PlannerClient({
       setSelectedPoi(null);
       setStageBreakpoints([]);
       setStageFeedback({});
+      setLastTourSavedAt(null);
       setTrimStartKm(0);
       setTrimEndKm(Number(originalRouteTotalKm.toFixed(1)));
       setStatus("Kürzung zurückgesetzt. Die vollständige Original-GPX-Route ist wieder sichtbar; Etappen und POI bitte neu erzeugen.");
@@ -1202,7 +1288,9 @@ export function PlannerClient({
     setCalculation(null);
     setSavedRoute(null);
     setStages([]);
+    setStageBreakpoints([]);
     setStageFeedback({});
+    setLastTourSavedAt(null);
     setPois([]);
     setSelectedPoi(null);
     try {
@@ -1254,7 +1342,9 @@ export function PlannerClient({
     setCalculation(null);
     setSavedRoute(null);
     setStages([]);
+    setStageBreakpoints([]);
     setStageFeedback({});
+    setLastTourSavedAt(null);
     setPois([]);
     setSelectedPoi(null);
     try {
@@ -1494,9 +1584,109 @@ export function PlannerClient({
     const savedDayNumbers = savedStages.map((item) => item.dayNumber).sort((a, b) => a - b);
     setStatus(
       savedDayNumbers.length > 1
-        ? `Etappen ${savedDayNumbers.join(", ")} wurden aktualisiert.`
-        : `Etappe ${savedDayNumbers[0]} wurde aktualisiert.`
+        ? `Etappen ${savedDayNumbers.join(", ")} wurden aktualisiert. Für die vollständige Tour bitte "Alle Änderungen speichern" verwenden.`
+        : `Etappe ${savedDayNumbers[0]} wurde aktualisiert. Für die vollständige Tour bitte "Alle Änderungen speichern" verwenden.`
     );
+  }
+
+  async function saveTour() {
+    if (!route) {
+      setStatus("Bitte zuerst eine Route laden oder planen.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      let routeToStore: RouteCalculation | SavedRoute = route;
+      if (savedRoute?.id) {
+        const response = await fetch(`/api/routes/${savedRoute.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: route.name,
+            description: route.description,
+            startName: route.startName,
+            endName: route.endName,
+            distanceKm: route.distanceKm,
+            elevationUp: route.elevationUp,
+            elevationDown: route.elevationDown,
+            geometryGeoJson: route.geometryGeoJson
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? "Tour konnte nicht gespeichert werden.");
+        }
+
+        routeToStore = {
+          ...route,
+          id: savedRoute.id,
+          name: payload.route?.name ?? route.name,
+          description: payload.route?.description ?? route.description,
+          startName: payload.route?.startName ?? route.startName,
+          endName: payload.route?.endName ?? route.endName,
+          distanceKm: payload.route?.distanceKm ?? route.distanceKm,
+          elevationUp: payload.route?.elevationUp ?? route.elevationUp,
+          elevationDown: payload.route?.elevationDown ?? route.elevationDown,
+          geometryGeoJson: payload.route?.geometryGeoJson ?? route.geometryGeoJson
+        };
+        setSavedRoute(routeToStore as SavedRoute);
+      }
+
+      const savedStages: Stage[] = [];
+      for (const item of stages) {
+        if (!item.id) {
+          savedStages.push(item);
+          continue;
+        }
+
+        const response = await fetch(`/api/stages/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            startName: item.startName,
+            endName: item.endName,
+            distanceKm: item.distanceKm,
+            elevationUp: item.elevationUp,
+            elevationDown: item.elevationDown,
+            geometryGeoJson: item.geometryGeoJson
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+          throw new Error(payload.error ?? `Etappe ${item.dayNumber} konnte nicht gespeichert werden.`);
+        }
+
+        savedStages.push({
+          ...payload.stage,
+          routeStartKm: item.routeStartKm,
+          routeEndKm: item.routeEndKm
+        });
+      }
+
+      const stagesToStore = savedStages.length > 0 ? savedStages : stages;
+      if (savedStages.length > 0) {
+        setStages(stagesToStore);
+        setStageFeedback(Object.fromEntries(stagesToStore.map((item) => [item.id, "Gespeichert"])));
+      }
+
+      const savedAt = new Date().toISOString();
+      const savedStatus = "Tour gespeichert.";
+      setLastTourSavedAt(savedAt);
+      setStatus(savedStatus);
+      persistStoredTourState(
+        buildStoredTourState({
+          routeValue: routeToStore,
+          stagesValue: stagesToStore,
+          statusValue: savedStatus,
+          lastSavedAtValue: savedAt
+        })
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Tour konnte nicht gespeichert werden.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   const workflowHeader = (
@@ -1916,6 +2106,17 @@ export function PlannerClient({
                   Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
                 </p>
               ) : null}
+              {savedRoute ? (
+                <div className="grid gap-2 rounded-md border bg-white p-3">
+                  <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
+                    <Save className="h-4 w-4" />
+                    Alle Änderungen speichern
+                  </Button>
+                  <p className="text-sm font-medium text-emerald-700">
+                    {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Gesamte Tour noch nicht bewusst gespeichert."}
+                  </p>
+                </div>
+              ) : null}
               <Button className="w-full" type="button" onClick={() => setPlannerStep(inputMode === "gpx" ? "trim" : "stage-edit")}>
                 <ArrowRight className="h-4 w-4" />
                 Weiter bearbeiten
@@ -2176,6 +2377,10 @@ export function PlannerClient({
           {savedRoute && (
             <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
               <div className="flex flex-wrap gap-2">
+                <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
+                  <Save className="h-4 w-4" />
+                  Alle Änderungen speichern
+                </Button>
                 <Button asChild>
                   <Link href={`/reiseplan/${savedRoute.id}`}>
                     <FileText className="h-4 w-4" />
@@ -2199,6 +2404,9 @@ export function PlannerClient({
                   GPX exportieren
                 </Button>
               </div>
+              <p className="text-sm font-medium text-emerald-700">
+                {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Gesamte Tour noch nicht bewusst gespeichert."}
+              </p>
               <p className="text-xs text-muted-foreground">
                 GPX exportiert aktuell die bearbeitete Routengeometrie. Etappennamen, Etappenfarben und manuelle Etappenschnitte werden in der gespeicherten Tour geladen, aber noch nicht in die GPX-Datei geschrieben.
               </p>
@@ -2605,7 +2813,7 @@ export function PlannerClient({
                           Unterkunft finden
                         </Button>
                         <Button className="min-w-36 flex-1 whitespace-nowrap" size="sm" type="button" variant="secondary" onClick={() => saveStage(stage)}>
-                          Speichern
+                          Etappe speichern
                         </Button>
                       </div>
                     </div>

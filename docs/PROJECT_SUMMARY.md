@@ -115,6 +115,8 @@ Details stehen in:
 - Paket 2 bündelt #43 und #44 in einem zusammenhängenden Entwicklungsblock.
 - Umfang: Route nach Anzahl Reisetage aufteilen, Etappenlänge weiterhin unterstützen, Städte/Orte entlang der GPX-Route suchen, Ort auf die GPX-Route projizieren und als Start, Ziel oder Etappenziel übernehmen.
 - Es gibt keine automatische Routenverlagerung und kein Neurouting durch Ortsnamen.
+- `Alle Änderungen speichern` ist die eindeutige Aktion für die vollständige Tour; der Planer zeigt danach `Tour gespeichert.` und optional den Zeitpunkt der letzten Speicherung.
+- Der vollständige Browser-TourState enthält GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung sowie gesetzte bzw. übernommene Orte/Etappenpunkte.
 - Bestehende manuelle Etappen werden bei Neuberechnung nach Länge oder Reisetagen nur nach Bestätigung ersetzt.
 - Manuelle RPi-/Browser-Abnahme erfolgt erst am Ende des Pakets, nicht nach kleinen UI-/UX-Zwischenschritten.
 

@@ -88,6 +88,7 @@ Je nach Aufgabe prüfen:
 - Versehentliche direkte Routenplanung bei geladener GPX-Route zeigt eine Bestätigung und erhält die GPX-Route bei Abbruch.
 - Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudrücken.
 - Geänderte Etappen zeigen eine Rückmeldung zur neu berechneten Geometrie.
+- `Alle Änderungen speichern` zeigt nach Erfolg `Tour gespeichert.` und erhält Route, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung sowie gesetzte Orte/Etappenpunkte beim erneuten Öffnen.
 - GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
 - Höhenprofil passt zur geladenen Route.
 - POI werden zur aktuellen Route bzw. Etappe angezeigt.

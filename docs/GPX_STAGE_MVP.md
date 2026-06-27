@@ -44,6 +44,8 @@ Stand: 2026-06-22
 - Route kürzen, Etappen erzeugen und Etappen bearbeiten sind getrennte Workflow-Schritte.
 - Nach manueller Etappenanpassung wird die betroffene Etappe als `Geometrie aktualisiert` markiert.
 - Nach dem Speichern wird die betroffene Etappe als `Gespeichert` markiert.
+- `Alle Änderungen speichern` ist die eindeutige Aktion für die komplette Tour.
+- Nach erfolgreicher Gesamt-Speicherung zeigt der Planer `Tour gespeichert.` und `Zuletzt gespeichert: HH:MM`.
 - Karte und Höhenprofil werden im Planer über eine gemeinsame Ansichtsauswahl umgeschaltet. Standard ist die Karte.
 - Das Höhenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
 - Etappen können entweder nach gewünschter Etappenlänge oder nach Anzahl Reisetage erzeugt werden.
@@ -53,6 +55,7 @@ Stand: 2026-06-22
 
 - Der GPX-Export schreibt aktuell die bearbeitete Routengeometrie.
 - Etappennamen, Etappenfarben und manuelle Etappenschnitte werden nicht in die GPX-Datei geschrieben.
+- `Alle Änderungen speichern` schreibt den vollständigen Browser-TourState: GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Etappenpunkte und übernommene Orte/Städte.
 - Gespeicherte Touren laden die persistierte `geometryGeoJson` der Etappen über die Datenbank wieder.
 - Der lokale Test deckt den JSON-Save/Load-nahen Roundtrip der Etappengeometrie ab; der Browser-/RPi-Test bleibt der manuelle End-to-End-Prüfpunkt.
 
