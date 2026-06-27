@@ -39,6 +39,14 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  accommodationDetourThresholdKm,
+  isAccommodationDetour,
+  rankStageAccommodationCandidates,
+  selectStageAccommodation,
+  type AccommodationStatus,
+  type StageAccommodation
+} from "@/lib/accommodations";
+import {
   createElevationProfile,
   createTrimmedRouteFromOriginal,
   projectLocationToRoute,
@@ -310,6 +318,12 @@ function formatSavedTime(value?: string | null) {
   return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
 
+function accommodationStatusLabel(status: AccommodationStatus) {
+  if (status === "selected") return "ausgewählt";
+  if (status === "planned") return "geplant";
+  return "nur Kandidat";
+}
+
 export function PlannerClient({
   initialStart = "",
   initialEnd = "",
@@ -371,6 +385,7 @@ export function PlannerClient({
   const [isPickingStagePoint, setIsPickingStagePoint] = useState(false);
   const [pendingRoutePointSelection, setPendingRoutePointSelection] = useState<PendingRoutePointSelection | null>(null);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
+  const [stageAccommodations, setStageAccommodations] = useState<Record<string, StageAccommodation>>({});
   const [lastTourSavedAt, setLastTourSavedAt] = useState<string | null>(null);
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
@@ -494,6 +509,33 @@ export function PlannerClient({
   }, [effectiveStageBreakpoints, route, routeTotalKm, stageGenerationMode, travelDayValidation]);
   const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
   const lastTourSavedLabel = useMemo(() => formatSavedTime(lastTourSavedAt), [lastTourSavedAt]);
+  const accommodationCandidatesByStageId = useMemo(() => {
+    if (!route) {
+      return {} as Record<string, StageAccommodation[]>;
+    }
+
+    return Object.fromEntries(
+      stages.map((stage) => [
+        stage.id,
+        rankStageAccommodationCandidates(
+          stage,
+          route.geometryGeoJson,
+          pois.map((poi) => ({
+            id: poi.id,
+            name: poi.name,
+            category: poi.category,
+            lat: poi.lat,
+            lon: poi.lon,
+            address: poi.address,
+            website: poi.website,
+            source: poi.source,
+            tagsJson: poi.tagsJson,
+            distanceToRouteKm: poi.distanceToRouteKm
+          }))
+        )
+      ])
+    );
+  }, [pois, route, stages]);
 
   const buildStoredTourState = useCallback(
     ({
@@ -529,6 +571,7 @@ export function PlannerClient({
           name: breakpoint.name,
           distanceKm: Number(breakpoint.distanceKm)
         })),
+        stageAccommodations,
         status: statusValue,
         lastSavedAt: lastSavedAtValue,
         updatedAt: new Date().toISOString()
@@ -541,6 +584,7 @@ export function PlannerClient({
       route,
       selectedPoi?.id,
       selectedStageId,
+      stageAccommodations,
       stageBreakpoints,
       stageGenerationMode,
       stages,
@@ -649,6 +693,7 @@ export function PlannerClient({
             }))
           );
         }
+        setStageAccommodations(stored.stageAccommodations ?? {});
         setLastTourSavedAt(stored.lastSavedAt ?? null);
         setPlannerStep(urlStep ?? "overview");
         setStatus(stored.status ? `Gespeicherte Tour geladen. ${stored.status}` : "Gespeicherte Tour geladen.");
@@ -670,6 +715,14 @@ export function PlannerClient({
   useEffect(() => {
     persistStoredTourState(buildStoredTourState());
   }, [buildStoredTourState, persistStoredTourState]);
+
+  useEffect(() => {
+    const stageIds = new Set(stages.map((stage) => stage.id));
+    setStageAccommodations((current) => {
+      const next = Object.fromEntries(Object.entries(current).filter(([stageId]) => stageIds.has(stageId)));
+      return Object.keys(next).length === Object.keys(current).length ? current : next;
+    });
+  }, [stages]);
 
   useEffect(() => {
     setNewStagePointKm(routeTotalKm > 0 ? Number(Math.min(50, routeTotalKm).toFixed(1)) : 0);
@@ -944,6 +997,7 @@ export function PlannerClient({
 
     setStages(payload.stages);
     setStageFeedback({});
+    setStageAccommodations({});
     setStatus(
       request.mode === "custom"
         ? `${payload.stages.length} individuelle Etappen erzeugt.`
@@ -1177,6 +1231,7 @@ export function PlannerClient({
       setSelectedPoi(null);
       setStageBreakpoints([]);
       setStageFeedback({});
+      setStageAccommodations({});
       setLastTourSavedAt(null);
       setTrimStartKm(trim.startKm);
       setTrimEndKm(trim.endKm);
@@ -1270,6 +1325,7 @@ export function PlannerClient({
       setSelectedPoi(null);
       setStageBreakpoints([]);
       setStageFeedback({});
+      setStageAccommodations({});
       setLastTourSavedAt(null);
       setTrimStartKm(0);
       setTrimEndKm(Number(originalRouteTotalKm.toFixed(1)));
@@ -1290,6 +1346,7 @@ export function PlannerClient({
     setStages([]);
     setStageBreakpoints([]);
     setStageFeedback({});
+    setStageAccommodations({});
     setLastTourSavedAt(null);
     setPois([]);
     setSelectedPoi(null);
@@ -1344,6 +1401,7 @@ export function PlannerClient({
     setStages([]);
     setStageBreakpoints([]);
     setStageFeedback({});
+    setStageAccommodations({});
     setLastTourSavedAt(null);
     setPois([]);
     setSelectedPoi(null);
@@ -1538,6 +1596,29 @@ export function PlannerClient({
         result.changedStage.distanceKm
       )}).${affectedNotice} Bitte speichern, um die Änderung dauerhaft zu übernehmen.`
     );
+  }
+
+  function updateStageAccommodation(stage: Stage, candidate: StageAccommodation, status: Exclude<AccommodationStatus, "candidate">) {
+    const nextAccommodation = selectStageAccommodation(candidate, status);
+    setSelectedStageId(stage.id);
+    setStageAccommodations((current) => ({
+      ...current,
+      [stage.id]: nextAccommodation
+    }));
+    setStatus(
+      status === "selected"
+        ? `${candidate.name} wurde als Übernachtung für Tag ${stage.dayNumber} ausgewählt. Die GPX-Route bleibt unverändert.`
+        : `${candidate.name} wurde als geplante Unterkunft für Tag ${stage.dayNumber} vorgemerkt.`
+    );
+  }
+
+  function removeStageAccommodation(stage: Stage) {
+    setStageAccommodations((current) => {
+      const next = { ...current };
+      delete next[stage.id];
+      return next;
+    });
+    setStatus(`Unterkunft für Tag ${stage.dayNumber} entfernt.`);
   }
 
   async function saveStage(stage: Stage) {
@@ -2694,6 +2775,8 @@ export function PlannerClient({
                 {stages.map((stage) => {
                   const stageKmBounds = stageKilometers(stage);
                   const isSelectedStage = selectedStageId === stage.id;
+                  const selectedAccommodation = stageAccommodations[stage.id];
+                  const accommodationCandidates = accommodationCandidatesByStageId[stage.id] ?? [];
 
                   return (
                     <div
@@ -2805,6 +2888,88 @@ export function PlannerClient({
                             <div className="flex min-h-10 items-center rounded-md border bg-muted px-3 text-sm">
                               {formatHours(stage.distanceKm / 17)}
                             </div>
+                          </div>
+                        </div>
+                        <div className="grid gap-3 rounded-md border bg-slate-50 p-3">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                            <div>
+                              <h3 className="text-sm font-semibold">Unterkunft</h3>
+                              <p className="text-xs text-muted-foreground">
+                                Kandidaten liegen am Etappenende oder entlang der Etappe. Die GPX-Route wird dadurch nicht verändert.
+                              </p>
+                            </div>
+                            <Button className="w-full sm:w-auto" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
+                              Kandidaten aktualisieren
+                            </Button>
+                          </div>
+                          {selectedAccommodation ? (
+                            <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <strong>{selectedAccommodation.name}</strong>
+                                <Badge variant={selectedAccommodation.status === "selected" ? "secondary" : "outline"}>
+                                  {accommodationStatusLabel(selectedAccommodation.status)}
+                                </Badge>
+                                {isAccommodationDetour(selectedAccommodation) && <Badge variant="outline">Abstecher</Badge>}
+                              </div>
+                              <div className="mt-1 text-muted-foreground">
+                                {selectedAccommodation.type} in {selectedAccommodation.place} · {formatKm(selectedAccommodation.distanceToStageEndKm)} zum Etappenende ·{" "}
+                                {formatKm(selectedAccommodation.distanceToRouteKm)} zur Route
+                              </div>
+                              {isAccommodationDetour(selectedAccommodation) && (
+                                <p className="mt-2 text-xs text-amber-800">
+                                  Diese Unterkunft liegt mehr als {formatKm(accommodationDetourThresholdKm)} von der GPX-Route entfernt und ist als Abstecher geplant.
+                                </p>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {selectedAccommodation.link && (
+                                  <Button asChild size="sm" variant="outline">
+                                    <a href={selectedAccommodation.link} rel="noreferrer" target="_blank">
+                                      Quelle öffnen
+                                    </a>
+                                  </Button>
+                                )}
+                                <Button size="sm" type="button" variant="outline" onClick={() => removeStageAccommodation(stage)}>
+                                  Entfernen
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
+                              Noch keine Übernachtung für diese Etappe ausgewählt.
+                            </div>
+                          )}
+                          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                            {accommodationCandidates.map((candidate) => (
+                              <div key={candidate.id} className="grid gap-2 rounded-md border bg-white p-3 text-sm">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Bed className="h-4 w-4 text-primary" />
+                                  <strong>{candidate.name}</strong>
+                                  <Badge variant="outline">{accommodationStatusLabel(candidate.status)}</Badge>
+                                  {isAccommodationDetour(candidate) && <Badge variant="outline">Abstecher</Badge>}
+                                </div>
+                                <div className="text-muted-foreground">
+                                  {candidate.type} · {candidate.place}
+                                </div>
+                                <div className="grid gap-1 text-xs text-muted-foreground">
+                                  <span>{formatKm(candidate.distanceToStageEndKm)} zum Etappenende</span>
+                                  <span>{formatKm(candidate.distanceToRouteKm)} zur Route</span>
+                                  <span>Quelle: {candidate.source ?? "MVP-Daten"}</span>
+                                </div>
+                                {isAccommodationDetour(candidate) && (
+                                  <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
+                                    Abseits der GPX-Route. Nur als Abstecher übernehmen; keine automatische Routenänderung.
+                                  </p>
+                                )}
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                  <Button className="w-full" size="sm" type="button" onClick={() => updateStageAccommodation(stage, candidate, "selected")}>
+                                    Übernachtung wählen
+                                  </Button>
+                                  <Button className="w-full" size="sm" type="button" variant="outline" onClick={() => updateStageAccommodation(stage, candidate, "planned")}>
+                                    Merken
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </div>
