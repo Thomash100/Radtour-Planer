@@ -38,6 +38,7 @@ export const saveRouteSchema = z.object({
 
 export const autoStageSchema = z.object({
   targetKm: z.coerce.number().min(15).max(180).default(55),
+  travelDays: z.coerce.number().int().positive().max(60).optional(),
   breakpoints: z
     .array(
       z.object({

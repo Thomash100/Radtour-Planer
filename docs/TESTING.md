@@ -80,6 +80,11 @@ Je nach Aufgabe prüfen:
 - Gekürzte Routen zeigen gekürzte Länge und GPX-km-Bereich an.
 - Große Startkürzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
 - Änderung der Etappenlänge erzeugt Vorschläge neu; bestehende Etappen werden nur nach Bestätigung ersetzt.
+- Aufteilung nach Reisetagen erzeugt die gewünschte Anzahl Etappen; bestehende Etappen werden nur nach Bestätigung ersetzt.
+- Ungültige Reisetage wie 0, negative Werte, Kommazahlen oder unbrauchbar viele Tage werden verständlich abgelehnt.
+- Ortssuche im GPX-Modus projiziert lokale MVP-Orte auf die bestehende GPX-Route und zeigt Arbeitsroute-km, Original-km und Abstand zur Route.
+- Ort als Start, Ziel oder Etappenpunkt wird erst nach ausdrücklicher Bestätigung übernommen.
+- Abbrechen einer Ortprojektion verändert weder Route noch Etappenpunkte.
 - Versehentliche direkte Routenplanung bei geladener GPX-Route zeigt eine Bestätigung und erhält die GPX-Route bei Abbruch.
 - Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudrücken.
 - Geänderte Etappen zeigen eine Rückmeldung zur neu berechneten Geometrie.
@@ -87,6 +92,8 @@ Je nach Aufgabe prüfen:
 - Höhenprofil passt zur geladenen Route.
 - POI werden zur aktuellen Route bzw. Etappe angezeigt.
 - Lead-/Partner-/Admin-Flows bleiben erreichbar, wenn betroffen.
+
+Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.
 
 ## PR-Dokumentation
 
