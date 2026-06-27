@@ -9,17 +9,21 @@ import {
   createStageSliceFromBounds,
   cumulativeDistances,
   normalizeRouteTrimBounds,
+  projectLocationToRoute,
   projectRouteClick,
   rebuildContiguousStageSlices,
   routeDistanceKm,
   routeBoundsForStage,
   splitRouteByBreakpoints,
+  splitRouteIntoStageCount,
   splitRouteIntoStages,
   trimRouteGeometry,
+  validateTravelDayCount,
   validateStageSliceBounds,
   type LineStringGeoJson,
   type Position
 } from "../src/lib/geo";
+import { parseStoredTourState } from "../src/lib/tour-state";
 
 const straightRoute: LineStringGeoJson = {
   type: "LineString",
@@ -225,6 +229,56 @@ describe("GPX parsing and stage planning", () => {
     });
   });
 
+  it("splits a GPX route into an exact number of travel days", () => {
+    const sixDayRoute: LineStringGeoJson = {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [0.63, 0],
+        [1.26, 0],
+        [1.89, 0],
+        [2.52, 0],
+        [3.15, 0],
+        [3.78, 0]
+      ]
+    };
+    const stages = splitRouteIntoStageCount(sixDayRoute, 6);
+
+    assert.equal(stages.length, 6);
+    assert.deepEqual(stages.map((stage) => stage.dayNumber), [1, 2, 3, 4, 5, 6]);
+    assertClose(
+      stages.reduce((sum, stage) => sum + stage.distanceKm, 0),
+      routeDistanceKm(sixDayRoute.coordinates),
+      0.6
+    );
+    stages.forEach((stage) => {
+      assertClose(stage.distanceKm, routeDistanceKm(sixDayRoute.coordinates) / 6, 0.4);
+      assert.ok(stage.geometryGeoJson.coordinates.length >= 2);
+    });
+  });
+
+  it("keeps the last travel-day stage clean when the route does not divide evenly", () => {
+    const stages = splitRouteIntoStageCount(longRoute, 3);
+
+    assert.equal(stages.length, 3);
+    assert.equal(stages[2].endName, "Ziel");
+    assert.deepEqual(stages[2].geometryGeoJson.coordinates.at(-1), longRoute.coordinates.at(-1));
+    assertClose(
+      stages.reduce((sum, stage) => sum + stage.distanceKm, 0),
+      routeDistanceKm(longRoute.coordinates),
+      0.6
+    );
+  });
+
+  it("rejects invalid or impractical travel-day counts", () => {
+    const totalKm = routeDistanceKm(straightRoute.coordinates);
+
+    assert.equal(validateTravelDayCount(totalKm, 0).ok, false);
+    assert.equal(validateTravelDayCount(totalKm, -2).ok, false);
+    assert.equal(validateTravelDayCount(totalKm, 2.5).ok, false);
+    assert.equal(validateTravelDayCount(totalKm, 100).ok, false);
+  });
+
   it("uses sorted manual breakpoints and removes duplicate or out-of-range stage targets", () => {
     const totalKm = routeDistanceKm(straightRoute.coordinates);
     const stages = splitRouteByBreakpoints(straightRoute, [
@@ -422,6 +476,56 @@ describe("GPX parsing and stage planning", () => {
     assert.deepEqual(savedStages[1].geometryGeoJson, result.stages[1].geometryGeoJson);
   });
 
+  it("keeps package two tour settings through a stored tour roundtrip", () => {
+    const stages = createContiguousTestStages();
+    const rawState = JSON.stringify({
+      inputMode: "gpx",
+      route: {
+        id: "route-1",
+        name: "GPX Testtour",
+        description: "Gekürzt und in Tage aufgeteilt",
+        startName: "Start",
+        endName: "Ziel",
+        profile: "balanced",
+        distanceKm: routeDistanceKm(straightRoute.coordinates),
+        elevationUp: 120,
+        elevationDown: 90,
+        durationHours: 4.5,
+        geometryGeoJson: straightRoute,
+        originalGeometryGeoJson: longRoute,
+        originalDistanceKm: routeDistanceKm(longRoute.coordinates),
+        trimStartKmOriginal: 300,
+        trimEndKmOriginal: 520,
+        elevationProfile: [],
+        waypoints: []
+      },
+      stages,
+      pois: [],
+      selectedStageId: stages[1].id,
+      stageGenerationMode: "days",
+      targetKm: 62,
+      travelDays: 5,
+      stageBreakpoints: [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }],
+      status: "Tour gespeichert.",
+      lastSavedAt: "2026-06-27T12:30:00.000Z",
+      updatedAt: "2026-06-27T12:30:00.000Z"
+    });
+
+    const stored = parseStoredTourState(rawState);
+
+    assert.ok(stored);
+    assert.equal(stored.inputMode, "gpx");
+    assert.equal(stored.stageGenerationMode, "days");
+    assert.equal(stored.targetKm, 62);
+    assert.equal(stored.travelDays, 5);
+    assert.equal(stored.selectedStageId, stages[1].id);
+    assert.equal(stored.lastSavedAt, "2026-06-27T12:30:00.000Z");
+    assert.deepEqual(stored.stageBreakpoints, [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }]);
+    assert.deepEqual(stored.stages[0].geometryGeoJson, stages[0].geometryGeoJson);
+    assert.deepEqual(stored.route?.geometryGeoJson, straightRoute);
+    assert.deepEqual(stored.route?.originalGeometryGeoJson, longRoute);
+  });
+
   it("projects a selected off-center target to the nearest existing route position", () => {
     const originalCoordinates: Position[] = straightRoute.coordinates.map((coordinate) => [...coordinate]);
     const selected = closestPointOnRoute([11.75, 52.2], straightRoute.coordinates);
@@ -440,5 +544,17 @@ describe("GPX parsing and stage planning", () => {
     assertClose(selected.workDistanceKm, routeDistanceKm(straightRoute.coordinates.slice(0, 2)) * 1.5, 0.2);
     assertClose(selected.originalDistanceKm, 125 + selected.workDistanceKm, 0.1);
     assert.ok(selected.distanceToRouteKm > 0);
+  });
+
+  it("projects a named location to the nearest GPX route position without changing the route", () => {
+    const originalCoordinates: Position[] = straightRoute.coordinates.map((coordinate) => [...coordinate]);
+    const selected = projectLocationToRoute("Teststadt", [11.75, 52.25], straightRoute, 25);
+
+    assert.equal(selected.name, "Teststadt");
+    assertClose(selected.coordinate[0], 11.75, 0.01);
+    assertClose(selected.coordinate[1], 52, 0.01);
+    assertClose(selected.originalDistanceKm, 25 + selected.workDistanceKm, 0.1);
+    assert.ok(selected.distanceToRouteKm > 0);
+    assert.deepEqual(straightRoute.coordinates, originalCoordinates);
   });
 });

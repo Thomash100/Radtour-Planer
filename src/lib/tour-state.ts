@@ -57,13 +57,27 @@ export type StoredPoi = {
   partnerId?: string | null;
 };
 
+export type StoredStageGenerationMode = "distance" | "days" | "custom";
+
+export type StoredStageBreakpoint = {
+  id?: string;
+  name: string;
+  distanceKm: number;
+};
+
 export type StoredTourState = {
   inputMode: TourInputMode;
   route: StoredRoute | null;
   stages: StoredStage[];
   pois: StoredPoi[];
   selectedPoiId?: string | null;
+  selectedStageId?: string | null;
+  stageGenerationMode?: StoredStageGenerationMode;
+  targetKm?: number;
+  travelDays?: number;
+  stageBreakpoints?: StoredStageBreakpoint[];
   status?: string;
+  lastSavedAt?: string | null;
   updatedAt: string;
 };
 

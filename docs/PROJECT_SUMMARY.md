@@ -99,14 +99,26 @@ Details stehen in:
 - Gekürzte Routen werden sichtbar markiert; die gekürzte Länge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
 - Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet; nachträgliche Korrekturen kürzen nicht erneut die bereits gekürzte Arbeitsroute.
 - `Kürzung zurücksetzen` stellt die vollständige Original-GPX-Route wieder her.
-- Startortsuche für GPX-Kürzungen ist deaktiviert, bis ein zuverlässiger Geocoder vorhanden ist; die UI verweist auf Start-km.
+- Routenklick kann als Start, Ziel oder Etappenpunkt übernommen werden; die Route ändert sich erst nach ausdrücklicher Übernahme bzw. Kürzungsaktion.
+- Ortssuche im GPX-Modus nutzt eine lokale MVP-Ortsliste, projiziert Orte auf die bestehende GPX-Route und verlegt die Route nicht automatisch.
 - Etappenlänge erzeugt Vorschläge entlang der aktuellen GPX-Arbeitsroute; bestehende Etappen werden nur nach Bestätigung ersetzt.
+- Etappen können zusätzlich nach Anzahl Reisetage erzeugt werden; die durchschnittliche Etappenlänge wird aus der aktuellen GPX-Arbeitsroute berechnet.
 - Direkte Routenplanung verwirft eine geladene GPX-Route nur nach Bestätigung.
 - Große Startkürzungen wie 300 km bleiben stabil, wenn das End-km-Feld durch die Anzeige auf eine Nachkommastelle gerundet ist.
 - Karte und Höhenprofil sind im Planer umschaltbar; die Etappenbearbeitung wird nicht mehr dauerhaft durch das Höhenprofil in eine schmale Spalte gedrückt.
 - Manuell geänderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
 - Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollständige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
-- Tests decken ungültige km-Bereiche, außerhalb der Route liegende Grenzen, große 300-km-Startkürzung, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
+- Tests decken ungültige km-Bereiche, außerhalb der Route liegende Grenzen, große 300-km-Startkürzung, Reisetage-Aufteilung, Ortprojektion, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
+
+## Aktueller Arbeitsblock Paket 2
+
+- Paket 2 bündelt #43 und #44 in einem zusammenhängenden Entwicklungsblock.
+- Umfang: Route nach Anzahl Reisetage aufteilen, Etappenlänge weiterhin unterstützen, Städte/Orte entlang der GPX-Route suchen, Ort auf die GPX-Route projizieren und als Start, Ziel oder Etappenziel übernehmen.
+- Es gibt keine automatische Routenverlagerung und kein Neurouting durch Ortsnamen.
+- `Alle Änderungen speichern` ist die eindeutige Aktion für die vollständige Tour; der Planer zeigt danach `Tour gespeichert.` und optional den Zeitpunkt der letzten Speicherung.
+- Der vollständige Browser-TourState enthält GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung sowie gesetzte bzw. übernommene Orte/Etappenpunkte.
+- Bestehende manuelle Etappen werden bei Neuberechnung nach Länge oder Reisetagen nur nach Bestätigung ersetzt.
+- Manuelle RPi-/Browser-Abnahme erfolgt erst am Ende des Pakets, nicht nach kleinen UI-/UX-Zwischenschritten.
 
 ## Deployment-Struktur
 
