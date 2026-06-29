@@ -319,9 +319,9 @@ function formatSavedTime(value?: string | null) {
 }
 
 function accommodationStatusLabel(status: AccommodationStatus) {
-  if (status === "selected") return "ausgewählt";
+  if (status === "selected") return "Übernachtung";
   if (status === "planned") return "geplant";
-  return "nur Kandidat";
+  return "Kandidat";
 }
 
 export function PlannerClient({
@@ -2776,7 +2776,11 @@ export function PlannerClient({
                   const stageKmBounds = stageKilometers(stage);
                   const isSelectedStage = selectedStageId === stage.id;
                   const selectedAccommodation = stageAccommodations[stage.id];
-                  const accommodationCandidates = accommodationCandidatesByStageId[stage.id] ?? [];
+                  const accommodationCandidates = (accommodationCandidatesByStageId[stage.id] ?? []).filter(
+                    (candidate) =>
+                      !selectedAccommodation ||
+                      (candidate.id !== selectedAccommodation.id && (!candidate.poiId || candidate.poiId !== selectedAccommodation.poiId))
+                  );
 
                   return (
                     <div
@@ -2890,9 +2894,9 @@ export function PlannerClient({
                             </div>
                           </div>
                         </div>
-                        <div className="grid gap-3 rounded-md border bg-slate-50 p-3">
-                          <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
+                        <div className="grid min-w-0 gap-3 rounded-md border bg-slate-50 p-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
                               <h3 className="text-sm font-semibold">Unterkunft</h3>
                               <p className="text-xs text-muted-foreground">
                                 Kandidaten liegen am Etappenende oder entlang der Etappe. Die GPX-Route wird dadurch nicht verändert.
@@ -2904,72 +2908,90 @@ export function PlannerClient({
                           </div>
                           {selectedAccommodation ? (
                             <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <strong>{selectedAccommodation.name}</strong>
-                                <Badge variant={selectedAccommodation.status === "selected" ? "secondary" : "outline"}>
-                                  {accommodationStatusLabel(selectedAccommodation.status)}
-                                </Badge>
-                                {isAccommodationDetour(selectedAccommodation) && <Badge variant="outline">Abstecher</Badge>}
-                              </div>
-                              <div className="mt-1 text-muted-foreground">
-                                {selectedAccommodation.type} in {selectedAccommodation.place} · {formatKm(selectedAccommodation.distanceToStageEndKm)} zum Etappenende ·{" "}
-                                {formatKm(selectedAccommodation.distanceToRouteKm)} zur Route
+                              <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <strong className="min-w-0 break-words">{selectedAccommodation.name}</strong>
+                                    <Badge className="shrink-0" variant={selectedAccommodation.status === "selected" ? "secondary" : "outline"}>
+                                      {accommodationStatusLabel(selectedAccommodation.status)}
+                                    </Badge>
+                                    {isAccommodationDetour(selectedAccommodation) && (
+                                      <Badge className="shrink-0" variant="outline">
+                                        Abstecher
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-muted-foreground">
+                                    {formatKm(selectedAccommodation.distanceToStageEndKm)} zum Etappenende · {formatKm(selectedAccommodation.distanceToRouteKm)} zur Route
+                                  </div>
+                                </div>
+                                <Button className="w-full shrink-0 lg:w-auto" size="sm" type="button" variant="outline" onClick={() => removeStageAccommodation(stage)}>
+                                  Entfernen
+                                </Button>
                               </div>
                               {isAccommodationDetour(selectedAccommodation) && (
                                 <p className="mt-2 text-xs text-amber-800">
                                   Diese Unterkunft liegt mehr als {formatKm(accommodationDetourThresholdKm)} von der GPX-Route entfernt und ist als Abstecher geplant.
                                 </p>
                               )}
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {selectedAccommodation.link && (
+                              {selectedAccommodation.link && (
+                                <div className="mt-2 flex flex-wrap gap-2">
                                   <Button asChild size="sm" variant="outline">
                                     <a href={selectedAccommodation.link} rel="noreferrer" target="_blank">
                                       Quelle öffnen
                                     </a>
                                   </Button>
-                                )}
-                                <Button size="sm" type="button" variant="outline" onClick={() => removeStageAccommodation(stage)}>
-                                  Entfernen
-                                </Button>
-                              </div>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
                               Noch keine Übernachtung für diese Etappe ausgewählt.
                             </div>
                           )}
-                          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                          <div className="grid gap-3 md:grid-cols-2">
                             {accommodationCandidates.map((candidate) => (
-                              <div key={candidate.id} className="grid gap-2 rounded-md border bg-white p-3 text-sm">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <Bed className="h-4 w-4 text-primary" />
-                                  <strong>{candidate.name}</strong>
-                                  <Badge variant="outline">{accommodationStatusLabel(candidate.status)}</Badge>
-                                  {isAccommodationDetour(candidate) && <Badge variant="outline">Abstecher</Badge>}
+                              <div key={candidate.id} className="grid min-w-0 gap-2 rounded-md border bg-white p-3 text-sm">
+                                <div className="flex flex-wrap items-start gap-2">
+                                  <Bed className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                                  <strong className="min-w-0 flex-1 break-words">{candidate.name}</strong>
+                                  <Badge className="shrink-0" variant="outline">
+                                    {accommodationStatusLabel(candidate.status)}
+                                  </Badge>
+                                  {isAccommodationDetour(candidate) && (
+                                    <Badge className="shrink-0" variant="outline">
+                                      Abstecher
+                                    </Badge>
+                                  )}
                                 </div>
-                                <div className="text-muted-foreground">
+                                <div className="break-words text-muted-foreground">
                                   {candidate.type} · {candidate.place}
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{formatKm(candidate.distanceToStageEndKm)} zum Etappenende</span>
                                   <span>{formatKm(candidate.distanceToRouteKm)} zur Route</span>
-                                  <span>Quelle: {candidate.source ?? "MVP-Daten"}</span>
+                                  <span className="break-words">Quelle: {candidate.source ?? "MVP-Daten"}</span>
                                 </div>
                                 {isAccommodationDetour(candidate) && (
                                   <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
                                     Abseits der GPX-Route. Nur als Abstecher übernehmen; keine automatische Routenänderung.
                                   </p>
                                 )}
-                                <div className="flex flex-col gap-2 sm:flex-row">
-                                  <Button className="w-full" size="sm" type="button" onClick={() => updateStageAccommodation(stage, candidate, "selected")}>
-                                    Übernachtung wählen
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <Button className="w-full whitespace-normal text-center" size="sm" type="button" onClick={() => updateStageAccommodation(stage, candidate, "selected")}>
+                                    Als Übernachtung wählen
                                   </Button>
-                                  <Button className="w-full" size="sm" type="button" variant="outline" onClick={() => updateStageAccommodation(stage, candidate, "planned")}>
-                                    Merken
+                                  <Button className="w-full whitespace-normal text-center" size="sm" type="button" variant="outline" onClick={() => updateStageAccommodation(stage, candidate, "planned")}>
+                                    Vormerken
                                   </Button>
                                 </div>
                               </div>
                             ))}
+                            {accommodationCandidates.length === 0 && selectedAccommodation && (
+                              <div className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
+                                Die ausgewählte Unterkunft wurde aus der Kandidatenliste ausgeblendet.
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
