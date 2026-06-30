@@ -8,8 +8,9 @@ Stand: 2026-06-22
 2. Route kürzen
 3. Etappen erzeugen
 4. Etappen bearbeiten
-5. Karte oder Höhenprofil anzeigen
-6. Speichern oder GPX exportieren
+5. Unterkunft je Etappe planen
+6. Karte oder Höhenprofil anzeigen
+7. Speichern oder GPX exportieren
 
 ## Bedienlogik
 
@@ -23,6 +24,8 @@ Stand: 2026-06-22
 - Die lokale MVP-Ortssuche projiziert bekannte Städte/Orte auf die aktuelle GPX-Arbeitsroute und zeigt Arbeitsroute-km, Original-km und Abstand zur Route.
 - Orte können nach Bestätigung als Start, Ziel oder Etappenpunkt übernommen werden.
 - Orte verlegen die Route nicht automatisch und starten keine neue Routing-Abfrage.
+- Unterkünfte werden als Planungsdaten je Etappe geführt und verlegen die GPX-Route nicht automatisch.
+- Unterkünfte abseits der GPX-Route werden als Abstecher gekennzeichnet.
 - Ein Wechsel zur direkten Routenplanung verwirft eine geladene GPX-Route nur nach ausdrücklicher Bestätigung.
 
 ## Validierung
@@ -50,12 +53,14 @@ Stand: 2026-06-22
 - Das Höhenprofil belegt dadurch nicht dauerhaft Platz neben der Etappenbearbeitung.
 - Etappen können entweder nach gewünschter Etappenlänge oder nach Anzahl Reisetage erzeugt werden.
 - Bei Erzeugung nach Reisetagen zeigt der Planer die berechnete durchschnittliche Etappenlänge an.
+- Je Etappe zeigt der Planer einen Bereich `Unterkunft` mit Kandidaten, Entfernungen zum Etappenende und Entfernung zur Route.
+- Ausgewählte oder geplante Unterkünfte werden mit ihrem Status angezeigt.
 
 ## Export und erneutes Öffnen
 
 - Der GPX-Export schreibt aktuell die bearbeitete Routengeometrie.
 - Etappennamen, Etappenfarben und manuelle Etappenschnitte werden nicht in die GPX-Datei geschrieben.
-- `Alle Änderungen speichern` schreibt den vollständigen Browser-TourState: GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Etappenpunkte und übernommene Orte/Städte.
+- `Alle Änderungen speichern` schreibt den vollständigen Browser-TourState: GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Etappenpunkte, übernommene Orte/Städte und Unterkunftszuordnungen je Etappe.
 - Gespeicherte Touren laden die persistierte `geometryGeoJson` der Etappen über die Datenbank wieder.
 - Der lokale Test deckt den JSON-Save/Load-nahen Roundtrip der Etappengeometrie ab; der Browser-/RPi-Test bleibt der manuelle End-to-End-Prüfpunkt.
 
@@ -63,6 +68,7 @@ Stand: 2026-06-22
 
 - Keine automatische Umleitung durch Ortsnamen.
 - Ortssuche nutzt im MVP eine lokale Testliste und noch keinen produktiven externen Geocoder.
+- Unterkunftskandidaten nutzen im MVP vorhandene POI-Daten oder lokale Testdaten und noch keine produktive externe Unterkunfts-API.
 - Keine neue Routing-API.
 - Keine produktive POI-Massenabfrage.
 - Keine Hotelbuchung oder Nutzerkonten.

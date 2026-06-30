@@ -92,6 +92,10 @@ Je nach Aufgabe prüfen:
 - GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
 - Höhenprofil passt zur geladenen Route.
 - POI werden zur aktuellen Route bzw. Etappe angezeigt.
+- Unterkunftskandidaten werden je Etappe angezeigt, inklusive Entfernung zum Etappenende und Entfernung zur Route.
+- Unterkunft abseits der Route wird als Abstecher gekennzeichnet und verändert die GPX-Route nicht automatisch.
+- Unterkunft kann als geplant gemerkt oder als Übernachtungspunkt ausgewählt werden.
+- Speichern und erneutes Öffnen erhalten die Unterkunftszuordnung je Etappe.
 - Lead-/Partner-/Admin-Flows bleiben erreichbar, wenn betroffen.
 
 Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import {
+  createMockStageAccommodation,
+  isAccommodationDetour,
+  rankStageAccommodationCandidates,
+  selectStageAccommodation
+} from "../src/lib/accommodations";
 import { parseGpx } from "../src/lib/gpx";
 import {
   closestPointOnRoute,
@@ -478,6 +484,9 @@ describe("GPX parsing and stage planning", () => {
 
   it("keeps package two tour settings through a stored tour roundtrip", () => {
     const stages = createContiguousTestStages();
+    const accommodationStage = stages[1];
+    assert.ok(accommodationStage);
+    const accommodation = selectStageAccommodation(createMockStageAccommodation(accommodationStage, straightRoute), "selected");
     const rawState = JSON.stringify({
       inputMode: "gpx",
       route: {
@@ -501,11 +510,14 @@ describe("GPX parsing and stage planning", () => {
       },
       stages,
       pois: [],
-      selectedStageId: stages[1].id,
+      selectedStageId: accommodationStage.id,
       stageGenerationMode: "days",
       targetKm: 62,
       travelDays: 5,
       stageBreakpoints: [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }],
+      stageAccommodations: {
+        [accommodationStage.id]: accommodation
+      },
       status: "Tour gespeichert.",
       lastSavedAt: "2026-06-27T12:30:00.000Z",
       updatedAt: "2026-06-27T12:30:00.000Z"
@@ -518,12 +530,68 @@ describe("GPX parsing and stage planning", () => {
     assert.equal(stored.stageGenerationMode, "days");
     assert.equal(stored.targetKm, 62);
     assert.equal(stored.travelDays, 5);
-    assert.equal(stored.selectedStageId, stages[1].id);
+    assert.equal(stored.selectedStageId, accommodationStage.id);
     assert.equal(stored.lastSavedAt, "2026-06-27T12:30:00.000Z");
     assert.deepEqual(stored.stageBreakpoints, [{ id: "breakpoint-1", name: "Magdeburg", distanceKm: 38.4 }]);
+    assert.deepEqual(stored.stageAccommodations?.[accommodationStage.id], accommodation);
     assert.deepEqual(stored.stages[0].geometryGeoJson, stages[0].geometryGeoJson);
     assert.deepEqual(stored.route?.geometryGeoJson, straightRoute);
     assert.deepEqual(stored.route?.originalGeometryGeoJson, longRoute);
+  });
+
+  it("ranks accommodation POIs by stage end and route distance", () => {
+    const [stage] = createContiguousTestStages();
+    assert.ok(stage);
+    const stageEnd = stage.geometryGeoJson.coordinates.at(-1);
+    assert.ok(stageEnd);
+
+    const candidates = rankStageAccommodationCandidates(stage, straightRoute, [
+      {
+        id: "far-hotel",
+        name: "Hotel weit weg",
+        category: "ACCOMMODATION",
+        lat: stageEnd[1] + 0.5,
+        lon: stageEnd[0] + 0.5,
+        address: "Nebenort",
+        website: "https://example.invalid/far",
+        source: "test",
+        tagsJson: { accommodationType: "Hotel" }
+      },
+      {
+        id: "near-pension",
+        name: "Pension Etappenende",
+        category: "ACCOMMODATION",
+        lat: stageEnd[1] + 0.002,
+        lon: stageEnd[0] + 0.002,
+        address: "Etappenstadt",
+        website: null,
+        source: "test",
+        tagsJson: { accommodationType: "Pension" }
+      }
+    ]);
+
+    assert.equal(candidates[0].name, "Pension Etappenende");
+    assert.equal(candidates[0].type, "Pension");
+    assert.ok(candidates[0].distanceToStageEndKm < candidates[1].distanceToStageEndKm);
+    assert.equal(candidates[0].status, "candidate");
+  });
+
+  it("creates local accommodation candidates and marks route detours", () => {
+    const [stage] = createContiguousTestStages();
+    assert.ok(stage);
+    const candidate = createMockStageAccommodation(stage, straightRoute);
+    const selected = selectStageAccommodation(candidate, "selected");
+    const detourCandidate = {
+      ...candidate,
+      distanceToRouteKm: 2.4
+    };
+
+    assert.equal(candidate.stageId, stage.id);
+    assert.ok(candidate.distanceToStageEndKm > 0);
+    assert.equal(candidate.source, "Lokale MVP-Testdaten");
+    assert.equal(selected.status, "selected");
+    assert.equal(isAccommodationDetour(candidate), false);
+    assert.equal(isAccommodationDetour(detourCandidate), true);
   });
 
   it("projects a selected off-center target to the nearest existing route position", () => {
