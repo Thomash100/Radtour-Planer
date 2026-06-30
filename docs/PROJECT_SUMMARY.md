@@ -1,154 +1,114 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-21
+Stand: 2026-06-30
 
-## Produkt
+## Produktstand
 
-BikeTripHub / RadreisePlaner ist ein MVP fuer mehrtaegige Radtourplanung. Ziel ist keine reine Kartenanzeige, sondern ein planbarer Reiseablauf mit Route, Etappen, POI, Unterkuenften, Gepaecktransfer, Fahrradservice und spaeter Partner-/Monetarisierungsfunktionen.
+BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Basis einer vorhandenen GPX-Route. Der aktuelle Schwerpunkt ist die Vorführ- und Reviewfähigkeit des GPX-Workflows, nicht eine produktive Buchungs- oder Routingplattform.
 
-## Aktuelle Richtung
+## Aktueller MVP-Funktionsumfang
 
-Die aktuelle Roadmap steht in Issue #26:
+- GPX-Datei laden und als feste geometrische Grundlage verwenden.
+- Route anhand von Start-km und Ziel-km kürzen; Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet.
+- Etappen nach gewünschter Etappenlänge erzeugen.
+- Etappen nach Anzahl Reisetage erzeugen.
+- Etappen manuell bearbeiten; Geometrie, Distanz, Höhenmeter und Fahrzeit werden aus der aktuellen Arbeitsroute neu berechnet.
+- Farbige Etappen direkt auf der Karte anzeigen und anklicken.
+- Karte und Höhenprofil in einer gemeinsamen Visualisierungsfläche umschalten.
+- Orte/Städte aus lokaler MVP-Liste auf die GPX-Arbeitsroute projizieren und nach Bestätigung als Start, Ziel oder Etappenpunkt übernehmen.
+- Unterkunftskandidaten je Etappe anzeigen, vormerken oder als Übernachtungspunkt auswählen.
+- Unterkunft abseits der GPX-Route als Abstecher kennzeichnen.
+- Gesamte Tour speichern und erneut öffnen.
 
-https://github.com/Thomash100/Radtour-Planer/issues/26
+Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
 
-P0-Fokus:
+## Bekannte Einschränkungen
 
-- Startseite ohne automatische Demo-Route: umgesetzt in #28-Schnitt.
-- Gefuehrter Workflow fuer direkte Eingabe oder GPX-Import: als mehrstufige Planerstruktur vorbereitet.
-- Stabile Kartenansicht mit Vollbildmodus: eigene Route `/planer/karte` nutzt denselben lokalen TourState.
-- GPX-Bearbeitung und Etappenlogik.
-- Keine Salzburg-Muenchen-Vorbelegung nach GPX-Import.
-- Keine Luftlinie als echte Route.
-- Codex-Arbeitsstandard und Leitplanken.
+- Keine echte Buchung, Reservierung oder Zahlung.
+- Keine Nutzerkonten.
+- Keine produktive externe Unterkunfts-API.
+- Unterkunftskandidaten kommen im MVP aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
+- Keine produktive POI-Massenabfrage.
+- Keine neue Routing-API; direkte Planung nutzt weiterhin Mockrouting.
+- Orte und Unterkünfte verlegen die GPX-Route nicht automatisch.
+- GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
+- Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
-## Technischer Stand
+## Paketstatus
 
-- Next.js App Router mit TypeScript.
-- Tailwind CSS und shadcn/ui-kompatible Komponenten.
-- MapLibre GL JS mit OpenStreetMap-Rastertiles.
-- Prisma ORM mit PostgreSQL/PostGIS.
-- Redis und BullMQ fuer Hintergrundjobs.
-- Docker Compose fuer lokale Entwicklung, Raspberry Pi und Webserver.
-- Public/private-Deployment-Artefakte sind als naechster Strukturstandard vorbereitet.
-- Echte Deployment-Branches `public` und `private` werden aus geprueften Artefakten befuellt.
-- RPi-/Produktionsstart wartet explizit auf Postgres und Redis, damit App und Worker nach Neustart oder Update stabil anlaufen.
+- Paket 1: GPX-Grundbedienung abgeschlossen.
+- Paket 2: Planung nach Reisetagen und Städte/Orte entlang der Route abgeschlossen.
+- Paket 3: Unterkünfte je Etappe abgeschlossen.
+- Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung in Arbeit auf Branch `codex/package-4-mvp-release-readiness`.
 
-## Wichtige Architekturprinzipien
+Letzter nachgezogener Deployment-Stand vor Paket 4:
 
-- Modularer Monolith vor Microservices.
-- Feature-Slices statt breiter Umbauten.
-- Route, Etappen, Karte und Höhenprofil müssen dieselbe Routengrundlage nutzen.
-- GPX-Import bleibt eine zentrale Grundlage fuer die erste echte Testplanung.
-- Oeffentliche OSM-/Overpass-/Geocoding-Dienste duerfen nicht als dauerhaftes Produktionsbackend verwendet werden.
-- Datenquellen, Lizenzen und Attribution muessen sichtbar bleiben.
+- `private`: `a238223a82700c11600f31bf1e0534dce8eabbbb`
+- RPi-Smoke: erfolgreich
+- Prisma: nicht aktualisiert
+- Plesk: unverändert
+- keine produktive externe Unterkunfts-API
 
-## Qualitaetsstandard
+## Paket 4: Release-Readiness
 
-Vor Abschluss eines Entwicklungsabschnitts:
+Paket 4 konsolidiert Darstellung, Dokumentation, Demo-Fähigkeit, rechtliche Grundstruktur, SEO-Basis und Deployment-Bewertung. Es enthält keine neue Fachfunktion und keine Änderung am Public-/Private-Konzept.
 
-- `git diff --check`
-- `npm run lint`
-- `npm run typecheck` oder `tsc --noEmit`
-- `npm run build`
-- bei Deployment: Docker-/Raspberry-Pi-Pruefung
-- PR oder Issue mit Testergebnis und manuellen Pruefpunkten aktualisieren
+Umgesetzt bzw. vorbereitet:
 
-## Aktueller Arbeitsstandard
+- Startseite beschreibt den aktuellen MVP-Stand und bevorzugt GPX als Einstieg.
+- Demo-Tour wird nur nach ausdrücklicher Aktion geladen und zeigt den MVP mit Reisetagen, Orten, Etappen und Unterkunftskandidaten.
+- Direkte Planung ist als Mockrouting gekennzeichnet.
+- Footer zeigt Version, Build-Datum und MVP-Status.
+- Impressum, Datenschutz, Nutzungsbedingungen und MVP-Hinweis sind als prüfpflichtige Platzhalter vorbereitet.
+- Basis-Metadaten, OpenGraph, Robots und Sitemap sind vorbereitet; Indexierung bleibt wegen MVP-/Teststatus gesperrt.
+- Partner-/Preisflächen sind als MVP-Ausblick gekennzeichnet und behaupten keine produktive Zahlung oder Buchung.
 
-Issue #27 legt fest, dass jeder Codex-Abschnitt mit einem geprueften und dokumentierten Stand endet:
+## Deployment-Strategie
 
-https://github.com/Thomash100/Radtour-Planer/issues/27
+Der aktuelle MVP ist keine rein statische Website. Die vollständige App benötigt weiter den privaten Next.js-/Docker-Stack mit API-Routen, Prisma/PostgreSQL, Redis und Worker.
 
-Details stehen in:
+Aktueller Ansatz:
 
-- [AGENTS.md](../AGENTS.md)
-- [docs/CODEX_WORKFLOW.md](CODEX_WORKFLOW.md)
-- [docs/ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md)
-- [docs/GPX_STAGE_MVP.md](GPX_STAGE_MVP.md)
-- [docs/TESTING.md](TESTING.md)
+- `public`: öffentlicher Webroot-/Asset-/Proxy-Bereich mit reduziertem Umfang.
+- `private`: serverseitige Next.js-App inklusive API, Prisma, Worker- und Deployment-Skripten.
 
-## Aktueller Stand nach #28-Schnitt
+Eine Plesk- oder rein statische Webseitenvariante wäre ein separater Produktzuschnitt mit reduziertem Funktionsumfang und wird in Paket 4 nicht umgesetzt.
 
-- Startseite zeigt keine Salzburg-/Muenchen-Vorbelegung mehr.
-- `/planer` trennt Eingabeart, direkte Route, GPX-Import, Übersicht, Bearbeitung und Etappen als Workflow-Schritte.
-- Explizite Demo-Tour bleibt verfuegbar, wird aber nicht automatisch geladen.
-- Lokaler TourState speichert Route, Etappen und POI fuer Ruecksprung und Vollbildkarte.
-- `/planer/karte` ist ein eigener Kartenarbeitsbereich mit Ruecksprung zur Bearbeitung und Etappenplanung.
+## Qualitätsstandard
 
-## Aktueller Stand nach #29-Abnahme
+Vor Paket-4-Stopppunkt:
 
-- PR #25 wurde nach fachlicher RPi-/Browser-Abnahme in den Integrationsbranch gemergt: `5c15c827624f75005595d05e2c63df0778a31886`.
-- Der #29-Branch wurde auf dem Raspberry Pi per `rpi-update.sh` gestartet; App- und Worker-Healthcheck waren erfolgreich.
-- Im Browser wurde eine echte GPX-Datei aus `gps-touring/sample-gpx` geladen und vollstaendig angezeigt.
-- GPX-Start und -Ende wurden entlang der Route getrimmt: km 2,0 bis km 76,8.
-- Nach dem Trim wurden 2 Etappen nach km erzeugt.
-- Eine Etappe wurde manuell per Start-km, Ziel-km und Länge geändert: 0,0 -> 0,5 km, 37,4 -> 38,9 km und 37,4 -> 38,4 km.
-- Distanz, Höhenmeter und Fahrzeit wurden neu berechnet; Höhenmeter stiegen im Test von 259 auf 266 Hm.
-- Farbige Etappenlinien, Speichern, erneutes Oeffnen und persistierte Etappengeometrie wurden geprueft.
-- Nach dem Merge wurde ein kurzer RPi-Smoke-Test durchgefuehrt: `/api/health` meldete `ok`, `/planer` oeffnete die Planer-Seite und die gespeicherte Beispielroute `cmqnvfw150043fuiv96ttfpr2` oeffnete mit persistierter Etappe `38.4 km`.
-- Prisma wurde im Rahmen von #29 nicht aktualisiert; der angezeigte Prisma-Update-Hinweis bleibt ein separater technischer Auftrag.
+```bash
+git diff --check
+npm test
+npm run typecheck
+npm run lint
+npm run build
+npm run artifact:private
+npm run artifact:check-private
+```
 
-## Aktueller Stand nach GPX-/Etappen-MVP-Konsolidierung
+Zusätzlich, weil Startseite, Legal-Seiten und öffentliche Basisartefakte betroffen sind:
 
-- Der Planer trennt Route kürzen, Etappen erzeugen und Etappen bearbeiten in eigene Workflow-Schritte.
-- Der Planer erklärt direkt im GPX-/Etappenbereich, dass die GPX-Route die feste Grundlage bleibt.
-- Start-km, Ziel-km und Länge werden im Arbeitskontext kurz erklärt.
-- Orte dienen im MVP als Etappennamen oder Projektion auf die bestehende Route und verlegen die Route nicht automatisch.
-- Ungültige km-Eingaben werden abgefangen: Start-km kleiner 0, Ziel-km größer als Routenlänge, Ziel-km kleiner/gleich Start-km und Länge kleiner/gleich 0 erzeugen Statusmeldungen statt kaputter Geometrie.
-- Gekürzte Routen werden sichtbar markiert; die gekürzte Länge und der zugrunde liegende GPX-km-Bereich werden angezeigt.
-- Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet; nachträgliche Korrekturen kürzen nicht erneut die bereits gekürzte Arbeitsroute.
-- `Kürzung zurücksetzen` stellt die vollständige Original-GPX-Route wieder her.
-- Routenklick kann als Start, Ziel oder Etappenpunkt übernommen werden; die Route ändert sich erst nach ausdrücklicher Übernahme bzw. Kürzungsaktion.
-- Ortssuche im GPX-Modus nutzt eine lokale MVP-Ortsliste, projiziert Orte auf die bestehende GPX-Route und verlegt die Route nicht automatisch.
-- Etappenlänge erzeugt Vorschläge entlang der aktuellen GPX-Arbeitsroute; bestehende Etappen werden nur nach Bestätigung ersetzt.
-- Etappen können zusätzlich nach Anzahl Reisetage erzeugt werden; die durchschnittliche Etappenlänge wird aus der aktuellen GPX-Arbeitsroute berechnet.
-- Direkte Routenplanung verwirft eine geladene GPX-Route nur nach Bestätigung.
-- Große Startkürzungen wie 300 km bleiben stabil, wenn das End-km-Feld durch die Anzeige auf eine Nachkommastelle gerundet ist.
-- Karte und Höhenprofil sind im Planer umschaltbar; die Etappenbearbeitung wird nicht mehr dauerhaft durch das Höhenprofil in eine schmale Spalte gedrückt.
-- Manuell geänderte Etappen werden als `Geometrie aktualisiert` markiert und nach dem Speichern als `Gespeichert`.
-- Exportstand ist dokumentiert: GPX exportiert die bearbeitete Routengeometrie; vollständige Etappenmetadaten bleiben in der gespeicherten Tour und werden noch nicht in GPX geschrieben.
-- Tests decken ungültige km-Bereiche, außerhalb der Route liegende Grenzen, große 300-km-Startkürzung, Reisetage-Aufteilung, Ortprojektion, manuelle Geometrie-Neuberechnung und einen JSON-Save/Load-nahen Roundtrip der `geometryGeoJson` ab.
+```bash
+npm run artifact:public
+npm run artifact:check-public
+```
 
-## Aktueller Arbeitsblock Paket 2
+## Manueller Paket-Review nach lokalem Abschluss
 
-- Paket 2 bündelt #43 und #44 in einem zusammenhängenden Entwicklungsblock.
-- Umfang: Route nach Anzahl Reisetage aufteilen, Etappenlänge weiterhin unterstützen, Städte/Orte entlang der GPX-Route suchen, Ort auf die GPX-Route projizieren und als Start, Ziel oder Etappenziel übernehmen.
-- Es gibt keine automatische Routenverlagerung und kein Neurouting durch Ortsnamen.
-- `Alle Änderungen speichern` ist die eindeutige Aktion für die vollständige Tour; der Planer zeigt danach `Tour gespeichert.` und optional den Zeitpunkt der letzten Speicherung.
-- Der vollständige Browser-TourState enthält GPX-/Arbeitsroute, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung sowie gesetzte bzw. übernommene Orte/Etappenpunkte.
-- Bestehende manuelle Etappen werden bei Neuberechnung nach Länge oder Reisetagen nur nach Bestätigung ersetzt.
-- Manuelle RPi-/Browser-Abnahme erfolgt erst am Ende des Pakets, nicht nach kleinen UI-/UX-Zwischenschritten.
-
-## Aktueller Arbeitsblock Paket 3
-
-- Paket 3 bereitet Unterkünfte als Planungsbestandteil je Etappe vor, ohne Buchung und ohne produktive externe API-Pflicht.
-- Je Etappe zeigt der Planer Unterkunftskandidaten aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
-- Unterkunftsdaten enthalten Name, Typ, Ort, Koordinate, Entfernung zum Etappenende, Entfernung zur GPX-Route, optionale Quelle und Status.
-- Nutzer können eine Unterkunft als geplanten Kandidaten merken oder als Übernachtungspunkt auswählen.
-- Unterkünfte ändern die GPX-Route nicht automatisch; abseits der Route liegende Unterkünfte werden als Abstecher gekennzeichnet.
-- `Alle Änderungen speichern` erhält die Unterkunftszuordnung im vollständigen Browser-TourState, sodass erneutes Öffnen die Auswahl wiederherstellt.
-- Keine Zahlung, keine Nutzerkonten, keine Hotelbuchung, keine produktive externe Unterkunfts-API und keine Prisma-Aktualisierung in diesem Paket.
-
-## Deployment-Struktur
-
-- Arbeitsbranches bleiben vollstaendige Entwicklungsstaende mit Quellcode, Tests, Doku und Buildlogik.
-- `public` soll nur oeffentlich auslieferbare Webroot-/Asset-/Proxy-Dateien enthalten.
-- `private` soll die serverseitige Next.js-Anwendung mit API, Prisma, Redis-/Worker-Anbindung und Beispielkonfiguration enthalten.
-- Die aktuelle App ist nicht als rein statischer Export geeignet; empfohlen ist Next.js-Serverbetrieb im privaten Bereich mit oeffentlichem Webroot/Reverse Proxy.
-- Lokale Artefakte werden mit `npm run artifact:public` und `npm run artifact:private` unter `artifacts/` erzeugt und mit den zugehoerigen Check-Skripten geprueft.
-- Der Branch `public` entspricht dem oeffentlichen Zielordner; der Branch `private` entspricht dem privaten/serverseitigen Zielordner.
-- Nach dem Push der Deployment-Branches bleibt ein manueller Server- oder Raspberry-Pi-Deploytest erforderlich.
-
-## RPi-Startrobustheit
-
-- `scripts/start-production.sh` wartet vor Prisma auf Postgres.
-- `worker` wartet vor BullMQ-Start auf Redis.
-- `scripts/rpi-install.sh` und `scripts/rpi-update.sh` pruefen App- und Worker-Health und geben bei Fehlern relevante Logs aus.
-- PR #40 wurde auf dem Raspberry Pi mit hartem Neustarttest erfolgreich abgenommen: `docker compose down --remove-orphans`, `docker network prune -f`, `docker compose up -d --build`, danach `postgres`, `redis`, `app` und `worker` healthy.
-- Der Healthcheck `/api/health` meldete `{"status":"ok","service":"radtour-planer","timestamp":"2026-06-20T22:14:48.092Z"}`.
-
-## Naechste fachliche Arbeit
-
-- #29 ist fachlich abgenommen und integriert.
-- Naechste fachliche Erweiterungen bleiben ausserhalb dieses Stands: Hotelbuchung, Nutzerkonten, produktive POI-Massenabfrage, neue Routing-API und Aenderungen am public/private-Konzept.
+- `/api/health`
+- `/planer`
+- Startseite
+- Demo-/Beispielroute
+- GPX laden
+- Route kürzen
+- Etappen nach Tagen erzeugen
+- Orte/Städte übernehmen
+- Unterkunft zuordnen
+- gesamte Tour speichern
+- Route erneut öffnen
+- Rechtliche Seiten öffnen
+- Footer/Version prüfen
+- mobile Ansicht prüfen
+- prüfen, dass keine produktive externe API, Buchung oder Zahlung suggeriert wird

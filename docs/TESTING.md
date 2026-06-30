@@ -1,22 +1,29 @@
-# Testing und Pruefstandard
+# Testing und Prüfstandard
 
-Dieses Dokument definiert die Mindestpruefung fuer Entwicklungsabschnitte.
+Dieses Dokument definiert die Mindestprüfung für Entwicklungsabschnitte.
 
 ## Standardchecks
 
-Vor Commit oder PR-Kommentar:
-
 ```bash
 git diff --check
-npm run lint
+npm test
 npm run typecheck
+npm run lint
 npm run build
 ```
 
-Wenn `npm run typecheck` nicht vorhanden ist, direkt ausfuehren:
+Wenn Deployment-Artefakte betroffen sind:
 
 ```bash
-npx tsc --noEmit
+npm run artifact:private
+npm run artifact:check-private
+```
+
+Wenn Startseite, öffentliche Seiten oder Webroot-/Asset-Bestandteile betroffen sind:
+
+```bash
+npm run artifact:public
+npm run artifact:check-public
 ```
 
 ## Erwartete Build-Hinweise
@@ -28,11 +35,56 @@ Nicht akzeptabel:
 - Redis-Connection-Errors im Build.
 - TypeScript-Fehler.
 - ESLint-Fehler.
-- fehlende oder inkonsistente Lockfile-Abhaengigkeiten.
+- fehlende oder inkonsistente Lockfile-Abhängigkeiten.
 
-## Docker-Pruefung
+## Manuelle Paketprüfung
 
-Bei Docker-, Deployment- oder Raspberry-Pi-Aenderungen:
+Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.
+
+## GPX-/Etappen-MVP
+
+Je nach Paket prüfen:
+
+- Startseite öffnet ohne automatische Demo-Route.
+- `/planer` öffnet ohne sichtbare Fehler.
+- GPX-Import zeigt die importierte Route.
+- Start/Ziel stammen nach GPX-Import nicht aus Demo-Werten.
+- Karte ist sichtbar und Etappenlinien sind farbig unterscheidbar.
+- Karte/Höhenprofil-Umschaltung funktioniert ohne gequetschte Etappenliste.
+- Route kürzen arbeitet aus der Original-GPX-Geometrie, nicht kumulativ.
+- Große Startkürzung, z. B. Start ab 300 km, bleibt stabil.
+- `Kürzung zurücksetzen` stellt die vollständige Originalroute wieder her.
+- Etappen können nach Länge und nach Reisetagen erzeugt werden.
+- Manuelle Etappenänderungen aktualisieren Geometrie, Folgeetappen, Distanz, Höhenmeter und Fahrzeit.
+- Ungültige km- oder Reisetage-Eingaben werden verständlich abgelehnt.
+- Orte/Städte werden auf die GPX-Route projiziert und erst nach Bestätigung übernommen.
+- Abbrechen einer Ortprojektion verändert Route und Etappenpunkte nicht.
+- Versehentliche direkte Routenplanung bei geladener GPX-Route zeigt eine Bestätigung.
+- Unterkunftskandidaten werden je Etappe angezeigt.
+- Unterkunft abseits der Route wird als Abstecher gekennzeichnet und verändert die GPX-Route nicht automatisch.
+- Unterkunft kann als geplant gemerkt oder als Übernachtungspunkt ausgewählt werden.
+- `Alle Änderungen speichern` zeigt nach Erfolg `Tour gespeichert.`.
+- Erneutes Öffnen erhält Route, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, Orte/Etappenpunkte und Unterkunftszuordnungen.
+- GPX-Export schreibt die bearbeitete Routengeometrie; Etappen- und Unterkunftsmetadaten bleiben im MVP im gespeicherten TourState.
+
+## Paket-4-Release-Readiness
+
+Zusätzlich prüfen:
+
+- Startseite beschreibt den aktuellen MVP ohne produktive Überversprechen.
+- GPX ist als empfohlener Einstieg erkennbar.
+- Demo-Tour wird nur durch ausdrückliche Aktion geladen.
+- Direkte Planung ist als Mockrouting bzw. eingeschränkter MVP-Modus gekennzeichnet.
+- Impressum, Datenschutz, Nutzungsbedingungen und MVP-Hinweis öffnen ohne Fehler.
+- Rechtliche Seiten enthalten nur prüfpflichtige Platzhalter und keine erfundenen Betreiberangaben.
+- Footer zeigt MVP-Status, Version und Build-Datum.
+- Robots/Sitemap sind vorbereitet; Indexierung bleibt bis zur Freigabe gesperrt.
+- Partner-/Preisflächen behaupten keine produktive Buchung, Zahlung oder externe Unterkunfts-API.
+- Mobile Ansicht der Startseite, Legal-Seiten und des Planers erzeugt keinen horizontalen Overflow.
+
+## Docker/RPi-Prüfung
+
+Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:
 
 ```bash
 docker compose build
@@ -48,78 +100,27 @@ docker compose -f docker-compose.rpi.yml up -d
 curl -fsS http://localhost:3000/api/health
 ```
 
-## Public/private-Artefaktpruefung
-
-Bei Webserver- oder public/private-Deployment-Aenderungen:
-
-```bash
-npm run artifact:public
-npm run artifact:check-public
-npm run artifact:private
-npm run artifact:check-private
-```
-
-Die Artefakte liegen lokal unter `artifacts/` und werden nicht committed.
-
-## Manuelle UI-Pruefung
-
-Je nach Aufgabe prüfen:
-
-- Startseite öffnet ohne automatische Demo-Route.
-- `/planer` öffnet ohne sichtbare Fehler.
-- GPX-Import zeigt die importierte Route.
-- Start/Ziel stammen nach GPX-Import nicht aus Demo-Werten.
-- Karte springt nicht unkontrolliert.
-- Vollbildkarte kann geöffnet und verlassen werden.
-- Etappenlinien sind farbig unterscheidbar.
-- Etappen können erzeugt, angepasst und gespeichert werden.
-- Ungültige Etappen-km werden verständlich abgelehnt und verändern die bisherige Geometrie nicht.
-- Wiederholte Routenkürzungen werden aus der Original-GPX-Route berechnet: Start 300 km, danach 250 km, danach 0 km dürfen nicht kumulativ schrumpfen.
-- `Kürzung zurücksetzen` stellt die vollständige Originalroute wieder her und setzt Etappen/POI zur Neuberechnung zurück.
-- Startortsuche ist im GPX-Kürzungsworkflow deaktiviert oder zeigt den Hinweis auf Start-km statt automatischer Routenänderung.
-- Gekürzte Routen zeigen gekürzte Länge und GPX-km-Bereich an.
-- Große Startkürzung, z. B. Start ab 300 km auf einer langen Route, bleibt stabil.
-- Änderung der Etappenlänge erzeugt Vorschläge neu; bestehende Etappen werden nur nach Bestätigung ersetzt.
-- Aufteilung nach Reisetagen erzeugt die gewünschte Anzahl Etappen; bestehende Etappen werden nur nach Bestätigung ersetzt.
-- Ungültige Reisetage wie 0, negative Werte, Kommazahlen oder unbrauchbar viele Tage werden verständlich abgelehnt.
-- Ortssuche im GPX-Modus projiziert lokale MVP-Orte auf die bestehende GPX-Route und zeigt Arbeitsroute-km, Original-km und Abstand zur Route.
-- Ort als Start, Ziel oder Etappenpunkt wird erst nach ausdrücklicher Bestätigung übernommen.
-- Abbrechen einer Ortprojektion verändert weder Route noch Etappenpunkte.
-- Versehentliche direkte Routenplanung bei geladener GPX-Route zeigt eine Bestätigung und erhält die GPX-Route bei Abbruch.
-- Karte ist Standardansicht; Umschalten auf Höhenprofil funktioniert ohne die Etappenliste seitlich zusammenzudrücken.
-- Geänderte Etappen zeigen eine Rückmeldung zur neu berechneten Geometrie.
-- `Alle Änderungen speichern` zeigt nach Erfolg `Tour gespeichert.` und erhält Route, gekürzte Route, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung sowie gesetzte Orte/Etappenpunkte beim erneuten Öffnen.
-- GPX-Export schreibt die bearbeitete Routengeometrie; Etappenmetadaten bleiben im MVP in der gespeicherten Tour.
-- Höhenprofil passt zur geladenen Route.
-- POI werden zur aktuellen Route bzw. Etappe angezeigt.
-- Unterkunftskandidaten werden je Etappe angezeigt, inklusive Entfernung zum Etappenende und Entfernung zur Route.
-- Unterkunft abseits der Route wird als Abstecher gekennzeichnet und verändert die GPX-Route nicht automatisch.
-- Unterkunft kann als geplant gemerkt oder als Übernachtungspunkt ausgewählt werden.
-- Speichern und erneutes Öffnen erhalten die Unterkunftszuordnung je Etappe.
-- Lead-/Partner-/Admin-Flows bleiben erreichbar, wenn betroffen.
-
-Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.
-
 ## PR-Dokumentation
 
-Jeder PR oder Issue-Abschlusskommentar muss enthalten:
+PR- oder Issue-Abschlusskommentare sollen enthalten:
 
 - Commit-Hash
 - Branch
 - Ergebnis `git diff --check`
+- Ergebnis `npm test`
 - Ergebnis Lint
 - Ergebnis Typecheck
 - Ergebnis Build
+- Ergebnis Artefaktprüfung, falls betroffen
 - Ergebnis Docker-/Raspberry-Pi-Test, falls betroffen
-- Ergebnis public/private-Artefaktpruefung, falls betroffen
-- manuelle Pruefpunkte
-- Entscheidung: merge empfohlen oder Nacharbeit erforderlich
+- manuelle Prüfpunkte
+- Entscheidung: mergefähig oder Nacharbeit erforderlich
 
-## Wenn Tests nicht moeglich sind
+## Wenn Tests nicht möglich sind
 
-Wenn eine Pruefung lokal nicht moeglich ist, muss dokumentiert werden:
+Dokumentieren:
 
 - welcher Check nicht lief,
 - warum er nicht lief,
-- welcher Ersatzcheck durchgefuehrt wurde,
-- welcher manuelle Stopppunkt fuer den Nutzer bleibt.
+- welcher Ersatzcheck durchgeführt wurde,
+- welcher manuelle Stopppunkt bleibt.

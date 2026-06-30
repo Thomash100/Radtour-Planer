@@ -1338,7 +1338,16 @@ export function PlannerClient({
     }
   }
 
-  async function planRoute(values: PlannerForm, routeWaypoints = waypoints) {
+  async function planRoute(
+    values: PlannerForm,
+    routeWaypoints = waypoints,
+    options: {
+      stageRequest?: PendingStageGeneration;
+      finalStep?: PlannerStep;
+      statusPrefix?: string;
+      seedFirstAccommodation?: boolean;
+    } = {}
+  ) {
     setIsBusy(true);
     setLeadStatus("");
     setCalculation(null);
@@ -1379,11 +1388,20 @@ export function PlannerClient({
 
       const savedData: SavedRoute = { ...calculatedRoute, id: saved.route.id };
       setSavedRoute(savedData);
-      const generatedStages = await generateStages(saved.route.id, { mode: "distance", targetKm: values.targetKm, breakpoints: [] });
+      const stageRequest = options.stageRequest ?? { mode: "distance", targetKm: values.targetKm, breakpoints: [] };
+      const generatedStages = await generateStages(saved.route.id, stageRequest);
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
+      if (options.seedFirstAccommodation && generatedStages[0]) {
+        const candidate = rankStageAccommodationCandidates(generatedStages[0], savedData.geometryGeoJson, poiPayload?.pois ?? [])[0];
+        if (candidate) {
+          setStageAccommodations({
+            [generatedStages[0].id]: selectStageAccommodation(candidate, "planned")
+          });
+        }
+      }
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
-      setStatus(`Route bereit: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
-      setPlannerStep("overview");
+      setStatus(`${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
+      setPlannerStep(options.finalStep ?? "overview");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
     } finally {
@@ -1453,18 +1471,30 @@ export function PlannerClient({
   }
 
   async function startDemoTour() {
+    const demoTravelDays = 6;
     const demoValues = {
       ...plannerForm.getValues(),
-      start: "München",
-      end: "Salzburg",
-      profile: "balanced" as const
+      start: "Dresden",
+      end: "Hamburg",
+      profile: "touristic" as const,
+      targetKm: 80,
+      corridorKm: 8
     };
     plannerForm.setValue("start", demoValues.start);
     plannerForm.setValue("end", demoValues.end);
     plannerForm.setValue("profile", demoValues.profile);
+    plannerForm.setValue("targetKm", demoValues.targetKm);
+    plannerForm.setValue("corridorKm", demoValues.corridorKm);
+    setStageGenerationMode("days");
+    setTravelDays(demoTravelDays);
     setWaypoints([]);
     setInputMode("demo");
-    await planRoute(demoValues, []);
+    await planRoute(demoValues, [], {
+      stageRequest: { mode: "days", travelDays: demoTravelDays, targetKm: demoValues.targetKm, breakpoints: [] },
+      finalStep: "stage-edit",
+      statusPrefix: "MVP-Demo bereit",
+      seedFirstAccommodation: true
+    });
   }
 
   function addWaypoint() {
@@ -2014,8 +2044,8 @@ export function PlannerClient({
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader>
-              <CardTitle>Neue Tour planen</CardTitle>
-              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben.</CardDescription>
+              <CardTitle>Direkte Planung ansehen</CardTitle>
+              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben. Im MVP weiterhin Mockrouting.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full" type="button" onClick={() => {
@@ -2045,7 +2075,7 @@ export function PlannerClient({
           <Card>
             <CardHeader>
               <CardTitle>Demo-Tour öffnen</CardTitle>
-              <CardDescription>Demo bewusst laden, nicht automatisch beim Start.</CardDescription>
+              <CardDescription>Dresden bis Hamburg mit Reisetagen, Orten und Unterkunftskandidaten bewusst laden.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full" disabled={isBusy} type="button" variant="secondary" onClick={() => void startDemoTour()}>
@@ -3063,7 +3093,7 @@ export function PlannerClient({
                 {selectedPoi ? categoryIcon(selectedPoi.category) : <Bed className="h-4 w-4" />}
                 Details
               </CardTitle>
-              <CardDescription>{selectedPoi?.name ?? "Noch kein POI gewaehlt"}</CardDescription>
+              <CardDescription>{selectedPoi?.name ?? "Noch kein POI gewählt"}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {selectedPoi ? (
@@ -3083,12 +3113,12 @@ export function PlannerClient({
                     <Button asChild variant="outline">
                       <a href={selectedPoi.website ?? "https://example.com"} rel="noreferrer" target="_blank">
                         <BadgeEuro className="h-4 w-4" />
-                        Zur Buchung
+                        Website öffnen
                       </a>
                     </Button>
                     <Button disabled={!selectedPoi.partnerId} type="button" onClick={leadForm.handleSubmit(submitLead)}>
                       <Briefcase className="h-4 w-4" />
-                      Anfrage
+                      MVP-Anfrage
                     </Button>
                   </div>
                   {selectedPoi.partnerId ? (
@@ -3125,20 +3155,20 @@ export function PlannerClient({
                       <Textarea {...leadForm.register("message")} />
                       <Button className="w-full" type="submit">
                         <CheckCircle2 className="h-4 w-4" />
-                        Anfrage senden
+                        MVP-Anfrage senden
                       </Button>
                       {leadStatus && <p className="text-sm text-muted-foreground">{leadStatus}</p>}
                     </form>
                   ) : (
                     <p className="text-sm text-muted-foreground">
                       {Boolean(selectedPoi.tagsJson?.testData)
-                        ? "Dieser Eintrag ist ein markierter Test-POI für die GPX-Abnahme. Buchungsanfragen sind nur für echte Partnerbetriebe aktiv."
-                        : "Anfragen sind im MVP für freigeschaltete Partner verfügbar."}
+                        ? "Dieser Eintrag ist ein markierter Test-POI für die GPX-Abnahme. Es wird keine Buchung ausgelöst."
+                        : "MVP-Anfragen sind nur für freigeschaltete Partnerbetriebe vorbereitet und ersetzen keine Buchung."}
                     </p>
                   )}
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">Waehle einen Marker oder Listeneintrag aus.</p>
+                <p className="text-sm text-muted-foreground">Wähle einen Marker oder Listeneintrag aus.</p>
               )}
             </CardContent>
           </Card>
