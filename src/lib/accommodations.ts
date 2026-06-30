@@ -1,6 +1,7 @@
 import { distancePointToLineKm, haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 
 export type AccommodationStatus = "planned" | "selected" | "candidate";
+export type AccommodationDataQuality = "partner" | "poi" | "local-test";
 
 export type AccommodationPoiInput = {
   id: string;
@@ -13,6 +14,7 @@ export type AccommodationPoiInput = {
   source?: string | null;
   tagsJson?: Record<string, unknown>;
   distanceToRouteKm?: number;
+  partnerId?: string | null;
 };
 
 export type AccommodationStageInput = {
@@ -35,9 +37,29 @@ export type StageAccommodation = {
   source?: string | null;
   link?: string | null;
   status: AccommodationStatus;
+  dataQuality?: AccommodationDataQuality;
+  searchRadiusKm?: number;
 };
 
 export const accommodationDetourThresholdKm = 1.5;
+
+export function stageAccommodationSearchRadiusKm(stage: AccommodationStageInput & { distanceKm?: number }) {
+  const distanceKm = Number(stage.distanceKm ?? 0);
+  if (distanceKm >= 90) return 12;
+  if (distanceKm >= 55) return 8;
+  return 5;
+}
+
+export function accommodationDataQualityLabel(value: AccommodationDataQuality) {
+  if (value === "partner") return "Partnerdaten";
+  if (value === "poi") return "POI-Daten";
+  return "Lokale MVP-Testdaten";
+}
+
+function dataQualityForPoi(poi: AccommodationPoiInput): AccommodationDataQuality {
+  if (poi.partnerId) return "partner";
+  return poi.source === "generated-test" || Boolean(poi.tagsJson?.testData) ? "local-test" : "poi";
+}
 
 function stageKey(stage: AccommodationStageInput) {
   return stage.id ?? `day-${stage.dayNumber}`;
@@ -84,7 +106,8 @@ export function isAccommodationDetour(accommodation: Pick<StageAccommodation, "d
 export function toStageAccommodationCandidate(
   stage: AccommodationStageInput,
   routeGeometry: LineStringGeoJson,
-  poi: AccommodationPoiInput
+  poi: AccommodationPoiInput,
+  searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
 ): StageAccommodation {
   const coordinate: Position = [poi.lon, poi.lat];
   const stageEnd = stageEndCoordinate(stage);
@@ -101,11 +124,18 @@ export function toStageAccommodationCandidate(
     distanceToRouteKm: roundedKm(distancePointToLineKm(coordinate, routeGeometry.coordinates)),
     source: poi.source ?? "POI",
     link: poi.website ?? null,
-    status: "candidate"
+    status: "candidate",
+    dataQuality: dataQualityForPoi(poi),
+    searchRadiusKm
   };
 }
 
-export function createMockStageAccommodation(stage: AccommodationStageInput, routeGeometry: LineStringGeoJson, index = 0): StageAccommodation {
+export function createMockStageAccommodation(
+  stage: AccommodationStageInput,
+  routeGeometry: LineStringGeoJson,
+  index = 0,
+  searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
+): StageAccommodation {
   const stageEnd = stageEndCoordinate(stage);
   const direction = index % 2 === 0 ? 1 : -1;
   const offset = 0.0045 + (stage.dayNumber % 3) * 0.0014;
@@ -125,7 +155,9 @@ export function createMockStageAccommodation(stage: AccommodationStageInput, rou
     distanceToRouteKm: roundedKm(distancePointToLineKm(coordinate, routeGeometry.coordinates)),
     source: "Lokale MVP-Testdaten",
     link: null,
-    status: "candidate"
+    status: "candidate",
+    dataQuality: "local-test",
+    searchRadiusKm
   };
 }
 
@@ -133,15 +165,17 @@ export function rankStageAccommodationCandidates(
   stage: AccommodationStageInput,
   routeGeometry: LineStringGeoJson,
   pois: AccommodationPoiInput[],
-  limit = 3
+  limit = 3,
+  searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
 ) {
   const candidates = pois
     .filter((poi) => poi.category === "ACCOMMODATION")
-    .map((poi) => toStageAccommodationCandidate(stage, routeGeometry, poi))
+    .map((poi) => toStageAccommodationCandidate(stage, routeGeometry, poi, searchRadiusKm))
+    .filter((candidate) => candidate.distanceToStageEndKm <= searchRadiusKm || candidate.distanceToRouteKm <= accommodationDetourThresholdKm)
     .sort((a, b) => a.distanceToStageEndKm + a.distanceToRouteKm * 0.5 - (b.distanceToStageEndKm + b.distanceToRouteKm * 0.5));
 
   const needsLocalFallback = candidates.length === 0 || candidates[0].distanceToStageEndKm > 20;
-  const withFallback = needsLocalFallback ? [createMockStageAccommodation(stage, routeGeometry), ...candidates] : candidates;
+  const withFallback = needsLocalFallback ? [createMockStageAccommodation(stage, routeGeometry, 0, searchRadiusKm), ...candidates] : candidates;
 
   return withFallback.slice(0, limit);
 }

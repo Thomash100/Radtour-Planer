@@ -647,16 +647,61 @@ export function trimRouteGeometry(geometry: LineStringGeoJson, startKm: number, 
   } satisfies LineStringGeoJson;
 }
 
-export function toGpx(geometry: LineStringGeoJson, name: string) {
-  const trkpts = geometry.coordinates
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function lineStringToGpxPoints(geometry: LineStringGeoJson) {
+  return geometry.coordinates
     .map(([lon, lat]) => `      <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}"></trkpt>`)
     .join("\n");
+}
+
+export function toGpx(geometry: LineStringGeoJson, name: string) {
+  const escapedName = escapeXml(name);
+  const trkpts = lineStringToGpxPoints(geometry);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="BikeTripHub" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata><name>${name}</name></metadata>
-  <trk><name>${name}</name><trkseg>
+  <metadata><name>${escapedName}</name></metadata>
+  <trk><name>${escapedName}</name><trkseg>
 ${trkpts}
   </trkseg></trk>
+</gpx>`;
+}
+
+export function toGpxWithStages(
+  geometry: LineStringGeoJson,
+  name: string,
+  stages: Array<{ dayNumber: number; startName?: string; endName?: string; geometryGeoJson: LineStringGeoJson }>
+) {
+  if (stages.length === 0) {
+    return toGpx(geometry, name);
+  }
+
+  const escapedName = escapeXml(name);
+  const stageTracks = stages
+    .map((stage) => {
+      const stageName = escapeXml(`Etappe ${stage.dayNumber}: ${stage.startName ?? "Start"} bis ${stage.endName ?? "Ziel"}`);
+      return `  <trk><name>${stageName}</name><trkseg>
+${lineStringToGpxPoints(stage.geometryGeoJson)}
+  </trkseg></trk>`;
+    })
+    .join("\n");
+
+  const routeTrack = `  <trk><name>${escapedName} Gesamtstrecke</name><trkseg>
+${lineStringToGpxPoints(geometry)}
+  </trkseg></trk>`;
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="BikeTripHub" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${escapedName}</name></metadata>
+${routeTrack}
+${stageTracks}
 </gpx>`;
 }

@@ -69,6 +69,8 @@ Gespeichert werden:
 
 Der GPX-Export schreibt aktuell die bearbeitete Routengeometrie. Etappennamen, Etappenfarben, manuelle Etappenschnitte und Unterkunftsmetadaten bleiben im MVP im gespeicherten TourState und werden noch nicht vollständig in die GPX-Datei geschrieben.
 
+Der Etappen-GPX-Export schreibt zusätzlich jede Etappe als eigenen Track. Unterkunftsmetadaten, Freigabe-Stand und vollständige Planungsdaten bleiben im JSON-Export der Tourverwaltung.
+
 ## Bekannte Einschränkungen
 
 - Keine produktive Routing-API.

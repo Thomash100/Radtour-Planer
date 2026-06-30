@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ShellNav } from "@/components/ShellNav";
-import { APP_BUILD_DATE, APP_MVP_STATUS, APP_VERSION } from "@/lib/version";
+import { APP_BUILD_DATE, APP_DEPLOYMENT_CHANNEL, APP_INDEXING_ALLOWED, APP_MVP_STATUS, APP_VERSION } from "@/lib/version";
 import "@/app/globals.css";
 
 export const metadata: Metadata = {
@@ -23,8 +23,8 @@ export const metadata: Metadata = {
     locale: "de_DE"
   },
   robots: {
-    index: false,
-    follow: false
+    index: APP_INDEXING_ALLOWED,
+    follow: APP_INDEXING_ALLOWED
   }
 };
 
@@ -46,6 +46,8 @@ export default function RootLayout({
               <span>Version {APP_VERSION}</span>
               <span className="text-slate-300">/</span>
               <span>Build: {APP_BUILD_DATE}</span>
+              <span className="text-slate-300">/</span>
+              <span>Kanal: {APP_DEPLOYMENT_CHANNEL}</span>
             </div>
             <nav className="flex flex-wrap gap-x-4 gap-y-2">
               <Link className="hover:text-slate-900" href="/impressum">
@@ -59,6 +61,9 @@ export default function RootLayout({
               </Link>
               <Link className="hover:text-slate-900" href="/mvp-hinweis">
                 MVP-Hinweis
+              </Link>
+              <Link className="hover:text-slate-900" href="/touren">
+                Tourverwaltung
               </Link>
             </nav>
           </div>
