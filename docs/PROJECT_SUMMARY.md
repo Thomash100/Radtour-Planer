@@ -120,6 +120,16 @@ Details stehen in:
 - Bestehende manuelle Etappen werden bei Neuberechnung nach Länge oder Reisetagen nur nach Bestätigung ersetzt.
 - Manuelle RPi-/Browser-Abnahme erfolgt erst am Ende des Pakets, nicht nach kleinen UI-/UX-Zwischenschritten.
 
+## Aktueller Arbeitsblock Paket 3
+
+- Paket 3 bereitet Unterkünfte als Planungsbestandteil je Etappe vor, ohne Buchung und ohne produktive externe API-Pflicht.
+- Je Etappe zeigt der Planer Unterkunftskandidaten aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
+- Unterkunftsdaten enthalten Name, Typ, Ort, Koordinate, Entfernung zum Etappenende, Entfernung zur GPX-Route, optionale Quelle und Status.
+- Nutzer können eine Unterkunft als geplanten Kandidaten merken oder als Übernachtungspunkt auswählen.
+- Unterkünfte ändern die GPX-Route nicht automatisch; abseits der Route liegende Unterkünfte werden als Abstecher gekennzeichnet.
+- `Alle Änderungen speichern` erhält die Unterkunftszuordnung im vollständigen Browser-TourState, sodass erneutes Öffnen die Auswahl wiederherstellt.
+- Keine Zahlung, keine Nutzerkonten, keine Hotelbuchung, keine produktive externe Unterkunfts-API und keine Prisma-Aktualisierung in diesem Paket.
+
 ## Deployment-Struktur
 
 - Arbeitsbranches bleiben vollstaendige Entwicklungsstaende mit Quellcode, Tests, Doku und Buildlogik.

@@ -1,3 +1,4 @@
+import type { StageAccommodation } from "@/lib/accommodations";
 import type { LineStringGeoJson } from "@/lib/geo";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
@@ -76,6 +77,7 @@ export type StoredTourState = {
   targetKm?: number;
   travelDays?: number;
   stageBreakpoints?: StoredStageBreakpoint[];
+  stageAccommodations?: Record<string, StageAccommodation>;
   status?: string;
   lastSavedAt?: string | null;
   updatedAt: string;
