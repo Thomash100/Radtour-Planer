@@ -1,12 +1,13 @@
-import { Bike, Building2, Gauge, Map, ShieldCheck } from "lucide-react";
+import { Bike, Building2, FlaskConical, FolderOpen, Map, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/planer", label: "Planer", icon: Map },
+  { href: "/touren", label: "Touren", icon: FolderOpen },
   { href: "/partner", label: "Partner", icon: Building2 },
-  { href: "/preise", label: "Preise", icon: Gauge },
+  { href: "/mvp-hinweis", label: "MVP", icon: FlaskConical },
   { href: "/admin/partner", label: "Admin", icon: ShieldCheck }
 ];
 
@@ -34,7 +35,7 @@ export function ShellNav() {
           })}
         </nav>
         <Button asChild size="sm">
-          <Link href="/planer">Route planen</Link>
+          <Link href="/planer?mode=gpx">GPX laden</Link>
         </Button>
       </div>
     </header>

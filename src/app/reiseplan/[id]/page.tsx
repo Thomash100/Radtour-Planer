@@ -103,7 +103,7 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
           <Badge>Reiseplan</Badge>
           <h1 className="mt-3 text-3xl font-bold">{route.name}</h1>
           <p className="mt-2 text-muted-foreground">
-            Tagesuebersicht mit Etappen, Kartenansicht, POI entlang der Route, Kontakten und Buchungslinks.
+            Tagesübersicht mit Etappen, Kartenansicht, POI entlang der Route und Kontaktinformationen.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -155,8 +155,8 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
 
       {usesTestPois && routePois.length > 0 && (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          Fuer diese Route wurden keine lokalen POI im Standardkorridor gefunden. Der Reiseplan zeigt markierte Test-POI, damit GPX-Import,
-          Etappenansicht und POI-Fluss trotzdem pruefbar sind.
+          Für diese Route wurden keine lokalen POI im Standardkorridor gefunden. Der Reiseplan zeigt markierte Test-POI, damit GPX-Import,
+          Etappenansicht und POI-Fluss trotzdem prüfbar sind.
         </div>
       )}
 
@@ -180,12 +180,12 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
                   <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                     <li>Start: {stage.startName}</li>
                     <li>Ziel: {stage.endName}</li>
-                    <li>Fahrzeit geschaetzt: {(stage.distanceKm / 17).toFixed(1)} h</li>
+                    <li>Fahrzeit geschätzt: {(stage.distanceKm / 17).toFixed(1)} h</li>
                     <li>GPX-Abschnitt: {(stage.geometryGeoJson as unknown as LineStringGeoJson).coordinates.length} Punkte</li>
                   </ul>
                 </div>
                 <div className="rounded-md border bg-white p-4">
-                  <h2 className="text-sm font-semibold">POI fuer diese Etappe</h2>
+                  <h2 className="text-sm font-semibold">POI für diese Etappe</h2>
                   <div className="mt-3 space-y-2">
                     {stagePois.slice(0, 5).map((poi) => (
                       <div key={poi.id} className="rounded-md border bg-muted/40 p-3 text-sm">
@@ -201,12 +201,12 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
                         </p>
                         {poi.website && (
                           <a className="mt-2 inline-block text-primary underline-offset-4 hover:underline" href={poi.website} rel="noreferrer" target="_blank">
-                            Buchungslink / Website
+                            Website öffnen
                           </a>
                         )}
                       </div>
                     ))}
-                    {stagePois.length === 0 && <p className="text-sm text-muted-foreground">Keine POI im Standardkorridor fuer diese Etappe.</p>}
+                    {stagePois.length === 0 && <p className="text-sm text-muted-foreground">Keine POI im Standardkorridor für diese Etappe.</p>}
                   </div>
                 </div>
               </CardContent>
@@ -231,7 +231,7 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
               </p>
             </div>
           ))}
-          {route.bookingLeads.length === 0 && <p className="text-sm text-muted-foreground">Noch keine Buchungsanfragen fuer diese Route.</p>}
+          {route.bookingLeads.length === 0 && <p className="text-sm text-muted-foreground">Noch keine MVP-Anfragen für diese Route.</p>}
         </CardContent>
       </Card>
     </main>
