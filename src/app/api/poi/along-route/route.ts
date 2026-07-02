@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { apiError } from "@/lib/api";
 import type { LineStringGeoJson } from "@/lib/geo";
+import { fetchOsmAccommodationPois } from "@/lib/osm-accommodation-pois";
 import { prisma } from "@/lib/prisma";
 import { applyPoiFilters, createRouteTestPois, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
 
@@ -23,6 +24,24 @@ function boundedNumber(value: string | null, fallback: number, min: number, max:
   return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
 }
 
+function wantsCategory(categories: PoiCategory[] | undefined, category: PoiCategory) {
+  return !categories || categories.includes(category);
+}
+
+function dedupePois(pois: RoutePoi[]) {
+  const seen = new Set<string>();
+  return pois.filter((poi) => {
+    const osmKey = poi.osmId ? `osm:${poi.osmId}` : null;
+    const coordinateKey = `${poi.name.toLowerCase()}@${poi.lat.toFixed(5)},${poi.lon.toFixed(5)}`;
+    const key = osmKey ?? coordinateKey;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -32,6 +51,7 @@ export async function GET(request: Request) {
     const categories = parseCategories(url.searchParams.get("categories"));
     const partnerOnly = url.searchParams.get("partnerOnly") === "true";
     const includeTestPois = url.searchParams.get("includeTestPois") !== "false";
+    const includeOsmAccommodations = url.searchParams.get("includeOsmAccommodations") !== "false";
     const ebikeFriendly = url.searchParams.get("ebikeFriendly") === "true";
     const bikeGarage = url.searchParams.get("bikeGarage") === "true";
     const luggageAccepted = url.searchParams.get("luggageAccepted") === "true";
@@ -66,17 +86,30 @@ export async function GET(request: Request) {
       bikeParking
     };
 
-    let sourceNotice = "";
-    let filtered = sortRoutePois(applyPoiFilters(withDistanceToRoute(pois, geometry) as RoutePoi[], filters));
+    const sourceNotices: string[] = [];
+    let routePois = withDistanceToRoute(pois, geometry) as RoutePoi[];
+
+    if (includeOsmAccommodations && !partnerOnly && wantsCategory(categories, PoiCategory.ACCOMMODATION)) {
+      const osmResult = await fetchOsmAccommodationPois(geometry, { corridorKm, timeoutMs: 3500, maxSamplePoints: 14 });
+      if (osmResult.pois.length > 0) {
+        routePois = dedupePois([...routePois, ...osmResult.pois]);
+        sourceNotices.push(`${osmResult.pois.length} echte Unterkunftsdaten aus OpenStreetMap ergänzt.`);
+      }
+      if (osmResult.warning) {
+        sourceNotices.push(osmResult.warning);
+      }
+    }
+
+    let filtered = sortRoutePois(applyPoiFilters(routePois, filters));
 
     if (filtered.length === 0 && includeTestPois && !partnerOnly) {
       filtered = sortRoutePois(applyPoiFilters(createRouteTestPois(routeId, geometry, categories), filters));
       if (filtered.length > 0) {
-        sourceNotice = "Keine lokalen POI im Korridor gefunden. Es werden markierte Test-POI entlang der Route angezeigt.";
+        sourceNotices.push("Keine lokalen/OSM-POI im Korridor gefunden. Es werden markierte Test-POI entlang der Route angezeigt.");
       }
     }
 
-    return NextResponse.json({ routeId, corridorKm, minRating, pois: filtered, sourceNotice });
+    return NextResponse.json({ routeId, corridorKm, minRating, pois: filtered, sourceNotice: sourceNotices.join(" ") });
   } catch (error) {
     return apiError(error, 500);
   }
