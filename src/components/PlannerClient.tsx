@@ -40,9 +40,11 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   accommodationDetourThresholdKm,
+  accommodationDataQualityLabel,
   isAccommodationDetour,
   rankStageAccommodationCandidates,
   selectStageAccommodation,
+  stageAccommodationSearchRadiusKm,
   type AccommodationStatus,
   type StageAccommodation
 } from "@/lib/accommodations";
@@ -54,6 +56,7 @@ import {
   routeBoundsForStage,
   routeDistanceKm,
   toGpx,
+  toGpxWithStages,
   trimRouteGeometry,
   validateTravelDayCount,
   type ElevationPoint,
@@ -62,6 +65,13 @@ import {
   type StageBreakpoint
 } from "@/lib/geo";
 import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type StoredTourState, type TourInputMode } from "@/lib/tour-state";
+import {
+  TOUR_LIBRARY_STORAGE_KEY,
+  createTourLibraryEntry,
+  parseTourLibrary,
+  serializeTourLibrary,
+  upsertTourLibraryEntry
+} from "@/lib/tour-library";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 type RouteCalculation = {
@@ -329,12 +339,14 @@ export function PlannerClient({
   initialEnd = "",
   initialMode,
   initialStep,
+  initialTourId,
   openLast = false
 }: {
   initialStart?: string;
   initialEnd?: string;
   initialMode?: string;
   initialStep?: string;
+  initialTourId?: string;
   openLast?: boolean;
 }) {
   const normalizedInitialMode = normalizeTourMode(initialMode);
@@ -387,6 +399,8 @@ export function PlannerClient({
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
   const [stageAccommodations, setStageAccommodations] = useState<Record<string, StageAccommodation>>({});
   const [lastTourSavedAt, setLastTourSavedAt] = useState<string | null>(null);
+  const [currentLibraryTourId, setCurrentLibraryTourId] = useState<string | null>(initialTourId ?? null);
+  const [tourKind, setTourKind] = useState<"demo" | "user">(normalizedInitialMode === "demo" ? "demo" : "user");
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -530,7 +544,8 @@ export function PlannerClient({
             website: poi.website,
             source: poi.source,
             tagsJson: poi.tagsJson,
-            distanceToRouteKm: poi.distanceToRouteKm
+            distanceToRouteKm: poi.distanceToRouteKm,
+            partnerId: poi.partnerId
           }))
         )
       ])
@@ -557,6 +572,8 @@ export function PlannerClient({
       const safeTravelDays = Number(travelDays);
 
       return {
+        libraryTourId: currentLibraryTourId,
+        tourKind,
         inputMode,
         route: routeValue,
         stages: stagesValue,
@@ -579,6 +596,7 @@ export function PlannerClient({
     },
     [
       inputMode,
+      currentLibraryTourId,
       lastTourSavedAt,
       pois,
       route,
@@ -590,6 +608,7 @@ export function PlannerClient({
       stages,
       status,
       targetKmValue,
+      tourKind,
       travelDays
     ]
   );
@@ -657,46 +676,83 @@ export function PlannerClient({
     [stages]
   );
 
+  const restoreStoredTourState = useCallback(
+    (stored: StoredTourState, message: string) => {
+      if (!stored.route) {
+        setStatus("Gespeicherte Tour enthält keine Route.");
+        return;
+      }
+
+      const storedRoute = routeWithOriginalGeometry(stored.route as RouteCalculation & { id?: string });
+      setInputMode(stored.inputMode);
+      setTourKind(stored.tourKind ?? (stored.inputMode === "demo" ? "demo" : "user"));
+      setCurrentLibraryTourId(stored.libraryTourId ?? null);
+      if (storedRoute.id) {
+        setSavedRoute(storedRoute as SavedRoute);
+      } else {
+        setCalculation(storedRoute);
+      }
+      setStages(stored.stages as Stage[]);
+      setPois(stored.pois as Poi[]);
+      setSelectedPoi(stored.pois.find((poi) => poi.id === stored.selectedPoiId) ?? stored.pois[0] ?? null);
+      setSelectedStageId(stored.selectedStageId ?? null);
+      if (stored.stageGenerationMode === "distance" || stored.stageGenerationMode === "days" || stored.stageGenerationMode === "custom") {
+        setStageGenerationMode(stored.stageGenerationMode);
+      }
+      if (typeof stored.targetKm === "number") {
+        plannerForm.setValue("targetKm", stored.targetKm);
+      }
+      if (typeof stored.travelDays === "number") {
+        setTravelDays(stored.travelDays);
+      }
+      if (Array.isArray(stored.stageBreakpoints)) {
+        setStageBreakpoints(
+          stored.stageBreakpoints.map((breakpoint, index) => ({
+            id: breakpoint.id ?? `stored-breakpoint-${index + 1}`,
+            name: breakpoint.name,
+            distanceKm: Number(breakpoint.distanceKm)
+          }))
+        );
+      }
+      setStageAccommodations(stored.stageAccommodations ?? {});
+      setLastTourSavedAt(stored.lastSavedAt ?? null);
+      setPlannerStep("overview");
+      setStatus(stored.status ? `${message} ${stored.status}` : message);
+    },
+    [plannerForm]
+  );
+
   useEffect(() => {
     const urlMode = normalizeTourMode(initialMode);
     const urlStep = normalizePlannerStep(initialStep);
 
-    if (openLast) {
+    if (initialTourId) {
+      const library = parseTourLibrary(window.localStorage.getItem(TOUR_LIBRARY_STORAGE_KEY));
+      const entry = library.find((item) => item.id === initialTourId);
+      if (entry?.state.route) {
+        const now = new Date().toISOString();
+        const nextEntry = {
+          ...entry,
+          lastOpenedAt: now,
+          state: {
+            ...entry.state,
+            libraryTourId: entry.id,
+            tourKind: entry.kind,
+            updatedAt: now
+          }
+        };
+        window.localStorage.setItem(TOUR_STATE_STORAGE_KEY, JSON.stringify(nextEntry.state));
+        window.localStorage.setItem(TOUR_LIBRARY_STORAGE_KEY, serializeTourLibrary(upsertTourLibraryEntry(library, nextEntry)));
+        restoreStoredTourState(nextEntry.state, "Tour aus Verwaltung geladen.");
+        setPlannerStep(urlStep ?? "overview");
+        return;
+      }
+      setStatus("Tour aus Verwaltung nicht gefunden.");
+    } else if (openLast) {
       const stored = parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY));
       if (stored?.route) {
-        const storedRoute = routeWithOriginalGeometry(stored.route as RouteCalculation & { id?: string });
-        setInputMode(stored.inputMode);
-        if (storedRoute.id) {
-          setSavedRoute(storedRoute as SavedRoute);
-        } else {
-          setCalculation(storedRoute);
-        }
-        setStages(stored.stages as Stage[]);
-        setPois(stored.pois as Poi[]);
-        setSelectedPoi(stored.pois.find((poi) => poi.id === stored.selectedPoiId) ?? stored.pois[0] ?? null);
-        setSelectedStageId(stored.selectedStageId ?? null);
-        if (stored.stageGenerationMode === "distance" || stored.stageGenerationMode === "days") {
-          setStageGenerationMode(stored.stageGenerationMode);
-        }
-        if (typeof stored.targetKm === "number") {
-          plannerForm.setValue("targetKm", stored.targetKm);
-        }
-        if (typeof stored.travelDays === "number") {
-          setTravelDays(stored.travelDays);
-        }
-        if (Array.isArray(stored.stageBreakpoints)) {
-          setStageBreakpoints(
-            stored.stageBreakpoints.map((breakpoint, index) => ({
-              id: breakpoint.id ?? `stored-breakpoint-${index + 1}`,
-              name: breakpoint.name,
-              distanceKm: Number(breakpoint.distanceKm)
-            }))
-          );
-        }
-        setStageAccommodations(stored.stageAccommodations ?? {});
-        setLastTourSavedAt(stored.lastSavedAt ?? null);
+        restoreStoredTourState(stored, "Gespeicherte Tour geladen.");
         setPlannerStep(urlStep ?? "overview");
-        setStatus(stored.status ? `Gespeicherte Tour geladen. ${stored.status}` : "Gespeicherte Tour geladen.");
         return;
       }
       setStatus("Keine gespeicherte Tour im Browser gefunden.");
@@ -710,7 +766,7 @@ export function PlannerClient({
     if (urlStep) {
       setPlannerStep(urlStep);
     }
-  }, [initialMode, initialStep, openLast, plannerForm]);
+  }, [initialMode, initialStep, initialTourId, openLast, restoreStoredTourState]);
 
   useEffect(() => {
     persistStoredTourState(buildStoredTourState());
@@ -1346,9 +1402,12 @@ export function PlannerClient({
       finalStep?: PlannerStep;
       statusPrefix?: string;
       seedFirstAccommodation?: boolean;
+      tourKind?: "demo" | "user";
     } = {}
   ) {
     setIsBusy(true);
+    setCurrentLibraryTourId(null);
+    setTourKind(options.tourKind ?? (inputMode === "demo" ? "demo" : "user"));
     setLeadStatus("");
     setCalculation(null);
     setSavedRoute(null);
@@ -1412,6 +1471,8 @@ export function PlannerClient({
   async function importGpx(file: File | null) {
     if (!file) return;
     setInputMode("gpx");
+    setTourKind("user");
+    setCurrentLibraryTourId(null);
     setIsBusy(true);
     setLeadStatus("");
     setCalculation(null);
@@ -1489,11 +1550,14 @@ export function PlannerClient({
     setTravelDays(demoTravelDays);
     setWaypoints([]);
     setInputMode("demo");
+    setTourKind("demo");
+    setCurrentLibraryTourId(null);
     await planRoute(demoValues, [], {
       stageRequest: { mode: "days", travelDays: demoTravelDays, targetKm: demoValues.targetKm, breakpoints: [] },
       finalStep: "stage-edit",
       statusPrefix: "MVP-Demo bereit",
-      seedFirstAccommodation: true
+      seedFirstAccommodation: true,
+      tourKind: "demo"
     });
   }
 
@@ -1532,6 +1596,17 @@ export function PlannerClient({
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `${route.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.gpx`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportGpxWithStageTracks() {
+    if (!route) return;
+    const blob = new Blob([toGpxWithStages(route.geometryGeoJson, route.name, stages)], { type: "application/gpx+xml" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${route.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-etappen.gpx`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -1656,6 +1731,11 @@ export function PlannerClient({
     const savedStages: Stage[] = [];
 
     for (const item of stagesToSave) {
+      if (!item.id || item.id.startsWith("local-")) {
+        savedStages.push(item);
+        continue;
+      }
+
       const response = await fetch(`/api/stages/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1746,7 +1826,7 @@ export function PlannerClient({
 
       const savedStages: Stage[] = [];
       for (const item of stages) {
-        if (!item.id) {
+        if (!item.id || item.id.startsWith("local-")) {
           savedStages.push(item);
           continue;
         }
@@ -1785,14 +1865,25 @@ export function PlannerClient({
       const savedStatus = "Tour gespeichert.";
       setLastTourSavedAt(savedAt);
       setStatus(savedStatus);
-      persistStoredTourState(
-        buildStoredTourState({
-          routeValue: routeToStore,
-          stagesValue: stagesToStore,
-          statusValue: savedStatus,
-          lastSavedAtValue: savedAt
-        })
-      );
+      const stateToStore = buildStoredTourState({
+        routeValue: routeToStore,
+        stagesValue: stagesToStore,
+        statusValue: savedStatus,
+        lastSavedAtValue: savedAt
+      });
+      if (stateToStore) {
+        const library = parseTourLibrary(window.localStorage.getItem(TOUR_LIBRARY_STORAGE_KEY));
+        const entry = createTourLibraryEntry(stateToStore, {
+          id: currentLibraryTourId,
+          name: routeToStore.name,
+          kind: tourKind,
+          now: savedAt
+        });
+        const nextLibrary = upsertTourLibraryEntry(library, entry);
+        window.localStorage.setItem(TOUR_LIBRARY_STORAGE_KEY, serializeTourLibrary(nextLibrary));
+        setCurrentLibraryTourId(entry.id);
+        persistStoredTourState(entry.state);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Tour konnte nicht gespeichert werden.");
     } finally {
@@ -2485,41 +2576,55 @@ export function PlannerClient({
             )}
             {routePointSelectionCard}
           </div>
-          {savedRoute && (
+          {route && (
             <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
               <div className="flex flex-wrap gap-2">
                 <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
                   <Save className="h-4 w-4" />
                   Alle Änderungen speichern
                 </Button>
-                <Button asChild>
-                  <Link href={`/reiseplan/${savedRoute.id}`}>
-                    <FileText className="h-4 w-4" />
-                    Reiseplan öffnen
-                  </Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href={`/route/${savedRoute.id}`}>
-                    <MapPinned className="h-4 w-4" />
-                    Route ansehen
-                  </Link>
-                </Button>
+                {savedRoute && (
+                  <>
+                    <Button asChild>
+                      <Link href={`/reiseplan/${savedRoute.id}`}>
+                        <FileText className="h-4 w-4" />
+                        Reiseplan öffnen
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline">
+                      <Link href={`/route/${savedRoute.id}`}>
+                        <MapPinned className="h-4 w-4" />
+                        Route ansehen
+                      </Link>
+                    </Button>
+                  </>
+                )}
                 <Button asChild variant="outline">
                   <Link href="/planer/karte">
                     <Map className="h-4 w-4" />
                     Vollbildkarte
                   </Link>
                 </Button>
+                <Button asChild variant="outline">
+                  <Link href="/touren">
+                    <FileText className="h-4 w-4" />
+                    Tourverwaltung
+                  </Link>
+                </Button>
                 <Button disabled={!route} type="button" variant="secondary" onClick={exportGpx}>
                   <ArrowDownToLine className="h-4 w-4" />
                   GPX exportieren
+                </Button>
+                <Button disabled={!route || stages.length === 0} type="button" variant="secondary" onClick={exportGpxWithStageTracks}>
+                  <ArrowDownToLine className="h-4 w-4" />
+                  Etappen-GPX
                 </Button>
               </div>
               <p className="text-sm font-medium text-emerald-700">
                 {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Gesamte Tour noch nicht bewusst gespeichert."}
               </p>
               <p className="text-xs text-muted-foreground">
-                GPX exportiert aktuell die bearbeitete Routengeometrie. Etappennamen, Etappenfarben und manuelle Etappenschnitte werden in der gespeicherten Tour geladen, aber noch nicht in die GPX-Datei geschrieben.
+                GPX exportiert die bearbeitete Routengeometrie. Etappen-GPX schreibt zusätzlich jede Etappe als eigenen Track; Unterkunftsmetadaten bleiben im Tour-JSON.
               </p>
             </div>
           )}
@@ -2806,6 +2911,7 @@ export function PlannerClient({
                   const stageKmBounds = stageKilometers(stage);
                   const isSelectedStage = selectedStageId === stage.id;
                   const selectedAccommodation = stageAccommodations[stage.id];
+                  const accommodationSearchRadiusKm = stageAccommodationSearchRadiusKm(stage);
                   const accommodationCandidates = (accommodationCandidatesByStageId[stage.id] ?? []).filter(
                     (candidate) =>
                       !selectedAccommodation ||
@@ -2931,6 +3037,9 @@ export function PlannerClient({
                               <p className="text-xs text-muted-foreground">
                                 Kandidaten liegen am Etappenende oder entlang der Etappe. Die GPX-Route wird dadurch nicht verändert.
                               </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                MVP-Suchradius: {formatKm(accommodationSearchRadiusKm)} um das Etappenende. Datenqualität wird je Kandidat ausgewiesen.
+                              </p>
                             </div>
                             <Button className="w-full sm:w-auto" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
                               Kandidaten aktualisieren
@@ -2944,6 +3053,9 @@ export function PlannerClient({
                                     <strong className="min-w-0 break-words">{selectedAccommodation.name}</strong>
                                     <Badge className="shrink-0" variant={selectedAccommodation.status === "selected" ? "secondary" : "outline"}>
                                       {accommodationStatusLabel(selectedAccommodation.status)}
+                                    </Badge>
+                                    <Badge className="shrink-0" variant="outline">
+                                      {accommodationDataQualityLabel(selectedAccommodation.dataQuality ?? "local-test")}
                                     </Badge>
                                     {isAccommodationDetour(selectedAccommodation) && (
                                       <Badge className="shrink-0" variant="outline">
@@ -2988,6 +3100,9 @@ export function PlannerClient({
                                   <Badge className="shrink-0" variant="outline">
                                     {accommodationStatusLabel(candidate.status)}
                                   </Badge>
+                                  <Badge className="shrink-0" variant="outline">
+                                    {accommodationDataQualityLabel(candidate.dataQuality ?? "local-test")}
+                                  </Badge>
                                   {isAccommodationDetour(candidate) && (
                                     <Badge className="shrink-0" variant="outline">
                                       Abstecher
@@ -3000,6 +3115,7 @@ export function PlannerClient({
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{formatKm(candidate.distanceToStageEndKm)} zum Etappenende</span>
                                   <span>{formatKm(candidate.distanceToRouteKm)} zur Route</span>
+                                  <span>Suchradius: {formatKm(candidate.searchRadiusKm ?? accommodationSearchRadiusKm)}</span>
                                   <span className="break-words">Quelle: {candidate.source ?? "MVP-Daten"}</span>
                                 </div>
                                 {isAccommodationDetour(candidate) && (

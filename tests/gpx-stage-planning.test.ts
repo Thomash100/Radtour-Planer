@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  accommodationDataQualityLabel,
   createMockStageAccommodation,
   isAccommodationDetour,
   rankStageAccommodationCandidates,
-  selectStageAccommodation
+  selectStageAccommodation,
+  stageAccommodationSearchRadiusKm
 } from "../src/lib/accommodations";
 import { parseGpx } from "../src/lib/gpx";
 import {
@@ -23,12 +25,23 @@ import {
   splitRouteByBreakpoints,
   splitRouteIntoStageCount,
   splitRouteIntoStages,
+  toGpxWithStages,
   trimRouteGeometry,
   validateTravelDayCount,
   validateStageSliceBounds,
   type LineStringGeoJson,
   type Position
 } from "../src/lib/geo";
+import {
+  createTourExport,
+  createTourLibraryEntry,
+  duplicateTourLibraryEntry,
+  parseTourExport,
+  parseTourLibrary,
+  renameTourLibraryEntry,
+  updateTourReleaseStatus,
+  upsertTourLibraryEntry
+} from "../src/lib/tour-library";
 import { parseStoredTourState } from "../src/lib/tour-state";
 
 const straightRoute: LineStringGeoJson = {
@@ -539,6 +552,107 @@ describe("GPX parsing and stage planning", () => {
     assert.deepEqual(stored.route?.originalGeometryGeoJson, longRoute);
   });
 
+  it("stores, renames and exports a managed tour library entry", () => {
+    const stages = createContiguousTestStages();
+    const rawState = {
+      inputMode: "gpx" as const,
+      tourKind: "user" as const,
+      route: {
+        id: "route-1",
+        name: "GPX Testtour",
+        startName: "Start",
+        endName: "Ziel",
+        profile: "balanced",
+        distanceKm: routeDistanceKm(straightRoute.coordinates),
+        elevationUp: 120,
+        elevationDown: 90,
+        durationHours: 4.5,
+        geometryGeoJson: straightRoute,
+        elevationProfile: [],
+        waypoints: []
+      },
+      stages,
+      pois: [],
+      stageGenerationMode: "days" as const,
+      travelDays: 3,
+      stageBreakpoints: [],
+      stageAccommodations: {},
+      status: "Tour gespeichert.",
+      lastSavedAt: "2026-06-30T12:30:00.000Z",
+      updatedAt: "2026-06-30T12:30:00.000Z"
+    };
+
+    const entry = createTourLibraryEntry(rawState, {
+      id: "tour-test",
+      now: "2026-06-30T12:30:00.000Z",
+      releaseStatus: "draft"
+    });
+    const library = upsertTourLibraryEntry([], entry);
+    const renamed = renameTourLibraryEntry(library, "tour-test", "Sommerreise");
+    const reviewed = updateTourReleaseStatus(renamed, "tour-test", "review");
+    const parsed = parseTourLibrary(JSON.stringify(reviewed));
+    const exported = createTourExport(parsed[0], "2026-06-30T12:35:00.000Z");
+    const imported = parseTourExport(JSON.stringify(exported));
+
+    assert.equal(parsed[0].name, "Sommerreise");
+    assert.equal(parsed[0].releaseStatus, "review");
+    assert.equal(parsed[0].state.route?.name, "Sommerreise");
+    assert.equal(imported?.id, "tour-test");
+    assert.equal(imported?.state.stages.length, stages.length);
+  });
+
+  it("duplicates a tour as an independent local browser copy", () => {
+    const stages = createContiguousTestStages();
+    const entry = createTourLibraryEntry(
+      {
+        inputMode: "gpx",
+        tourKind: "user",
+        route: {
+          id: "route-original",
+          name: "Originaltour",
+          startName: "Start",
+          endName: "Ziel",
+          profile: "balanced",
+          distanceKm: routeDistanceKm(straightRoute.coordinates),
+          elevationUp: 100,
+          elevationDown: 80,
+          durationHours: 4,
+          geometryGeoJson: straightRoute,
+          elevationProfile: [],
+          waypoints: []
+        },
+        stages,
+        pois: [],
+        selectedStageId: stages[0].id,
+        stageAccommodations: {
+          [stages[0].id]: selectStageAccommodation(createMockStageAccommodation(stages[0], straightRoute), "planned")
+        },
+        updatedAt: "2026-06-30T12:30:00.000Z"
+      },
+      { id: "tour-original", now: "2026-06-30T12:30:00.000Z" }
+    );
+
+    const [duplicate] = duplicateTourLibraryEntry([entry], "tour-original", "2026-06-30T12:40:00.000Z");
+
+    assert.notEqual(duplicate.id, entry.id);
+    assert.equal(duplicate.kind, "user");
+    assert.equal(duplicate.releaseStatus, "draft");
+    assert.equal(duplicate.state.route?.id, undefined);
+    assert.ok(duplicate.state.stages.every((stage) => stage.id?.startsWith("local-stage-")));
+    assert.notEqual(duplicate.state.selectedStageId, entry.state.selectedStageId);
+    assert.equal(Object.keys(duplicate.state.stageAccommodations ?? {}).length, 1);
+  });
+
+  it("exports stages as separate GPX tracks", () => {
+    const stages = createContiguousTestStages();
+    const gpx = toGpxWithStages(straightRoute, "Test & Tour", stages);
+
+    assert.match(gpx, /Test &amp; Tour/);
+    assert.match(gpx, /Etappe 1/);
+    assert.match(gpx, /Etappe 2/);
+    assert.equal((gpx.match(/<trk>/g) ?? []).length, stages.length + 1);
+  });
+
   it("ranks accommodation POIs by stage end and route distance", () => {
     const [stage] = createContiguousTestStages();
     assert.ok(stage);
@@ -547,13 +661,13 @@ describe("GPX parsing and stage planning", () => {
 
     const candidates = rankStageAccommodationCandidates(stage, straightRoute, [
       {
-        id: "far-hotel",
-        name: "Hotel weit weg",
+        id: "nearby-hotel",
+        name: "Hotel am Rand",
         category: "ACCOMMODATION",
-        lat: stageEnd[1] + 0.5,
-        lon: stageEnd[0] + 0.5,
-        address: "Nebenort",
-        website: "https://example.invalid/far",
+        lat: stageEnd[1] + 0.018,
+        lon: stageEnd[0] + 0.018,
+        address: "Etappenrand",
+        website: "https://example.invalid/rand",
         source: "test",
         tagsJson: { accommodationType: "Hotel" }
       },
@@ -572,6 +686,8 @@ describe("GPX parsing and stage planning", () => {
 
     assert.equal(candidates[0].name, "Pension Etappenende");
     assert.equal(candidates[0].type, "Pension");
+    assert.equal(candidates[0].dataQuality, "poi");
+    assert.equal(candidates[0].searchRadiusKm, stageAccommodationSearchRadiusKm(stage));
     assert.ok(candidates[0].distanceToStageEndKm < candidates[1].distanceToStageEndKm);
     assert.equal(candidates[0].status, "candidate");
   });
@@ -589,6 +705,8 @@ describe("GPX parsing and stage planning", () => {
     assert.equal(candidate.stageId, stage.id);
     assert.ok(candidate.distanceToStageEndKm > 0);
     assert.equal(candidate.source, "Lokale MVP-Testdaten");
+    assert.equal(candidate.dataQuality, "local-test");
+    assert.equal(accommodationDataQualityLabel(candidate.dataQuality ?? "local-test"), "Lokale MVP-Testdaten");
     assert.equal(selected.status, "selected");
     assert.equal(isAccommodationDetour(candidate), false);
     assert.equal(isAccommodationDetour(detourCandidate), true);

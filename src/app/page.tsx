@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   FileText,
+  FolderOpen,
   Map,
   Route,
   Save,
@@ -42,6 +43,13 @@ const primaryActions = [
     title: "Gespeicherte Tour",
     text: "Letzten Browser-TourState mit Route, Etappen, Orten und Unterkünften wieder öffnen.",
     variant: "outline" as const
+  },
+  {
+    href: "/touren",
+    icon: FolderOpen,
+    title: "Tourverwaltung",
+    text: "Touren umbenennen, duplizieren, löschen sowie als JSON exportieren oder importieren.",
+    variant: "outline" as const
   }
 ];
 
@@ -73,7 +81,7 @@ export default function HomePage() {
               Etappen erzeugen, Orte entlang der Route übernehmen, Unterkünfte je Etappe vormerken
               und die gesamte Tour wieder öffnen.
             </p>
-            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {primaryActions.map((action) => {
                 const Icon = action.icon;
                 return (

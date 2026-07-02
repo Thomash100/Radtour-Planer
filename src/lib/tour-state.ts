@@ -67,6 +67,8 @@ export type StoredStageBreakpoint = {
 };
 
 export type StoredTourState = {
+  libraryTourId?: string | null;
+  tourKind?: "demo" | "user";
   inputMode: TourInputMode;
   route: StoredRoute | null;
   stages: StoredStage[];

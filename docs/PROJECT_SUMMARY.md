@@ -40,6 +40,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 2: Planung nach Reisetagen und Städte/Orte entlang der Route abgeschlossen.
 - Paket 3: Unterkünfte je Etappe abgeschlossen.
 - Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung in Arbeit auf Branch `codex/package-4-mvp-release-readiness`.
+- Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung in Arbeit auf Branch `codex/packages-5-7-tour-data-release`.
 
 Letzter nachgezogener Deployment-Stand vor Paket 4:
 
@@ -112,3 +113,35 @@ npm run artifact:check-public
 - Footer/Version prüfen
 - mobile Ansicht prüfen
 - prüfen, dass keine produktive externe API, Buchung oder Zahlung suggeriert wird
+
+## Paket 5-7: nächster zusammenhängender Entwicklungsblock
+
+Paket 5-7 bündelt die nächsten größeren Themen ohne kleine Zwischenabnahmen:
+
+- Tourverwaltung, Export/Import und Freigabe-Stand.
+- Echte Planungsdatenstruktur für Orte, POI und Unterkünfte vorbereiten.
+- Produktionsbetrieb und Veröffentlichung dokumentieren.
+
+Paket 5 ergänzt:
+
+- lokale Tourverwaltung unter `/touren`
+- Tour umbenennen, duplizieren und löschen
+- JSON-Export und JSON-Import
+- Freigabe-Status für lokale Touren
+- Etappen-GPX-Export mit Gesamtstrecke und Etappen-Tracks
+- klare Trennung von Demo-Touren und echten Planungen
+
+Paket 6 ergänzt:
+
+- Datenqualitätsmarkierung für Unterkunftskandidaten
+- Suchradius je Etappe
+- klarere Unterscheidung zwischen Partnerdaten, POI-Daten und lokalen MVP-Testdaten
+- Abstecherhinweis bleibt ohne automatische Routenänderung
+
+Paket 7 ergänzt:
+
+- `/api/version`
+- erweiterte Health-/Version-Daten ohne Secrets
+- Indexing-Steuerung über `NEXT_PUBLIC_ALLOW_INDEXING`
+- Release-/Backup-/Betriebsdokumentation
+- keine Plesk-Umstellung und keine produktive Veröffentlichung

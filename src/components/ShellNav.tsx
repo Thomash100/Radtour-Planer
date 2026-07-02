@@ -1,10 +1,11 @@
-import { Bike, Building2, FlaskConical, Map, ShieldCheck } from "lucide-react";
+import { Bike, Building2, FlaskConical, FolderOpen, Map, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 
 const links = [
   { href: "/planer", label: "Planer", icon: Map },
+  { href: "/touren", label: "Touren", icon: FolderOpen },
   { href: "/partner", label: "Partner", icon: Building2 },
   { href: "/mvp-hinweis", label: "MVP", icon: FlaskConical },
   { href: "/admin/partner", label: "Admin", icon: ShieldCheck }

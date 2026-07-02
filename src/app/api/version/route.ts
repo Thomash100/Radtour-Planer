@@ -4,13 +4,11 @@ import { APP_BUILD_DATE, APP_DEPLOYMENT_CHANNEL, APP_INDEXING_ALLOWED, APP_MVP_S
 
 export async function GET() {
   return NextResponse.json({
-    status: "ok",
     service: "radtour-planer",
     version: APP_VERSION,
     buildDate: APP_BUILD_DATE,
     mvpStatus: APP_MVP_STATUS,
     deploymentChannel: APP_DEPLOYMENT_CHANNEL,
-    indexingAllowed: APP_INDEXING_ALLOWED,
-    timestamp: new Date().toISOString()
+    indexingAllowed: APP_INDEXING_ALLOWED
   });
 }

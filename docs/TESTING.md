@@ -82,6 +82,26 @@ Zusätzlich prüfen:
 - Partner-/Preisflächen behaupten keine produktive Buchung, Zahlung oder externe Unterkunfts-API.
 - Mobile Ansicht der Startseite, Legal-Seiten und des Planers erzeugt keinen horizontalen Overflow.
 
+## Paket 5-7
+
+Zusätzlich gebündelt prüfen:
+
+- `/touren` öffnet ohne Fehler.
+- gespeicherte Tour erscheint in der Tourverwaltung.
+- Tour lässt sich umbenennen.
+- Tour lässt sich duplizieren, ohne die Ursprungstour zu überschreiben.
+- Tour lässt sich löschen.
+- Tour lässt sich als JSON exportieren.
+- JSON-Import stellt eine Tour wieder her.
+- Freigabe-Stand kann zwischen Entwurf, Freigabe prüfen und Freigegeben wechseln.
+- Öffnen aus der Tourverwaltung lädt die richtige Tour im Planer.
+- Demo-Tour und echte Touren sind unterscheidbar.
+- Etappen-GPX exportiert Gesamtstrecke und Etappen-Tracks.
+- Unterkunftskandidaten zeigen Datenqualität und Suchradius.
+- `/api/health` und `/api/version` liefern Version, Build-Datum, MVP-Status, Deployment-Kanal und Indexierungsstatus.
+- Robots sperrt Indexierung standardmäßig.
+- Keine produktive API, Buchung, Zahlung, Nutzerkonten oder Plesk-Umstellung werden suggeriert.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:
