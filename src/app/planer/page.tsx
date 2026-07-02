@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
+
 import { PlannerClient } from "@/components/PlannerClient";
+
+export const metadata: Metadata = {
+  title: "Planer",
+  description:
+    "GPX-Route laden, kürzen, Etappen erzeugen, Orte projizieren, Unterkünfte vormerken und die gesamte Tour speichern."
+};
 
 export default function PlannerPage({
   searchParams

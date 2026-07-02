@@ -1,100 +1,156 @@
-import { Bed, Briefcase, FileText, Map, Route, Upload, Utensils, Wrench } from "lucide-react";
+import {
+  ArrowDownToLine,
+  Bed,
+  CalendarDays,
+  CheckCircle2,
+  FileText,
+  Map,
+  Route,
+  Save,
+  ShieldAlert
+} from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-const modules = [
-  { icon: Bed, title: "Unterkunft", text: "Hotels, Pensionen, Ferienwohnungen und Camping entlang der Etappen." },
-  { icon: Briefcase, title: "Gepaecktransfer", text: "Partner fuer Gepaeck- und Fahrradtransport je Tagesabschnitt." },
-  { icon: Wrench, title: "Fahrradservice", text: "Werkstaetten, Ersatzteile, E-Bike-Service und Notfallkontakte." },
-  { icon: Utensils, title: "Versorgung", text: "Restaurants, Cafes, Supermaerkte, Trinkwasser und Rastpunkte." }
+export const metadata: Metadata = {
+  title: "BikeTripHub MVP | GPX-Radtour planen",
+  description:
+    "MVP für mehrtägige Radtourplanung auf GPX-Basis mit Routenkürzung, Etappen, Orten, Unterkünften und lokaler Speicherung."
+};
+
+const primaryActions = [
+  {
+    href: "/planer?mode=gpx",
+    icon: ArrowDownToLine,
+    title: "GPX laden",
+    text: "Empfohlener Einstieg: vorhandene GPX-Datei importieren und als feste Routengrundlage nutzen.",
+    variant: "default" as const
+  },
+  {
+    href: "/planer?mode=demo",
+    icon: Map,
+    title: "Demo-Tour öffnen",
+    text: "Demo bewusst laden. Es wird keine Route automatisch beim Start erzeugt.",
+    variant: "secondary" as const
+  },
+  {
+    href: "/planer?open=last",
+    icon: FileText,
+    title: "Gespeicherte Tour",
+    text: "Letzten Browser-TourState mit Route, Etappen, Orten und Unterkünften wieder öffnen.",
+    variant: "outline" as const
+  }
+];
+
+const mvpSteps = [
+  { icon: Route, label: "Route kürzen", text: "Start/Ziel bleiben auf die Original-GPX-Geometrie bezogen." },
+  { icon: CalendarDays, label: "Etappen planen", text: "Etappen nach Länge oder Reisetagen erzeugen und bearbeiten." },
+  { icon: Map, label: "Orte übernehmen", text: "Orte/Städte werden auf die GPX-Route projiziert, nicht neu geroutet." },
+  { icon: Bed, label: "Unterkunft vormerken", text: "Kandidaten je Etappe speichern, ohne Buchung oder externe Pflicht-API." },
+  { icon: Save, label: "Tour speichern", text: "Alle Änderungen werden im vollständigen Browser-TourState erhalten." }
+];
+
+const limitations = [
+  "Keine echte Buchung, Zahlung oder Nutzerkonten.",
+  "Keine produktive externe Unterkunfts-API im MVP.",
+  "Unterkunfts- und POI-Daten können lokale MVP-Testdaten sein.",
+  "Orte und Unterkünfte verlegen die GPX-Route nicht automatisch."
 ];
 
 export default function HomePage() {
   return (
-    <main>
-      <section className="relative overflow-hidden border-b">
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,118,110,0.14)_1px,transparent_1px),linear-gradient(0deg,rgba(14,116,144,0.12)_1px,transparent_1px)] bg-[size:44px_44px]" />
-        <div className="relative mx-auto grid min-h-[calc(100vh-4rem)] max-w-7xl content-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.9fr]">
-          <div className="max-w-2xl">
-            <Badge variant="sponsored">MVP Prototype</Badge>
+    <main className="bg-slate-50">
+      <section className="border-b bg-white">
+        <div className="mx-auto grid max-w-7xl content-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.78fr)] lg:py-14">
+          <div className="max-w-3xl">
+            <Badge variant="sponsored">MVP-Release-Kandidat</Badge>
             <h1 className="mt-5 text-4xl font-bold leading-tight text-slate-950 sm:text-6xl">BikeTripHub</h1>
-            <p className="mt-5 text-xl text-slate-700">Plane deine komplette Radreise entlang deiner Route.</p>
-            <div className="mt-8 grid gap-3 rounded-lg border bg-white/94 p-3 shadow-panel sm:grid-cols-2">
-              <Button asChild>
-                <Link href="/planer?mode=direct">
-                  <Route className="h-4 w-4" />
-                  Neue Tour planen
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/planer?mode=gpx">
-                  <Upload className="h-4 w-4" />
-                  GPX-Datei laden
-                </Link>
-              </Button>
-              <Button asChild variant="secondary">
-                <Link href="/planer?mode=demo">
-                  <Map className="h-4 w-4" />
-                  Demo-Tour oeffnen
-                </Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/planer?open=last">
-                  <FileText className="h-4 w-4" />
-                  Gespeicherte Tour
-                </Link>
-              </Button>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-700">
+              Der aktuelle MVP plant mehrtägige Radtouren auf Basis einer festen GPX-Route: kürzen,
+              Etappen erzeugen, Orte entlang der Route übernehmen, Unterkünfte je Etappe vormerken
+              und die gesamte Tour wieder öffnen.
+            </p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              {primaryActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <Button key={action.href} asChild className="h-auto justify-start whitespace-normal p-4" variant={action.variant}>
+                    <Link className="flex flex-col items-start gap-2 text-left" href={action.href}>
+                      <span className="flex items-center gap-2 font-semibold">
+                        <Icon className="h-4 w-4" />
+                        {action.title}
+                      </span>
+                      <span className="text-xs font-normal opacity-85">{action.text}</span>
+                    </Link>
+                  </Button>
+                );
+              })}
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild variant="ghost">
-                <Link href="/partner">Partnerbetrieb eintragen</Link>
+                <Link href="/planer?mode=direct">
+                  <Route className="h-4 w-4" />
+                  Direkte Planung ansehen
+                </Link>
+              </Button>
+              <Button asChild variant="ghost">
+                <Link href="/mvp-hinweis">
+                  <ShieldAlert className="h-4 w-4" />
+                  MVP-Hinweis
+                </Link>
               </Button>
             </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Die direkte Planung nutzt weiterhin Mockrouting. Für die fachliche MVP-Prüfung ist GPX der stabile Einstieg.
+            </p>
           </div>
 
-          <div className="relative min-h-[420px] rounded-lg border bg-white/86 p-4 shadow-panel">
-            <div className="absolute inset-4 rounded-lg bg-[radial-gradient(circle_at_30%_30%,rgba(14,165,233,0.24),transparent_24rem),linear-gradient(135deg,rgba(255,255,255,0.86),rgba(236,253,245,0.86))]" />
-            <svg className="absolute inset-8 h-[calc(100%-4rem)] w-[calc(100%-4rem)]" viewBox="0 0 520 360" aria-hidden="true">
-              <path d="M42 285 C 120 210, 170 260, 230 180 S 350 92, 468 68" fill="none" stroke="#0f766e" strokeLinecap="round" strokeWidth="14" />
-              <path d="M42 285 C 120 210, 170 260, 230 180 S 350 92, 468 68" fill="none" stroke="#f59e0b" strokeDasharray="14 18" strokeLinecap="round" strokeWidth="4" />
-              {[
-                [42, 285, "Start"],
-                [230, 180, "Hotel"],
-                [332, 112, "Service"],
-                [468, 68, "Ziel"]
-              ].map(([x, y, label]) => (
-                <g key={String(label)}>
-                  <circle cx={Number(x)} cy={Number(y)} fill="#0f766e" r="18" stroke="#fff" strokeWidth="5" />
-                  <text fill="#0f172a" fontSize="18" fontWeight="700" x={Number(x) + 24} y={Number(y) + 6}>
-                    {label}
-                  </text>
-                </g>
-              ))}
-            </svg>
-            <div className="absolute bottom-6 left-6 right-6 grid gap-2 sm:grid-cols-3">
-              {["152 km", "3 Etappen", "7 POI"].map((item) => (
-                <div key={item} className="rounded-md border bg-white/92 px-4 py-3 text-center font-semibold">
-                  {item}
+          <div className="grid content-start gap-4">
+            <div className="rounded-lg border bg-white p-4 shadow-panel">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-muted-foreground">Funktionsstand</div>
+                  <h2 className="text-xl font-semibold text-slate-950">GPX-Planungsworkflow</h2>
                 </div>
-              ))}
+                <Badge>bereit für Review</Badge>
+              </div>
+              <div className="grid gap-3">
+                {mvpSteps.map((step) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.label} className="grid grid-cols-[32px_minmax(0,1fr)] gap-3 rounded-md border bg-slate-50 p-3">
+                      <span className="grid h-8 w-8 place-items-center rounded-md bg-primary text-primary-foreground">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span>
+                        <span className="block font-medium text-slate-950">{step.label}</span>
+                        <span className="block text-sm text-muted-foreground">{step.text}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+              <div className="mb-2 flex items-center gap-2 font-semibold">
+                <ShieldAlert className="h-4 w-4" />
+                Grenzen des MVP
+              </div>
+              <ul className="grid gap-2">
+                {limitations.map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         </div>
-      </section>
-
-      <section className="mx-auto grid max-w-7xl gap-4 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-4">
-        {modules.map((module) => {
-          const Icon = module.icon;
-          return (
-            <div key={module.title} className="rounded-lg border bg-white p-5">
-              <Icon className="h-6 w-6 text-primary" />
-              <h2 className="mt-4 font-semibold">{module.title}</h2>
-              <p className="mt-2 text-sm text-muted-foreground">{module.text}</p>
-            </div>
-          );
-        })}
       </section>
     </main>
   );

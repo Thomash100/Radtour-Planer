@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const adminLinks = [
-  ["/admin/partner", "Partner pruefen"],
+  ["/admin/partner", "Partner prüfen"],
   ["/admin/leads", "Leads auswerten"],
-  ["/admin/poi", "POI pruefen"],
+  ["/admin/poi", "POI prüfen"],
   ["/admin/ads", "Anzeigen verwalten"]
 ];
 
