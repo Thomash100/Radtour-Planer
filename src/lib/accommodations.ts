@@ -1,7 +1,7 @@
 import { distancePointToLineKm, haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 
 export type AccommodationStatus = "planned" | "selected" | "candidate";
-export type AccommodationDataQuality = "partner" | "poi" | "local-test";
+export type AccommodationDataQuality = "partner" | "osm" | "poi" | "manual" | "local-test";
 
 export type AccommodationPoiInput = {
   id: string;
@@ -10,8 +10,10 @@ export type AccommodationPoiInput = {
   lat: number;
   lon: number;
   address?: string | null;
+  phone?: string | null;
   website?: string | null;
   source?: string | null;
+  osmId?: string | null;
   tagsJson?: Record<string, unknown>;
   distanceToRouteKm?: number;
   partnerId?: string | null;
@@ -36,6 +38,8 @@ export type StageAccommodation = {
   distanceToRouteKm: number;
   source?: string | null;
   link?: string | null;
+  phone?: string | null;
+  email?: string | null;
   status: AccommodationStatus;
   dataQuality?: AccommodationDataQuality;
   searchRadiusKm?: number;
@@ -52,13 +56,18 @@ export function stageAccommodationSearchRadiusKm(stage: AccommodationStageInput 
 
 export function accommodationDataQualityLabel(value: AccommodationDataQuality) {
   if (value === "partner") return "Partnerdaten";
+  if (value === "osm") return "OSM-Daten";
+  if (value === "manual") return "manuell geprüft";
   if (value === "poi") return "POI-Daten";
   return "Lokale MVP-Testdaten";
 }
 
 function dataQualityForPoi(poi: AccommodationPoiInput): AccommodationDataQuality {
   if (poi.partnerId) return "partner";
-  return poi.source === "generated-test" || Boolean(poi.tagsJson?.testData) ? "local-test" : "poi";
+  if (poi.source === "generated-test" || Boolean(poi.tagsJson?.testData)) return "local-test";
+  if (poi.source === "manual" || poi.source === "manual-verified") return "manual";
+  if (poi.source === "osm-overpass" || typeof poi.osmId === "string" || poi.tagsJson?.dataSource === "openstreetmap") return "osm";
+  return "poi";
 }
 
 function stageKey(stage: AccommodationStageInput) {
@@ -73,6 +82,15 @@ function roundedKm(value: number) {
   return Number(value.toFixed(2));
 }
 
+function stringTag(tags: unknown, key: string) {
+  if (typeof tags !== "object" || tags === null || !(key in tags)) {
+    return null;
+  }
+
+  const value = (tags as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
 export function accommodationTypeFromTags(tags: unknown, name = "") {
   const record = typeof tags === "object" && tags !== null ? (tags as Record<string, unknown>) : {};
   const explicitType = record.accommodationType ?? record.type;
@@ -80,10 +98,21 @@ export function accommodationTypeFromTags(tags: unknown, name = "") {
     return explicitType.trim();
   }
 
+  const tourism = typeof record.tourism === "string" ? record.tourism : undefined;
+  if (tourism === "hotel") return "Hotel";
+  if (tourism === "guest_house" || tourism === "bed_and_breakfast") return "Pension/Gästehaus";
+  if (tourism === "hostel") return "Hostel";
+  if (tourism === "motel") return "Motel";
+  if (tourism === "camp_site" || tourism === "caravan_site") return "Camping";
+  if (tourism === "apartment" || tourism === "chalet") return "Ferienwohnung";
+  if (tourism === "alpine_hut" || tourism === "wilderness_hut") return "Hütte";
+
   const normalizedName = name.toLowerCase();
   if (normalizedName.includes("camping")) return "Camping";
   if (normalizedName.includes("ferien")) return "Ferienwohnung";
+  if (normalizedName.includes("hostel")) return "Hostel";
   if (normalizedName.includes("pension")) return "Pension";
+  if (normalizedName.includes("gästehaus") || normalizedName.includes("gaestehaus")) return "Gästehaus";
   return "Hotel";
 }
 
@@ -111,6 +140,8 @@ export function toStageAccommodationCandidate(
 ): StageAccommodation {
   const coordinate: Position = [poi.lon, poi.lat];
   const stageEnd = stageEndCoordinate(stage);
+  const sourceLabel = poi.source === "osm-overpass" ? "OpenStreetMap" : poi.source ?? "POI";
+  const osmLink = poi.osmId ? `https://www.openstreetmap.org/${poi.osmId}` : null;
 
   return {
     id: `poi-${poi.id}-stage-${stageKey(stage)}`,
@@ -122,8 +153,10 @@ export function toStageAccommodationCandidate(
     coordinate,
     distanceToStageEndKm: roundedKm(haversineKm(coordinate, stageEnd)),
     distanceToRouteKm: roundedKm(distancePointToLineKm(coordinate, routeGeometry.coordinates)),
-    source: poi.source ?? "POI",
-    link: poi.website ?? null,
+    source: sourceLabel,
+    link: poi.website ?? osmLink,
+    phone: poi.phone ?? stringTag(poi.tagsJson, "phone") ?? stringTag(poi.tagsJson, "contact:phone"),
+    email: stringTag(poi.tagsJson, "email") ?? stringTag(poi.tagsJson, "contact:email"),
     status: "candidate",
     dataQuality: dataQualityForPoi(poi),
     searchRadiusKm
