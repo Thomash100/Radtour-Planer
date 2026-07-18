@@ -8,7 +8,10 @@ import {
   type AccommodationPoiInput,
   type AccommodationStageInput
 } from "../src/lib/accommodations";
+import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import type { LineStringGeoJson } from "../src/lib/geo";
+import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
+import { routeCalculateSchema } from "../src/lib/validators";
 
 const routeGeometry: LineStringGeoJson = {
   type: "LineString",
@@ -60,4 +63,70 @@ test("ranks OSM accommodation candidates without treating them as booking data",
   assert.equal(candidate.dataQuality, "osm");
   assert.equal(candidate.status, "candidate");
   assert.equal(candidate.link, "https://hotel.example.invalid");
+});
+
+test("parses direct route expressions with supported separators", () => {
+  assert.deepEqual(parseRouteExpression("Flensburg-Swinemünde"), {
+    start: "Flensburg",
+    end: "Swinemünde",
+    separator: "Bindestrich"
+  });
+  assert.deepEqual(parseRouteExpression(" Leipzig   nach   München "), {
+    start: "Leipzig",
+    end: "München",
+    separator: "Worttrenner"
+  });
+  assert.deepEqual(parseRouteExpression("Kiel bis Lübeck"), {
+    start: "Kiel",
+    end: "Lübeck",
+    separator: "Worttrenner"
+  });
+  assert.deepEqual(parseRouteExpression("Dresden → Prag"), {
+    start: "Dresden",
+    end: "Prag",
+    separator: "Pfeil"
+  });
+});
+
+test("normalizes one-field route input into start and destination", () => {
+  const normalized = normalizeDirectRouteInput({ start: "  Hamburg   -   Berlin  ", end: "" });
+
+  assert.deepEqual(normalized, {
+    ok: true,
+    start: "Hamburg",
+    end: "Berlin",
+    detectedExpression: "Hamburg - Berlin"
+  });
+});
+
+test("rejects incomplete direct route input before geocoding", () => {
+  const normalized = normalizeDirectRouteInput({ start: "Hamburg", end: "" });
+
+  assert.equal(normalized.ok, false);
+  if (!normalized.ok) {
+    assert.match(normalized.error, /Zielort/);
+  }
+});
+
+test("calculates accepted direct route expressions with distinct start and destination", () => {
+  for (const expression of ["Flensburg-Swinemünde", "Hamburg-Berlin", "Dresden-Prag", "Leipzig nach München", "Kiel bis Lübeck"]) {
+    const payload = normalizeRouteCalculationPayload({ start: expression, end: "", profile: "balanced", waypoints: [] });
+    const input = routeCalculateSchema.parse(payload);
+    const route = calculateMockRoute(input);
+
+    assert.equal(route.startName, payload.start);
+    assert.equal(route.endName, payload.end);
+    assert.ok(route.distanceKm > 20, `${expression} should produce a non-trivial route`);
+    assert.notDeepEqual(route.waypoints[0], route.waypoints[route.waypoints.length - 1]);
+  }
+});
+
+test("reports unknown places instead of routing to fallback coordinates", () => {
+  const unknown = resolveMockPlace("Flensburg-Suchbegriff");
+
+  assert.equal(unknown.ok, false);
+  assert.throws(
+    () => calculateMockRoute({ start: "Flensburg-Suchbegriff", end: "Berlin", profile: "balanced" }),
+    /Ort nicht eindeutig gefunden/
+  );
 });

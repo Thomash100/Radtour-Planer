@@ -48,6 +48,7 @@ import {
   type AccommodationStatus,
   type StageAccommodation
 } from "@/lib/accommodations";
+import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
 import {
   createElevationProfile,
   createTrimmedRouteFromOriginal,
@@ -144,7 +145,7 @@ type Poi = {
 
 const plannerSchema = z.object({
   start: z.string().min(2),
-  end: z.string().min(2),
+  end: z.string().optional().default(""),
   profile: z.enum(["balanced", "cycleways", "low_elevation", "touristic", "sportive"]),
   targetKm: z.coerce.number().min(15).max(180),
   corridorKm: z.coerce.number().min(0.5).max(50)
@@ -1160,8 +1161,25 @@ export function PlannerClient({
   }
 
   function requestDirectRoutePlan(values: PlannerForm, routeWaypoints = waypoints) {
+    const routeInput = normalizeDirectRouteInput({ start: values.start, end: values.end });
+    if (!routeInput.ok) {
+      setStatus(routeInput.error);
+      return;
+    }
+
+    const normalizedValues = {
+      ...values,
+      start: routeInput.start,
+      end: routeInput.end
+    };
+    plannerForm.setValue("start", routeInput.start, { shouldDirty: true });
+    plannerForm.setValue("end", routeInput.end, { shouldDirty: true });
+    if (routeInput.detectedExpression) {
+      setStatus(`Strecke erkannt: Start ${routeInput.start}, Ziel ${routeInput.end}.`);
+    }
+
     const nextPlan = {
-      values: { ...values },
+      values: normalizedValues,
       routeWaypoints: [...routeWaypoints]
     };
 
@@ -1937,8 +1955,8 @@ export function PlannerClient({
       <CardContent>
         <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => requestDirectRoutePlan(values))}>
           <div className="grid gap-2">
-            <Label htmlFor="start">Startort</Label>
-            <Input id="start" placeholder="z. B. Hamburg" {...plannerForm.register("start")} />
+            <Label htmlFor="start">Startort oder Strecke</Label>
+            <Input id="start" placeholder="z. B. Hamburg-Berlin oder Hamburg" {...plannerForm.register("start")} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="end">Zielort</Label>
@@ -2359,12 +2377,12 @@ export function PlannerClient({
             <CardContent>
               <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => requestDirectRoutePlan(values))}>
                 <div className="grid gap-2">
-                  <Label htmlFor="start">Startort</Label>
-                  <Input id="start" {...plannerForm.register("start")} />
+                  <Label htmlFor="start">Startort oder Strecke</Label>
+                  <Input id="start" placeholder="z. B. Hamburg-Berlin oder Hamburg" {...plannerForm.register("start")} />
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="end">Zielort</Label>
-                  <Input id="end" {...plannerForm.register("end")} />
+                  <Input id="end" placeholder="z. B. Berlin" {...plannerForm.register("end")} />
                 </div>
                 <div className="grid gap-2">
                   <Label>Zwischenziele</Label>
