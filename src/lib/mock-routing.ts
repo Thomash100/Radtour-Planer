@@ -35,7 +35,18 @@ const knownPlaces: Record<string, Position> = {
   rosenheim: [12.1264, 47.8561],
   traunstein: [12.6421, 47.8685],
   salzburg: [13.0457, 47.8095],
+  flensburg: [9.4469, 54.7937],
+  kiel: [10.1228, 54.3233],
+  rostock: [12.0991, 54.0924],
+  stralsund: [13.0818, 54.3091],
+  greifswald: [13.3833, 54.0865],
+  swinemunde: [14.2476, 53.9105],
+  swinemuende: [14.2476, 53.9105],
+  swinoujscie: [14.2476, 53.9105],
   dresden: [13.7373, 51.0504],
+  pirna: [13.9407, 50.9625],
+  prag: [14.4378, 50.0755],
+  praha: [14.4378, 50.0755],
   meissen: [13.4775, 51.1616],
   riesa: [13.2877, 51.3077],
   torgau: [12.9961, 51.5602],
@@ -88,6 +99,12 @@ const knownPlaces: Record<string, Position> = {
 };
 
 const demoCorridors: Record<string, string[]> = {
+  flensburgswinemunde: ["Kiel", "Luebeck", "Rostock", "Stralsund", "Greifswald"],
+  swinemundeflensburg: ["Greifswald", "Stralsund", "Rostock", "Luebeck", "Kiel"],
+  dresdenprag: ["Pirna"],
+  pragdresden: ["Pirna"],
+  leipzigmunchen: ["Halle", "Erfurt", "Nurnberg"],
+  munchenleipzig: ["Nurnberg", "Erfurt", "Halle"],
   dresdenhamburg: [
     "Meissen",
     "Riesa",
@@ -146,6 +163,29 @@ export function geocodeMock(place: string): Position {
   return knownPlaces[normalizePlace(place)] ?? fallbackCoordinate(place);
 }
 
+export function resolveMockPlace(place: string): { ok: true; coordinate: Position; normalized: string } | { ok: false; normalized: string; error: string } {
+  const normalized = normalizePlace(place);
+  const coordinate = knownPlaces[normalized];
+  if (coordinate) {
+    return { ok: true, coordinate, normalized };
+  }
+
+  const label = place.trim() || "unbekannter Ort";
+  return {
+    ok: false,
+    normalized,
+    error: `Ort nicht eindeutig gefunden: "${label}". Bitte Start und Ziel getrennt prüfen.`
+  };
+}
+
+function geocodeMockStrict(place: string): Position {
+  const resolved = resolveMockPlace(place);
+  if (!resolved.ok) {
+    throw new Error(resolved.error);
+  }
+  return resolved.coordinate;
+}
+
 function enrichDemoWaypoints(start: string, end: string, waypoints: string[]) {
   if (waypoints.length > 0) {
     return waypoints;
@@ -184,7 +224,7 @@ export function calculateMockRoute(input: RouteCalculationInput): RouteCalculati
   const inputWaypoints = (input.waypoints ?? []).filter(Boolean);
   const demoWaypoints = enrichDemoWaypoints(input.start, input.end, inputWaypoints);
   const orderedNames = [input.start, ...demoWaypoints, input.end];
-  const controlPoints = orderedNames.map(geocodeMock);
+  const controlPoints = orderedNames.map(geocodeMockStrict);
   const coordinates: Position[] = [];
 
   for (let index = 1; index < controlPoints.length; index += 1) {
