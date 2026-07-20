@@ -13,6 +13,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Etappen nach gewünschter Etappenlänge erzeugen.
 - Etappen nach Anzahl Reisetage erzeugen.
 - Etappen manuell bearbeiten; Geometrie, Distanz, Höhenmeter und Fahrzeit werden aus der aktuellen Arbeitsroute neu berechnet.
+- Etappen nach Schwierigkeit und Belastung bewerten; Distanz, Höhenmeter, Steigungsdichte, Belastungspunkte und Hinweise werden je Etappe angezeigt.
 - Farbige Etappen direkt auf der Karte anzeigen und anklicken.
 - Karte und Höhenprofil in einer gemeinsamen Visualisierungsfläche umschalten.
 - Orte/Städte aus lokaler MVP-Liste auf die GPX-Arbeitsroute projizieren und nach Bestätigung als Start, Ziel oder Etappenpunkt übernehmen.
@@ -31,6 +32,8 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Keine produktive POI-Massenabfrage.
 - Keine neue Routing-API; direkte Planung nutzt weiterhin Mockrouting.
 - Orte und Unterkünfte verlegen die GPX-Route nicht automatisch.
+- Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
+- Wetter, Oberfläche, individuelle Leistungsfähigkeit und E-Bike-Akkureichweite werden in der Etappenbewertung noch nicht berücksichtigt.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -41,6 +44,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 3: Unterkünfte je Etappe abgeschlossen.
 - Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung in Arbeit auf Branch `codex/package-4-mvp-release-readiness`.
 - Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung in Arbeit auf Branch `codex/packages-5-7-tour-data-release`.
+- Paket 10: Etappenbewertung nach Schwierigkeit und Belastung in Arbeit auf Branch `codex/package-10-stage-difficulty`.
 
 Letzter nachgezogener Deployment-Stand vor Paket 4:
 
@@ -145,3 +149,17 @@ Paket 7 ergänzt:
 - Indexing-Steuerung über `NEXT_PUBLIC_ALLOW_INDEXING`
 - Release-/Backup-/Betriebsdokumentation
 - keine Plesk-Umstellung und keine produktive Veröffentlichung
+
+## Paket 10: Etappenbewertung nach Schwierigkeit
+
+Paket 10 ergänzt eine erklärbare MVP-Bewertung je Etappe. Die App berechnet Belastungspunkte von `0..100` aus Distanz, Höhenmetern bergauf, Höhenmetern bergab, Steigungsdichte und Längenzuschlägen. Die Etappen-Timeline zeigt daraus eine Stufe `leicht`, `mittel`, `schwer` oder `sehr schwer`, kompakte Kennzahlen und konkrete Hinweise.
+
+Dokumentation der Formel, Schwellen und Grenzen: [docs/STAGE_DIFFICULTY_MVP.md](STAGE_DIFFICULTY_MVP.md).
+
+Nicht enthalten:
+
+- Wetter-, Wind- oder Oberflächenbewertung
+- individuelle Fitnessprofile
+- E-Bike-Akkureichweite
+- medizinische oder sicherheitsrelevante Eignungsprüfung
+- automatische Neuoptimierung der Etappen ohne Nutzerbestätigung

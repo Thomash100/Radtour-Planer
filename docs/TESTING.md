@@ -56,6 +56,7 @@ Je nach Paket prüfen:
 - `Kürzung zurücksetzen` stellt die vollständige Originalroute wieder her.
 - Etappen können nach Länge und nach Reisetagen erzeugt werden.
 - Manuelle Etappenänderungen aktualisieren Geometrie, Folgeetappen, Distanz, Höhenmeter und Fahrzeit.
+- Etappen zeigen Schwierigkeit, Belastungspunkte, Steigungsdichte und Hinweise aus Distanz/Höhenmetern.
 - Ungültige km- oder Reisetage-Eingaben werden verständlich abgelehnt.
 - Orte/Städte werden auf die GPX-Route projiziert und erst nach Bestätigung übernommen.
 - Abbrechen einer Ortprojektion verändert Route und Etappenpunkte nicht.
@@ -101,6 +102,19 @@ Zusätzlich gebündelt prüfen:
 - `/api/health` und `/api/version` liefern Version, Build-Datum, MVP-Status, Deployment-Kanal und Indexierungsstatus.
 - Robots sperrt Indexierung standardmäßig.
 - Keine produktive API, Buchung, Zahlung, Nutzerkonten oder Plesk-Umstellung werden suggeriert.
+
+## Paket 10
+
+Zusätzlich gebündelt prüfen:
+
+- Etappen-Timeline zeigt pro Etappe eine Schwierigkeit `leicht`, `mittel`, `schwer` oder `sehr schwer`.
+- Belastungspunkte bleiben zwischen `0` und `100`.
+- Distanz, Höhenmeter bergauf, Höhenmeter bergab, Steigungsdichte und Fahrzeit sind kompakt sichtbar.
+- Lange Etappen, viele Höhenmeter und lange Abfahrten erzeugen verständliche Hinweise.
+- Fehlende Höhendaten werden als unvollständig markiert und erzeugen keine kaputte Bewertung.
+- Manuelle Änderungen an Distanz oder Höhenmetern aktualisieren die Bewertung sofort.
+- Speichern und erneutes Öffnen erhält Etappenwerte; die Bewertung wird daraus erneut berechnet.
+- Die Bewertung behauptet keine Fitness-, Wetter-, Sicherheits- oder E-Bike-Akkugarantie.
 
 ## Docker/RPi-Prüfung
 

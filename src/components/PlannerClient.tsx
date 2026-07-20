@@ -49,6 +49,7 @@ import {
   type StageAccommodation
 } from "@/lib/accommodations";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
+import { calculateStageDifficulty, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import {
   createElevationProfile,
   createTrimmedRouteFromOriginal,
@@ -333,6 +334,21 @@ function accommodationStatusLabel(status: AccommodationStatus) {
   if (status === "selected") return "Übernachtung";
   if (status === "planned") return "geplant";
   return "Kandidat";
+}
+
+function stageDifficultyBadgeClass(level: StageDifficultyLevel) {
+  switch (level) {
+    case "easy":
+      return "border-emerald-200 bg-emerald-50 text-emerald-900";
+    case "moderate":
+      return "border-sky-200 bg-sky-50 text-sky-900";
+    case "hard":
+      return "border-amber-200 bg-amber-50 text-amber-900";
+    case "very_hard":
+      return "border-rose-200 bg-rose-50 text-rose-900";
+    default:
+      return "border bg-white";
+  }
 }
 
 export function PlannerClient({
@@ -2935,6 +2951,13 @@ export function PlannerClient({
                       !selectedAccommodation ||
                       (candidate.id !== selectedAccommodation.id && (!candidate.poiId || candidate.poiId !== selectedAccommodation.poiId))
                   );
+                  const stageDifficulty = calculateStageDifficulty({
+                    distanceKm: stage.distanceKm,
+                    elevationUp: stage.elevationUp,
+                    elevationDown: stage.elevationDown,
+                    durationHours: stage.distanceKm / 17
+                  });
+                  const stageDifficultyNotes = [...stageDifficulty.warnings, ...stageDifficulty.suggestions].slice(0, 3);
 
                   return (
                     <div
@@ -3047,6 +3070,36 @@ export function PlannerClient({
                               {formatHours(stage.distanceKm / 17)}
                             </div>
                           </div>
+                        </div>
+                        <div className="grid min-w-0 gap-2 rounded-md border bg-white p-3 text-sm">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge className={cn("border", stageDifficultyBadgeClass(stageDifficulty.level))} variant="outline">
+                              Schwierigkeit: {stageDifficulty.label}
+                            </Badge>
+                            <Badge variant="outline">Belastung: {stageDifficulty.effortScore}/100</Badge>
+                            <Badge variant="outline">
+                              {stageDifficulty.climbDensityHmPerKm === null
+                                ? "Steigungsdichte offen"
+                                : `${stageDifficulty.climbDensityHmPerKm.toFixed(1)} Hm/km`}
+                            </Badge>
+                            {stageDifficulty.isIncomplete && (
+                              <Badge variant="outline">Höhendaten unvollständig</Badge>
+                            )}
+                          </div>
+                          <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-4">
+                            <span>Distanz: {formatKm(stage.distanceKm)}</span>
+                            <span>Bergauf: {stage.elevationUp} Hm</span>
+                            <span>Bergab: {stage.elevationDown} Hm</span>
+                            <span>Fahrzeit: {formatHours(stage.distanceKm / 17)}</span>
+                          </div>
+                          <p className="text-xs text-slate-700">{stageDifficulty.summary}</p>
+                          {stageDifficultyNotes.length > 0 && (
+                            <div className="grid gap-1 text-xs text-muted-foreground">
+                              {stageDifficultyNotes.map((note) => (
+                                <div key={note}>Hinweis: {note}</div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="grid min-w-0 gap-3 rounded-md border bg-slate-50 p-3">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
