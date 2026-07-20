@@ -11,6 +11,7 @@ import {
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import type { LineStringGeoJson } from "../src/lib/geo";
 import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
+import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { routeCalculateSchema } from "../src/lib/validators";
 
 const routeGeometry: LineStringGeoJson = {
@@ -129,4 +130,80 @@ test("reports unknown places instead of routing to fallback coordinates", () => 
     () => calculateMockRoute({ start: "Flensburg-Suchbegriff", end: "Berlin", profile: "balanced" }),
     /Ort nicht eindeutig gefunden/
   );
+});
+
+test("rates short flat stages as easy", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 30, elevationUp: 80, elevationDown: 60, durationHours: 1.8 });
+
+  assert.equal(rating.level, "easy");
+  assert.equal(rating.label, "leicht");
+  assert.ok(rating.effortScore >= 0 && rating.effortScore <= 100);
+});
+
+test("keeps moderate reference stage in the middle range", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 60, elevationUp: 300, elevationDown: 250, durationHours: 3.6 });
+
+  assert.equal(rating.level, "moderate");
+  assert.equal(rating.label, "mittel");
+  assert.ok(rating.effortScore >= 35 && rating.effortScore <= 64);
+});
+
+test("rates short hilly stages as hard and explains climb load", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 45, elevationUp: 1000, elevationDown: 250, durationHours: 3 });
+
+  assert.equal(rating.level, "hard");
+  assert.equal(rating.label, "schwer");
+  assert.ok(rating.warnings.some((warning) => warning.includes("Höhenmeter")));
+  assert.ok(rating.suggestions.some((suggestion) => suggestion.includes("Anstiegslast")));
+});
+
+test("treats long flat stages as distance-driven load", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 80, elevationUp: 150, elevationDown: 120, durationHours: 4.8 });
+
+  assert.equal(rating.level, "moderate");
+  assert.ok(rating.warnings.some((warning) => warning.includes("Lange Etappe")));
+  assert.ok(rating.suggestions.some((suggestion) => suggestion.includes("Etappe verkürzen")));
+});
+
+test("warns about long descents without changing the route", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 50, elevationUp: 200, elevationDown: 1200, durationHours: 3.1 });
+
+  assert.ok(rating.warnings.some((warning) => warning.includes("Abfahrt")));
+  assert.ok(rating.suggestions.some((suggestion) => suggestion.includes("Brems")));
+});
+
+test("adds climb-density warning above 15 height meters per kilometer", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 35, elevationUp: 700, elevationDown: 100, durationHours: 2.5 });
+
+  assert.equal(rating.climbDensityHmPerKm, 20);
+  assert.ok(rating.factors.climbDensityBonus > 0);
+  assert.ok(rating.warnings.some((warning) => warning.includes("Steigungsdichte")));
+});
+
+test("marks missing elevation data as incomplete and keeps score bounded", () => {
+  const rating = calculateStageDifficulty({ distanceKm: 40, elevationUp: null, elevationDown: undefined });
+
+  assert.equal(rating.isIncomplete, true);
+  assert.equal(rating.climbDensityHmPerKm, null);
+  assert.ok(rating.warnings.some((warning) => warning.includes("Höhendaten")));
+  assert.ok(rating.effortScore >= 0 && rating.effortScore <= 100);
+});
+
+test("keeps difficulty thresholds ordered and caps very hard stages at 100", () => {
+  assert.equal(calculateStageDifficulty({ distanceKm: 10, elevationUp: 0, elevationDown: 0 }).level, "easy");
+  assert.equal(calculateStageDifficulty({ distanceKm: 60, elevationUp: 300, elevationDown: 150 }).level, "moderate");
+  assert.equal(calculateStageDifficulty({ distanceKm: 45, elevationUp: 1000, elevationDown: 250 }).level, "hard");
+
+  const veryHard = calculateStageDifficulty({ distanceKm: 100, elevationUp: 1400, elevationDown: 1300, durationHours: 6 });
+  assert.equal(veryHard.level, "very_hard");
+  assert.equal(veryHard.effortScore, 100);
+});
+
+test("recalculates difficulty when manual stage metrics change", () => {
+  const before = calculateStageDifficulty({ distanceKm: 40, elevationUp: 100, elevationDown: 100 });
+  const after = calculateStageDifficulty({ distanceKm: 40, elevationUp: 900, elevationDown: 100 });
+
+  assert.ok(after.effortScore > before.effortScore);
+  assert.equal(before.level, "easy");
+  assert.equal(after.level, "hard");
 });
