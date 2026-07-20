@@ -26,6 +26,10 @@ export type RouteCalculation = {
     lat: number;
     lon: number;
   }>;
+  routingProvider: "mock" | "brouter";
+  routingProfileName: string;
+  routingAttribution: string;
+  routingDataNotice: string;
 };
 
 const knownPlaces: Record<string, Position> = {
@@ -186,13 +190,26 @@ function geocodeMockStrict(place: string): Position {
   return resolved.coordinate;
 }
 
-function enrichDemoWaypoints(start: string, end: string, waypoints: string[]) {
+export function enrichDemoWaypoints(start: string, end: string, waypoints: string[]) {
   if (waypoints.length > 0) {
     return waypoints;
   }
 
   const corridorKey = `${normalizePlace(start)}${normalizePlace(end)}`;
   return demoCorridors[corridorKey] ?? [];
+}
+
+export function resolveRouteControlPoints(input: RouteCalculationInput) {
+  const profile = input.profile ?? "balanced";
+  const inputWaypoints = (input.waypoints ?? []).map((waypoint) => waypoint.trim()).filter(Boolean);
+  const routeWaypoints = enrichDemoWaypoints(input.start, input.end, inputWaypoints);
+  const orderedNames = [input.start.trim(), ...routeWaypoints, input.end.trim()];
+
+  return {
+    profile,
+    orderedNames,
+    controlPoints: orderedNames.map(geocodeMockStrict)
+  };
 }
 
 function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmentIndex: number) {
@@ -220,11 +237,7 @@ function segmentPoints(a: Position, b: Position, profile: RoutingProfile, segmen
 }
 
 export function calculateMockRoute(input: RouteCalculationInput): RouteCalculation {
-  const profile = input.profile ?? "balanced";
-  const inputWaypoints = (input.waypoints ?? []).filter(Boolean);
-  const demoWaypoints = enrichDemoWaypoints(input.start, input.end, inputWaypoints);
-  const orderedNames = [input.start, ...demoWaypoints, input.end];
-  const controlPoints = orderedNames.map(geocodeMockStrict);
+  const { profile, orderedNames, controlPoints } = resolveRouteControlPoints(input);
   const coordinates: Position[] = [];
 
   for (let index = 1; index < controlPoints.length; index += 1) {
@@ -254,6 +267,10 @@ export function calculateMockRoute(input: RouteCalculationInput): RouteCalculati
     waypoints: orderedNames.map((name, order) => {
       const [lon, lat] = controlPoints[order];
       return { order, name, lat, lon };
-    })
+    }),
+    routingProvider: "mock",
+    routingProfileName: profile,
+    routingAttribution: "Lokale MVP-Testdaten",
+    routingDataNotice: "Mockroute: nicht als reale Fahrradnavigation verwenden."
   };
 }

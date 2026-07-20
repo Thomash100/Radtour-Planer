@@ -4,7 +4,7 @@ import { z } from "zod";
 export const routeCalculateSchema = z.object({
   start: z.string().min(2),
   end: z.string().min(2),
-  waypoints: z.array(z.string().min(2)).optional().default([]),
+  waypoints: z.array(z.string().min(2)).max(20).optional().default([]),
   profile: z
     .enum(["balanced", "cycleways", "low_elevation", "touristic", "sportive"])
     .optional()

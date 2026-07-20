@@ -32,6 +32,10 @@ services:
       DATABASE_URL: postgresql://radreise:radreise@postgres:5432/radreiseplaner?schema=public
       REDIS_URL: redis://redis:6379
       NEXT_PUBLIC_APP_URL: http://localhost:3000
+      ROUTING_PROVIDER: ${ROUTING_PROVIDER:-brouter}
+      BROUTER_BASE_URL: ${BROUTER_BASE_URL:-https://brouter.de/brouter}
+      ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-60000}
+      ROUTING_MAX_SEGMENT_KM: ${ROUTING_MAX_SEGMENT_KM:-80}
     ports:
       - "3000:3000"
     volumes:

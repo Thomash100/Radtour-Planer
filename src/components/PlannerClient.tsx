@@ -100,6 +100,10 @@ type RouteCalculation = {
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
   coordinateCorrections?: string[];
+  routingProvider?: "brouter" | "mock";
+  routingProfileName?: string;
+  routingAttribution?: string;
+  routingDataNotice?: string;
 };
 
 type SavedRoute = RouteCalculation & {
@@ -1493,7 +1497,10 @@ export function PlannerClient({
         }
       }
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
-      setStatus(`${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
+      const routingNotice = calculatedRoute.routingDataNotice ? ` ${calculatedRoute.routingDataNotice}` : "";
+      setStatus(
+        `${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${routingNotice}${poiNotice}`
+      );
       setPlannerStep(options.finalStep ?? "overview");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
@@ -1966,7 +1973,7 @@ export function PlannerClient({
           <Route className="h-5 w-5 text-primary" />
           Direkte Routeneingabe
         </CardTitle>
-        <CardDescription>Start, Ziel, Zwischenziele und Profil festlegen. Das MVP nutzt weiterhin Mockrouting.</CardDescription>
+        <CardDescription>Start, Ziel, Zwischenziele und Profil festlegen. Die Strecke wird über reale Fahrradwege berechnet.</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => requestDirectRoutePlan(values))}>
@@ -2170,7 +2177,7 @@ export function PlannerClient({
           <Card>
             <CardHeader>
               <CardTitle>Direkte Planung ansehen</CardTitle>
-              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben. Im MVP weiterhin Mockrouting.</CardDescription>
+              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben und über reale Fahrradwege verbinden.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full" type="button" onClick={() => {
@@ -2334,9 +2341,21 @@ export function PlannerClient({
               <CardDescription>{route.startName} - {route.endName}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                MVP-Hinweis: Direkte Eingabe nutzt Mockrouting und ist noch keine produktive Fahrradnavigation.
-              </p>
+              {inputMode === "direct" ? (
+                <p
+                  className={cn(
+                    "rounded-md border p-3 text-sm",
+                    route.routingProvider === "brouter"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                      : "border-amber-200 bg-amber-50 text-amber-950"
+                  )}
+                >
+                  {route.routingProvider === "brouter"
+                    ? `Reale Fahrradroute über BRouter (${route.routingProfileName ?? "trekking"}) auf Basis von OpenStreetMap. Routenverlauf vor der Fahrt prüfen.`
+                    : "MVP-Hinweis: Diese Route verwendet Testgeometrie und ist keine reale Fahrradnavigation."}
+                  {route.routingAttribution ? ` Quelle: ${route.routingAttribution}.` : ""}
+                </p>
+              ) : null}
               {route.coordinateCorrections?.length ? (
                 <p className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
                   Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
