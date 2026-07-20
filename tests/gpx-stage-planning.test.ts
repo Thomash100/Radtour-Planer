@@ -11,9 +11,16 @@ import {
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import type { LineStringGeoJson } from "../src/lib/geo";
 import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
-import { buildBRouterUrl, calculateRoadRoute, createRoutingAnchors } from "../src/lib/road-routing";
+import {
+  analyzeBRouterCycleCoverage,
+  brouterProfileByRoutingProfile,
+  buildBRouterUrl,
+  calculateRoadRoute,
+  createRoutingAnchors
+} from "../src/lib/road-routing";
 import { configuredRoutingProvider } from "../src/lib/routing-provider";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
+import { parseStoredTourState } from "../src/lib/tour-state";
 import { routeCalculateSchema } from "../src/lib/validators";
 
 const routeGeometry: LineStringGeoJson = {
@@ -136,7 +143,7 @@ test("reports unknown places instead of routing to fallback coordinates", () => 
 
 function brouterFeature(
   coordinates: number[][],
-  properties: Record<string, string | number> = {}
+  properties: Record<string, unknown> = {}
 ) {
   return {
     type: "FeatureCollection",
@@ -164,6 +171,51 @@ test("builds BRouter requests for real bicycle profiles", () => {
   assert.equal(url.searchParams.get("profile"), "fastbike");
   assert.equal(url.searchParams.get("format"), "geojson");
   assert.equal(url.searchParams.get("lonlats"), "13.737300,51.050400|13.940700,50.962500");
+  assert.equal(brouterProfileByRoutingProfile.cycleways, "safety");
+  assert.equal(brouterProfileByRoutingProfile.touristic, "trekking");
+});
+
+test("reports bicycle infrastructure and signed cycle-route networks from BRouter messages", () => {
+  const coverage = analyzeBRouterCycleCoverage(
+    [
+      ["Distance", "WayTags"],
+      [4000, "highway=cycleway route_bicycle_ncn=yes route_bicycle_rcn=yes"],
+      [3000, "highway=path bicycle=designated route_bicycle_rcn=yes"],
+      [3000, "highway=residential cycleway=no"]
+    ],
+    10
+  );
+
+  assert.equal(coverage.dataAvailable, true);
+  assert.equal(coverage.bicycleInfrastructureDistanceKm, 7);
+  assert.equal(coverage.bicycleInfrastructurePercent, 70);
+  assert.equal(coverage.signedCycleRouteDistanceKm, 7);
+  assert.equal(coverage.signedCycleRoutePercent, 70);
+  assert.equal(coverage.networkDistanceKm.ncn, 4);
+  assert.equal(coverage.networkDistanceKm.rcn, 7);
+});
+
+test("keeps cycle-route coverage in the stored browser tour state", () => {
+  const coverage = analyzeBRouterCycleCoverage(
+    [
+      ["Distance", "WayTags"],
+      [6000, "highway=cycleway route_bicycle_ncn=yes"],
+      [4000, "highway=residential cycleway=no"]
+    ],
+    10
+  );
+  const stored = parseStoredTourState(
+    JSON.stringify({
+      route: { geometryGeoJson: routeGeometry, cycleRouteCoverage: coverage },
+      stages: [],
+      pois: [],
+      inputMode: "direct",
+      updatedAt: "2026-07-20T12:00:00.000Z"
+    })
+  );
+
+  assert.equal(stored?.route?.cycleRouteCoverage?.signedCycleRouteDistanceKm, 6);
+  assert.equal(stored?.route?.cycleRouteCoverage?.bicycleInfrastructurePercent, 60);
 });
 
 test("splits long provider requests into short internal routing sections", () => {
@@ -182,7 +234,16 @@ test("combines routed BRouter segments without replacing them by straight lines"
         [13.66, 51.14, 145],
         [13.4775, 51.1616, 120]
       ],
-      { "track-length": "18500", "filtered ascend": "120", "total-time": "3600" }
+      {
+        "track-length": "18500",
+        "filtered ascend": "120",
+        "total-time": "3600",
+        messages: [
+          ["Distance", "WayTags"],
+          [10000, "highway=cycleway route_bicycle_rcn=yes"],
+          [8500, "highway=residential cycleway=no"]
+        ]
+      }
     ),
     brouterFeature(
       [
@@ -190,7 +251,16 @@ test("combines routed BRouter segments without replacing them by straight lines"
         [12.8, 52.1, 90],
         [9.9937, 53.5511, 12]
       ],
-      { "track-length": "410000", "filtered ascend": "800", "total-time": "72000" }
+      {
+        "track-length": "410000",
+        "filtered ascend": "800",
+        "total-time": "72000",
+        messages: [
+          ["Distance", "WayTags"],
+          [205000, "highway=path bicycle=yes route_bicycle_ncn=yes"],
+          [205000, "highway=secondary cycleway=no"]
+        ]
+      }
     )
   ];
   const requestedUrls: string[] = [];
@@ -215,6 +285,10 @@ test("combines routed BRouter segments without replacing them by straight lines"
   assert.equal(route.waypoints[1].name, "Meissen");
   assert.deepEqual([route.waypoints[1].lon, route.waypoints[1].lat], [13.4775, 51.1616]);
   assert.ok(route.elevationProfile.length >= 2);
+  assert.equal(route.cycleRouteCoverage?.dataAvailable, true);
+  assert.equal(route.cycleRouteCoverage?.bicycleInfrastructureDistanceKm, 10);
+  assert.equal(route.cycleRouteCoverage?.signedCycleRouteDistanceKm, 215);
+  assert.equal(route.cycleRouteCoverage?.networkDistanceKm.ncn, 205);
 });
 
 test("reports routing provider failures instead of silently drawing a direct line", async () => {

@@ -173,8 +173,8 @@ npm run worker
 ## MVP-Flows
 
 1. `/planer` oeffnen.
-2. Start, Ziel, Zwischenziele und Routingprofil waehlen.
-3. `Route planen` berechnet ueber BRouter eine Fahrradroute auf realen OpenStreetMap-Wegen, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI.
+2. Start, Ziel, Zwischenziele und Routingprofil waehlen; `Fahrradwege bevorzugen` nutzt sichere Fahrradinfrastruktur, `Radwanderwege bevorzugen` das ausgeschilderte OSM-Radroutennetz.
+3. `Route planen` berechnet ueber BRouter eine Fahrradroute auf realen OpenStreetMap-Wegen, weist die erfassten Radwege-Anteile aus, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI.
 4. Etappen in der Timeline bei Bedarf manuell anpassen und speichern.
 5. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant, Mindestbewertung, Hunde, Fahrradstellplatz und weitere Kategorien nutzen.
 6. Partner-POI auswaehlen und eine Unterkunfts- oder Gepaecktransfer-Anfrage senden.

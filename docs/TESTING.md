@@ -123,7 +123,9 @@ Reale Wege in der Direktplanung gebündelt prüfen:
 - Flensburg nach Swinemünde planen; die Geometrie folgt Straßen und Fahrradwegen und besteht nicht nur aus Kontrollpunkten.
 - Hamburg nach Dresden planen; die vorhandenen Korridorpunkte werden über reale Wege verbunden.
 - Ein eigenes Zwischenziel hinzufügen und prüfen, dass die Route dieses Ziel in der richtigen Reihenfolge anfährt.
-- Profil `sportlich` verwendet BRouter `fastbike`; die übrigen MVP-Profile verwenden `trekking`.
+- Profil `Fahrradwege bevorzugen` verwendet BRouter `safety`, `Radwanderwege bevorzugen` verwendet `trekking` und `sportlich` verwendet `fastbike`.
+- Die Radwege-Auswertung zeigt Kilometer und Anteil für erfasste Fahrradinfrastruktur und ausgeschilderte OSM-Radroutennetze.
+- Vorhandene Netzebenen (`international`, `national`, `regional`, `lokal`) werden angezeigt; mehrfach markierte Abschnitte werden in der Radwanderwege-Gesamtsumme nicht doppelt gezählt.
 - Distanz, Fahrzeit und Höhenprofil werden angezeigt.
 - Etappen lassen sich aus der realen Arbeitsroute erzeugen und farbig darstellen.
 - Speichern und erneutes Öffnen erhält die geroutete Geometrie.

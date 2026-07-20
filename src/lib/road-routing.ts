@@ -10,6 +10,8 @@ import {
 } from "@/lib/geo";
 import {
   resolveRouteControlPoints,
+  type CycleRouteCoverage,
+  type CycleRouteNetwork,
   type RouteCalculation,
   type RouteCalculationInput,
   type RoutingProfile
@@ -37,7 +39,7 @@ const brouterResponseSchema = z.union([
 
 export const brouterProfileByRoutingProfile: Record<RoutingProfile, string> = {
   balanced: "trekking",
-  cycleways: "trekking",
+  cycleways: "safety",
   low_elevation: "trekking",
   touristic: "trekking",
   sportive: "fastbike"
@@ -71,7 +73,143 @@ type RoutedSegment = {
   elevationUp: number;
   elevationDown: number;
   durationSeconds: number;
+  cycleRouteCoverage: CycleRouteCoverage;
 };
+
+const cycleRouteNetworks: CycleRouteNetwork[] = ["icn", "ncn", "rcn", "lcn"];
+
+function emptyCycleRouteCoverage(): CycleRouteCoverage {
+  return {
+    dataAvailable: false,
+    analyzedDistanceKm: 0,
+    bicycleInfrastructureDistanceKm: 0,
+    bicycleInfrastructurePercent: 0,
+    signedCycleRouteDistanceKm: 0,
+    signedCycleRoutePercent: 0,
+    networkDistanceKm: { icn: 0, ncn: 0, rcn: 0, lcn: 0 }
+  };
+}
+
+function parseBRouterWayTags(value: unknown) {
+  if (typeof value !== "string") {
+    return new Map<string, string>();
+  }
+
+  return new Map(
+    value
+      .trim()
+      .split(/\s+/)
+      .map((entry) => {
+        const separatorIndex = entry.indexOf("=");
+        return separatorIndex > 0 ? [entry.slice(0, separatorIndex), entry.slice(separatorIndex + 1)] : [entry, "yes"];
+      })
+  );
+}
+
+function isBicycleInfrastructure(tags: Map<string, string>) {
+  if (tags.get("highway") === "cycleway" || tags.get("bicycle") === "designated") {
+    return true;
+  }
+
+  return Array.from(tags.entries()).some(([key, value]) => {
+    if (key !== "cycleway" && !key.startsWith("cycleway:")) {
+      return false;
+    }
+    return !["", "no", "none", "separate", "unknown"].includes(value);
+  });
+}
+
+export function analyzeBRouterCycleCoverage(messages: unknown, routeDistanceKm: number): CycleRouteCoverage {
+  if (!Array.isArray(messages) || messages.length < 2 || !Array.isArray(messages[0])) {
+    return emptyCycleRouteCoverage();
+  }
+
+  const header = messages[0].map(String);
+  const distanceIndex = header.indexOf("Distance");
+  const wayTagsIndex = header.indexOf("WayTags");
+  if (distanceIndex < 0 || wayTagsIndex < 0) {
+    return emptyCycleRouteCoverage();
+  }
+
+  let analyzedMeters = 0;
+  let bicycleInfrastructureMeters = 0;
+  let signedCycleRouteMeters = 0;
+  const networkMeters: Record<CycleRouteNetwork, number> = { icn: 0, ncn: 0, rcn: 0, lcn: 0 };
+
+  for (const row of messages.slice(1)) {
+    if (!Array.isArray(row)) {
+      continue;
+    }
+
+    const distanceMeters = numericProperty(row[distanceIndex]);
+    if (distanceMeters === null || distanceMeters <= 0) {
+      continue;
+    }
+
+    analyzedMeters += distanceMeters;
+    const tags = parseBRouterWayTags(row[wayTagsIndex]);
+    if (isBicycleInfrastructure(tags)) {
+      bicycleInfrastructureMeters += distanceMeters;
+    }
+
+    const networks = cycleRouteNetworks.filter((network) => tags.get(`route_bicycle_${network}`) === "yes");
+    if (networks.length > 0) {
+      signedCycleRouteMeters += distanceMeters;
+      for (const network of networks) {
+        networkMeters[network] += distanceMeters;
+      }
+    }
+  }
+
+  const safeRouteMeters = Math.max(routeDistanceKm * 1000, analyzedMeters, 1);
+  const toKm = (meters: number) => Number((meters / 1000).toFixed(3));
+  const toPercent = (meters: number) => Number(Math.min(100, (meters / safeRouteMeters) * 100).toFixed(1));
+
+  return {
+    dataAvailable: analyzedMeters > 0,
+    analyzedDistanceKm: toKm(analyzedMeters),
+    bicycleInfrastructureDistanceKm: toKm(bicycleInfrastructureMeters),
+    bicycleInfrastructurePercent: toPercent(bicycleInfrastructureMeters),
+    signedCycleRouteDistanceKm: toKm(signedCycleRouteMeters),
+    signedCycleRoutePercent: toPercent(signedCycleRouteMeters),
+    networkDistanceKm: Object.fromEntries(
+      cycleRouteNetworks.map((network) => [network, toKm(networkMeters[network])])
+    ) as Record<CycleRouteNetwork, number>
+  };
+}
+
+function combineCycleRouteCoverage(segments: RoutedSegment[], routeDistanceKm: number): CycleRouteCoverage {
+  if (segments.length === 0 || segments.some((segment) => !segment.cycleRouteCoverage.dataAvailable)) {
+    return emptyCycleRouteCoverage();
+  }
+
+  const bicycleInfrastructureDistanceKm = segments.reduce(
+    (sum, segment) => sum + segment.cycleRouteCoverage.bicycleInfrastructureDistanceKm,
+    0
+  );
+  const signedCycleRouteDistanceKm = segments.reduce(
+    (sum, segment) => sum + segment.cycleRouteCoverage.signedCycleRouteDistanceKm,
+    0
+  );
+  const percent = (distanceKm: number) => Number(Math.min(100, (distanceKm / Math.max(routeDistanceKm, 0.001)) * 100).toFixed(1));
+
+  return {
+    dataAvailable: true,
+    analyzedDistanceKm: Number(
+      segments.reduce((sum, segment) => sum + segment.cycleRouteCoverage.analyzedDistanceKm, 0).toFixed(3)
+    ),
+    bicycleInfrastructureDistanceKm: Number(bicycleInfrastructureDistanceKm.toFixed(3)),
+    bicycleInfrastructurePercent: percent(bicycleInfrastructureDistanceKm),
+    signedCycleRouteDistanceKm: Number(signedCycleRouteDistanceKm.toFixed(3)),
+    signedCycleRoutePercent: percent(signedCycleRouteDistanceKm),
+    networkDistanceKm: Object.fromEntries(
+      cycleRouteNetworks.map((network) => [
+        network,
+        Number(segments.reduce((sum, segment) => sum + segment.cycleRouteCoverage.networkDistanceKm[network], 0).toFixed(3))
+      ])
+    ) as Record<CycleRouteNetwork, number>
+  };
+}
 
 function numericProperty(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -129,13 +267,15 @@ function parseBRouterPayload(payload: unknown, profile: RoutingProfile): RoutedS
   const distanceKm = (numericProperty(feature.properties["track-length"]) ?? routeDistanceKm(twoDimensionalCoordinates) * 1000) / 1000;
   const durationSeconds =
     numericProperty(feature.properties["total-time"]) ?? (distanceKm / fallbackSpeedKmh[profile]) * 60 * 60;
+  const cycleRouteCoverage = analyzeBRouterCycleCoverage(feature.properties.messages, distanceKm);
 
   return {
     coordinates,
     distanceKm,
     elevationUp,
     elevationDown,
-    durationSeconds
+    durationSeconds,
+    cycleRouteCoverage
   };
 }
 
@@ -299,13 +439,21 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
 
   const geometryCoordinates = coordinates.map(([lon, lat]) => [lon, lat] satisfies Position);
   const brouterProfile = brouterProfileByRoutingProfile[profile];
+  const distanceKm = Number(segments.reduce((sum, segment) => sum + segment.distanceKm, 0).toFixed(1));
+  const cycleRouteCoverage = combineCycleRouteCoverage(segments, distanceKm);
+  const preferenceNotice =
+    profile === "cycleways"
+      ? "Das Profil safety bevorzugt sichere Wege und erfasste Fahrradinfrastruktur."
+      : profile === "touristic"
+        ? "Das Profil trekking bevorzugt ausgeschilderte Radwanderwege aus dem OSM-Radroutennetz."
+        : `Berechnet mit dem BRouter-Profil ${brouterProfile}.`;
 
   return {
     name: `${input.start.trim()} nach ${input.end.trim()}`,
     startName: input.start.trim(),
     endName: input.end.trim(),
     profile,
-    distanceKm: Number(segments.reduce((sum, segment) => sum + segment.distanceKm, 0).toFixed(1)),
+    distanceKm,
     elevationUp: Math.round(segments.reduce((sum, segment) => sum + segment.elevationUp, 0)),
     elevationDown: Math.round(segments.reduce((sum, segment) => sum + segment.elevationDown, 0)),
     durationHours: Number((segments.reduce((sum, segment) => sum + segment.durationSeconds, 0) / 3600).toFixed(2)),
@@ -321,6 +469,7 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
     routingProvider: "brouter",
     routingProfileName: brouterProfile,
     routingAttribution: "BRouter / OpenStreetMap-Mitwirkende",
-    routingDataNotice: `Reale Fahrradroute über BRouter (${brouterProfile}) auf Basis von OpenStreetMap.`
+    routingDataNotice: `Reale Fahrradroute auf Basis von OpenStreetMap. ${preferenceNotice}`,
+    cycleRouteCoverage
   };
 }

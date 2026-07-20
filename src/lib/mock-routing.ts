@@ -2,6 +2,18 @@ import { createElevationProfile, haversineKm, routeDistanceKm, type LineStringGe
 
 export type RoutingProfile = "balanced" | "cycleways" | "low_elevation" | "touristic" | "sportive";
 
+export type CycleRouteNetwork = "icn" | "ncn" | "rcn" | "lcn";
+
+export type CycleRouteCoverage = {
+  dataAvailable: boolean;
+  analyzedDistanceKm: number;
+  bicycleInfrastructureDistanceKm: number;
+  bicycleInfrastructurePercent: number;
+  signedCycleRouteDistanceKm: number;
+  signedCycleRoutePercent: number;
+  networkDistanceKm: Record<CycleRouteNetwork, number>;
+};
+
 export type RouteCalculationInput = {
   start: string;
   end: string;
@@ -30,6 +42,7 @@ export type RouteCalculation = {
   routingProfileName: string;
   routingAttribution: string;
   routingDataNotice: string;
+  cycleRouteCoverage?: CycleRouteCoverage;
 };
 
 const knownPlaces: Record<string, Position> = {

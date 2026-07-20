@@ -49,6 +49,7 @@ import {
   type StageAccommodation
 } from "@/lib/accommodations";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
+import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
 import { calculateStageDifficulty, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import {
   createElevationProfile,
@@ -104,6 +105,7 @@ type RouteCalculation = {
   routingProfileName?: string;
   routingAttribution?: string;
   routingDataNotice?: string;
+  cycleRouteCoverage?: CycleRouteCoverage;
 };
 
 type SavedRoute = RouteCalculation & {
@@ -217,10 +219,26 @@ const categoryOptions = [
 
 const profileLabels: Record<string, string> = {
   balanced: "ausgewogen",
-  cycleways: "möglichst Fahrradwege",
+  cycleways: "Fahrradwege bevorzugen",
   low_elevation: "wenig Steigung",
-  touristic: "touristisch",
+  touristic: "Radwanderwege bevorzugen",
   sportive: "sportlich"
+};
+
+const profileDescriptions: Record<string, string> = {
+  balanced: "Ausgewogene Fahrradroute mit BRouter trekking.",
+  cycleways: "Bevorzugt sichere Wege und in OSM erfasste Fahrradinfrastruktur.",
+  low_elevation: "Berücksichtigt Steigungen, garantiert aber nicht die höhenärmste Route.",
+  touristic: "Bevorzugt ausgeschilderte internationale, nationale, regionale und lokale Radrouten.",
+  sportive: "Zügige Fahrradroute mit dem BRouter-Profil fastbike."
+};
+
+const cycleRouteNetworks: CycleRouteNetwork[] = ["icn", "ncn", "rcn", "lcn"];
+const cycleRouteNetworkLabels: Record<CycleRouteNetwork, string> = {
+  icn: "international",
+  ncn: "national",
+  rcn: "regional",
+  lcn: "lokal"
 };
 
 const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Position }> = [
@@ -438,6 +456,7 @@ export function PlannerClient({
     }
   });
   const targetKmValue = plannerForm.watch("targetKm");
+  const profileValue = plannerForm.watch("profile");
 
   const leadForm = useForm<LeadForm>({
     resolver: zodResolver(leadSchema),
@@ -2040,6 +2059,7 @@ export function PlannerClient({
                   </option>
                 ))}
               </Select>
+              <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="targetKm">Tages-km</Label>
@@ -2323,6 +2343,37 @@ export function PlannerClient({
                 </span>
               </div>
             )}
+            {inputMode === "direct" && route.cycleRouteCoverage?.dataAvailable ? (
+              <div className="space-y-3 border-y py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-sm">Radwege-Anteil laut OSM</strong>
+                  {cycleRouteNetworks
+                    .filter((network) => route.cycleRouteCoverage!.networkDistanceKm[network] > 0)
+                    .map((network) => (
+                      <Badge key={network} variant="outline">
+                        {cycleRouteNetworkLabels[network]}: {formatKm(route.cycleRouteCoverage!.networkDistanceKm[network])}
+                      </Badge>
+                    ))}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 border-l-4 border-sky-600 pl-3">
+                    <span className="text-sm text-muted-foreground">Fahrradinfrastruktur</span>
+                    <strong className="shrink-0 text-sm">
+                      {formatKm(route.cycleRouteCoverage.bicycleInfrastructureDistanceKm)} ({route.cycleRouteCoverage.bicycleInfrastructurePercent} %)
+                    </strong>
+                  </div>
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 border-l-4 border-emerald-600 pl-3">
+                    <span className="text-sm text-muted-foreground">Ausgeschilderte Radwanderwege</span>
+                    <strong className="shrink-0 text-sm">
+                      {formatKm(route.cycleRouteCoverage.signedCycleRouteDistanceKm)} ({route.cycleRouteCoverage.signedCycleRoutePercent} %)
+                    </strong>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Aus den Weg- und Radroutennetz-Merkmalen der BRouter-/OSM-Daten. Fehlende Kennzeichnungen und aktuelle Sperrungen sind möglich.
+                </p>
+              </div>
+            ) : null}
             <RouteMap
               pois={pois}
               route={route.geometryGeoJson}
@@ -2351,7 +2402,7 @@ export function PlannerClient({
                   )}
                 >
                   {route.routingProvider === "brouter"
-                    ? `Reale Fahrradroute über BRouter (${route.routingProfileName ?? "trekking"}) auf Basis von OpenStreetMap. Routenverlauf vor der Fahrt prüfen.`
+                    ? `${route.routingDataNotice ?? `Reale Fahrradroute über BRouter (${route.routingProfileName ?? "trekking"}) auf Basis von OpenStreetMap.`} Routenverlauf vor der Fahrt prüfen.`
                     : "MVP-Hinweis: Diese Route verwendet Testgeometrie und ist keine reale Fahrradnavigation."}
                   {route.routingAttribution ? ` Quelle: ${route.routingAttribution}.` : ""}
                 </p>
@@ -2466,7 +2517,7 @@ export function PlannerClient({
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="profile">Profil</Label>
                     <Select id="profile" {...plannerForm.register("profile")}>
@@ -2476,6 +2527,7 @@ export function PlannerClient({
                         </option>
                       ))}
                     </Select>
+                    <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="targetKm">Tages-km</Label>

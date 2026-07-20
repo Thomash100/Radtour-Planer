@@ -9,7 +9,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 ## Aktueller MVP-Funktionsumfang
 
 - GPX-Datei laden und als feste geometrische Grundlage verwenden.
-- Start, Ziel und Zwischenziele direkt eingeben und über BRouter auf realen OpenStreetMap-Wegen verbinden.
+- Start, Ziel und Zwischenziele direkt eingeben und über BRouter auf realen OpenStreetMap-Wegen verbinden; Fahrradwege und ausgeschilderte Radwanderwege können gezielt bevorzugt werden.
 - Route anhand von Start-km und Ziel-km kürzen; Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet.
 - Etappen nach gewünschter Etappenlänge erzeugen.
 - Etappen nach Anzahl Reisetage erzeugen.
@@ -175,8 +175,10 @@ Enthalten:
 
 - BRouter-GeoJSON als tatsächliche Arbeitsgeometrie
 - OSM-basierte Fahrradwege für direkte Routen
+- getrennte Profile für sichere Fahrradinfrastruktur (`safety`) und ausgeschilderte Radwanderwege (`trekking`)
+- Kilometer-/Prozentanzeige für erfasste Fahrradinfrastruktur und internationale, nationale, regionale oder lokale OSM-Radroutennetze
 - Distanz, Fahrzeit und Höhenprofil aus dem Provider
-- Profilabbildung auf `trekking` und `fastbike`
+- Profilabbildung auf `safety`, `trekking` und `fastbike`
 - verständliche Provider- und Timeoutfehler
 - expliziter Offline-Testmodus über `ROUTING_PROVIDER=mock`
 - Docker-/RPi-Konfiguration und Datenschutz-/Betriebshinweise

@@ -1,5 +1,6 @@
 import type { StageAccommodation } from "@/lib/accommodations";
 import type { LineStringGeoJson } from "@/lib/geo";
+import type { CycleRouteCoverage } from "@/lib/mock-routing";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
 
@@ -30,6 +31,11 @@ export type StoredRoute = {
   elevationProfile: Array<{ distanceKm: number; elevationM: number }>;
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
   coordinateCorrections?: string[];
+  routingProvider?: "brouter" | "mock";
+  routingProfileName?: string;
+  routingAttribution?: string;
+  routingDataNotice?: string;
+  cycleRouteCoverage?: CycleRouteCoverage;
 };
 
 export type StoredStage = {

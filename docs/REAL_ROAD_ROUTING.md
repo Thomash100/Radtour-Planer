@@ -24,12 +24,28 @@ Die MVP-Profile werden so abgebildet:
 | Planerprofil | BRouter-Profil |
 | --- | --- |
 | ausgewogen | `trekking` |
-| möglichst Fahrradwege | `trekking` |
+| Fahrradwege bevorzugen | `safety` |
 | wenig Steigung | `trekking` |
-| touristisch | `trekking` |
+| Radwanderwege bevorzugen | `trekking` |
 | sportlich | `fastbike` |
 
-Die Profilnamen im Planer sind im MVP noch keine vollständig getrennten BRouter-Cost-Modelle. Insbesondere `wenig Steigung` ist eine Präferenz, aber keine Garantie für die höhenärmste mögliche Strecke.
+`safety` gewichtet sichere, für Fahrräder geeignete Wege stärker. Das BRouter-Profil `trekking` berücksichtigt das ausgeschilderte OSM-Radroutennetz und macht solche Abschnitte in seiner Kostenfunktion besonders günstig. Dadurch kann die Route bewusst internationalen, nationalen, regionalen oder lokalen Radwanderwegen folgen. Insbesondere `wenig Steigung` bleibt im MVP eine Präferenz, aber keine Garantie für die höhenärmste mögliche Strecke.
+
+## Fahrradwege und Radwanderwege
+
+BRouter liefert neben der Routengeometrie Wegmerkmale für die berechneten Abschnitte. Der Planer wertet daraus zwei voneinander unabhängige Anteile aus:
+
+- **Fahrradinfrastruktur:** als `highway=cycleway`, `bicycle=designated` oder über ein positives `cycleway*`-Merkmal erfasste Abschnitte.
+- **Ausgeschilderte Radwanderwege:** Abschnitte in einem OSM-Radroutennetz mit `route_bicycle_icn`, `route_bicycle_ncn`, `route_bicycle_rcn` oder `route_bicycle_lcn`.
+
+Im Planer werden Kilometer und Prozentanteil sowie vorhandene Netzebenen angezeigt:
+
+- `icn`: internationales Radroutennetz
+- `ncn`: nationales Radroutennetz
+- `rcn`: regionales Radroutennetz
+- `lcn`: lokales Radroutennetz
+
+Ein Abschnitt kann zugleich Fahrradinfrastruktur und Teil eines Radwanderwegs sein. Er wird daher in beiden fachlichen Kennzahlen berücksichtigt, innerhalb der Gesamtstrecke der Radwanderwege aber auch bei mehreren Netzkennzeichnungen nur einmal gezählt. Die Auswertung wird mit dem Browser-Tourzustand gespeichert und bleibt beim JSON-Export/-Import erhalten.
 
 ## Lange Strecken
 
@@ -40,6 +56,7 @@ Für ausgewählte lange Demo-Korridore ergänzt die vorhandene lokale Ortsliste 
 ## Daten und Grenzen
 
 - BRouter nutzt OpenStreetMap-Wege und liefert Distanz, Fahrzeit und Höheninformationen.
+- Die Radwege-Anteile hängen von Vollständigkeit und Aktualität der OSM-Weg- und Radroutenmerkmale ab. Sie garantieren weder eine lückenlose Beschilderung noch eine aktuell freie oder für das konkrete Fahrrad geeignete Strecke.
 - Ortsauflösung verwendet weiterhin den lokalen MVP-Ortskatalog; eine freie produktive Ortssuche ist nicht Bestandteil dieses Pakets.
 - Die öffentliche BRouter-Instanz hat kein zugesichertes SLA und priorisiert kurze Anfragen. Für einen produktiven Betrieb ist eine eigene BRouter-Instanz oder ein vertraglich geeigneter Routingprovider zu entscheiden.
 - Bei einer Routinganfrage werden die Koordinaten der Start-, Ziel- und Zwischenpunkte serverseitig an den konfigurierten BRouter-Dienst übertragen.
