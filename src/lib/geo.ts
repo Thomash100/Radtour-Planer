@@ -185,7 +185,96 @@ export function createElevationProfile(coordinates: Position[]) {
   });
 }
 
-export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: number) {
+function normalizedElevationProfile(profile: ElevationPoint[]) {
+  const sorted = profile
+    .filter((point) => Number.isFinite(point.distanceKm) && Number.isFinite(point.elevationM))
+    .map((point) => ({ distanceKm: Math.max(0, point.distanceKm), elevationM: point.elevationM }))
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  return sorted.filter((point, index) => index === 0 || point.distanceKm > sorted[index - 1].distanceKm);
+}
+
+function elevationAtDistance(profile: ElevationPoint[], distanceKm: number) {
+  if (profile.length === 0) {
+    return null;
+  }
+
+  const clampedDistance = Math.min(Math.max(distanceKm, profile[0].distanceKm), profile[profile.length - 1].distanceKm);
+  for (let index = 1; index < profile.length; index += 1) {
+    if (profile[index].distanceKm >= clampedDistance) {
+      const previous = profile[index - 1];
+      const current = profile[index];
+      const distance = current.distanceKm - previous.distanceKm;
+      const ratio = distance > 0 ? (clampedDistance - previous.distanceKm) / distance : 0;
+      return previous.elevationM + (current.elevationM - previous.elevationM) * ratio;
+    }
+  }
+
+  return profile[profile.length - 1].elevationM;
+}
+
+export function sliceElevationProfile(profile: ElevationPoint[], startKm: number, endKm: number) {
+  const normalized = normalizedElevationProfile(profile);
+  if (normalized.length < 2 || !Number.isFinite(startKm) || !Number.isFinite(endKm) || endKm <= startKm) {
+    return [];
+  }
+
+  const safeStart = Math.max(0, startKm);
+  const safeEnd = Math.max(safeStart, endKm);
+  const startElevation = elevationAtDistance(normalized, safeStart);
+  const endElevation = elevationAtDistance(normalized, safeEnd);
+  if (startElevation === null || endElevation === null) {
+    return [];
+  }
+
+  return [
+    { distanceKm: 0, elevationM: Math.round(startElevation) },
+    ...normalized
+      .filter((point) => point.distanceKm > safeStart && point.distanceKm < safeEnd)
+      .map((point) => ({ distanceKm: Number((point.distanceKm - safeStart).toFixed(3)), elevationM: Math.round(point.elevationM) })),
+    { distanceKm: Number((safeEnd - safeStart).toFixed(3)), elevationM: Math.round(endElevation) }
+  ];
+}
+
+export function elevationMetricsForRange(profile: ElevationPoint[], startKm: number, endKm: number) {
+  const slicedProfile = sliceElevationProfile(profile, startKm, endKm);
+  if (slicedProfile.length < 2) {
+    return null;
+  }
+
+  let elevationUp = 0;
+  let elevationDown = 0;
+  for (let index = 1; index < slicedProfile.length; index += 1) {
+    const difference = slicedProfile[index].elevationM - slicedProfile[index - 1].elevationM;
+    if (difference > 0) {
+      elevationUp += difference;
+    } else {
+      elevationDown += Math.abs(difference);
+    }
+  }
+
+  return {
+    elevationUp: Math.round(elevationUp),
+    elevationDown: Math.round(elevationDown),
+    elevationProfile: slicedProfile
+  };
+}
+
+function stageElevationMetrics(stageDistance: number, startKm: number, endKm: number, stageIndex: number, elevationProfile?: ElevationPoint[]) {
+  const actual = elevationProfile ? elevationMetricsForRange(elevationProfile, startKm, endKm) : null;
+  if (actual) {
+    return actual;
+  }
+
+  const elevationFactor = 1 + Math.sin(stageIndex + 0.7) * 0.18;
+  return {
+    elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
+    elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+    elevationProfile: []
+  };
+}
+
+export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: number, elevationProfile?: ElevationPoint[]) {
   const coordinates = geometry.coordinates;
   const totalDistance = routeDistanceKm(coordinates);
   const safeTarget = Math.max(15, targetKm || 50);
@@ -197,15 +286,15 @@ export function splitRouteIntoStages(geometry: LineStringGeoJson, targetKm: numb
     const endKm = (totalDistance / stageCount) * (index + 1);
     const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
     const stageDistance = routeDistanceKm(stageCoordinates);
-    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+    const elevation = stageElevationMetrics(stageDistance, startKm, endKm, index, elevationProfile);
 
     stages.push({
       dayNumber: index + 1,
       startName: index === 0 ? "Start" : `Etappenpunkt ${index}`,
       endName: index === stageCount - 1 ? "Ziel" : `Etappenpunkt ${index + 1}`,
       distanceKm: Number(stageDistance.toFixed(1)),
-      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
-      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      elevationUp: elevation.elevationUp,
+      elevationDown: elevation.elevationDown,
       geometryGeoJson: {
         type: "LineString",
         coordinates: stageCoordinates
@@ -259,7 +348,7 @@ export function validateTravelDayCount(totalDistanceKm: number, travelDays: numb
   };
 }
 
-export function splitRouteIntoStageCount(geometry: LineStringGeoJson, travelDays: number) {
+export function splitRouteIntoStageCount(geometry: LineStringGeoJson, travelDays: number, elevationProfile?: ElevationPoint[]) {
   const coordinates = geometry.coordinates;
   const totalDistance = routeDistanceKm(coordinates);
   const validation = validateTravelDayCount(totalDistance, travelDays);
@@ -272,15 +361,15 @@ export function splitRouteIntoStageCount(geometry: LineStringGeoJson, travelDays
     const endKm = index === validation.travelDays - 1 ? totalDistance : (totalDistance / validation.travelDays) * (index + 1);
     const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
     const stageDistance = routeDistanceKm(stageCoordinates);
-    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+    const elevation = stageElevationMetrics(stageDistance, startKm, endKm, index, elevationProfile);
 
     return {
       dayNumber: index + 1,
       startName: index === 0 ? "Start" : `Etappenpunkt ${index}`,
       endName: index === validation.travelDays - 1 ? "Ziel" : `Etappenpunkt ${index + 1}`,
       distanceKm: Number(stageDistance.toFixed(1)),
-      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
-      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      elevationUp: elevation.elevationUp,
+      elevationDown: elevation.elevationDown,
       geometryGeoJson: {
         type: "LineString",
         coordinates: stageCoordinates
@@ -365,7 +454,8 @@ export function createValidatedStageSliceFromBounds(
   geometry: LineStringGeoJson,
   startKm: number,
   endKm: number,
-  stageIndex = 0
+  stageIndex = 0,
+  elevationProfile?: ElevationPoint[]
 ) {
   const totalDistance = routeDistanceKm(geometry.coordinates);
   const validation = normalizeRouteTrimBounds(totalDistance, startKm, endKm);
@@ -375,15 +465,15 @@ export function createValidatedStageSliceFromBounds(
 
   const stageCoordinates = sliceLineString(geometry.coordinates, validation.startKm, validation.endKm);
   const stageDistance = routeDistanceKm(stageCoordinates);
-  const elevationFactor = 1 + Math.sin(stageIndex + 0.7) * 0.18;
+  const elevation = stageElevationMetrics(stageDistance, validation.startKm, validation.endKm, stageIndex, elevationProfile);
 
   return {
     ok: true as const,
     startKm: Number(validation.startKm.toFixed(1)),
     endKm: Number(validation.endKm.toFixed(1)),
     distanceKm: Number(stageDistance.toFixed(1)),
-    elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
-    elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+    elevationUp: elevation.elevationUp,
+    elevationDown: elevation.elevationDown,
     geometryGeoJson: {
       type: "LineString",
       coordinates: stageCoordinates
@@ -411,7 +501,8 @@ export function rebuildContiguousStageSlices<T extends ContiguousStageSliceInput
   routeGeometry: LineStringGeoJson,
   stages: T[],
   changedStageIndex: number,
-  patch: ContiguousStageSlicePatch
+  patch: ContiguousStageSlicePatch,
+  elevationProfile?: ElevationPoint[]
 ):
   | {
       ok: true;
@@ -512,7 +603,7 @@ export function rebuildContiguousStageSlices<T extends ContiguousStageSliceInput
 
   const rebuiltStages = stages.map((stage, index) => {
     const bounds = nextBounds[index];
-    const rebuilt = createValidatedStageSliceFromBounds(routeGeometry, bounds.startKm, bounds.endKm, index);
+    const rebuilt = createValidatedStageSliceFromBounds(routeGeometry, bounds.startKm, bounds.endKm, index, elevationProfile);
     if (!rebuilt.ok) {
       return {
         ok: false as const,
@@ -576,21 +667,22 @@ export function createStageSliceFromBounds(
   geometry: LineStringGeoJson,
   startKm: number,
   endKm: number,
-  stageIndex = 0
+  stageIndex = 0,
+  elevationProfile?: ElevationPoint[]
 ) {
   const totalDistance = routeDistanceKm(geometry.coordinates);
   const start = Math.min(Math.max(Number.isFinite(startKm) ? startKm : 0, 0), Math.max(totalDistance - 0.1, 0));
   const end = Math.min(Math.max(Number.isFinite(endKm) ? endKm : start + 0.1, start + 0.1), totalDistance);
   const stageCoordinates = sliceLineString(geometry.coordinates, start, end);
   const stageDistance = routeDistanceKm(stageCoordinates);
-  const elevationFactor = 1 + Math.sin(stageIndex + 0.7) * 0.18;
+  const elevation = stageElevationMetrics(stageDistance, start, end, stageIndex, elevationProfile);
 
   return {
     startKm: Number(start.toFixed(1)),
     endKm: Number(end.toFixed(1)),
     distanceKm: Number(stageDistance.toFixed(1)),
-    elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
-    elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+    elevationUp: elevation.elevationUp,
+    elevationDown: elevation.elevationDown,
     geometryGeoJson: {
       type: "LineString",
       coordinates: stageCoordinates
@@ -598,7 +690,7 @@ export function createStageSliceFromBounds(
   };
 }
 
-export function splitRouteByBreakpoints(geometry: LineStringGeoJson, breakpoints: StageBreakpoint[]) {
+export function splitRouteByBreakpoints(geometry: LineStringGeoJson, breakpoints: StageBreakpoint[], elevationProfile?: ElevationPoint[]) {
   const coordinates = geometry.coordinates;
   const totalDistance = routeDistanceKm(coordinates);
   const sortedBreakpoints = breakpoints
@@ -619,15 +711,15 @@ export function splitRouteByBreakpoints(geometry: LineStringGeoJson, breakpoints
     const endKm = splitPoints[index + 1];
     const stageCoordinates = sliceLineString(coordinates, startKm, endKm);
     const stageDistance = routeDistanceKm(stageCoordinates);
-    const elevationFactor = 1 + Math.sin(index + 0.7) * 0.18;
+    const elevation = stageElevationMetrics(stageDistance, startKm, endKm, index, elevationProfile);
 
     return {
       dayNumber: index + 1,
       startName: names[index],
       endName: names[index + 1],
       distanceKm: Number(stageDistance.toFixed(1)),
-      elevationUp: Math.round(stageDistance * 6.2 * elevationFactor),
-      elevationDown: Math.round(stageDistance * 4.8 * elevationFactor),
+      elevationUp: elevation.elevationUp,
+      elevationDown: elevation.elevationDown,
       geometryGeoJson: {
         type: "LineString",
         coordinates: stageCoordinates

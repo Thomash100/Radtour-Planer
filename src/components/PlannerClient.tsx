@@ -50,14 +50,17 @@ import {
 } from "@/lib/accommodations";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
-import { calculateStageDifficulty, type StageDifficultyLevel } from "@/lib/stage-difficulty";
+import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
+import { difficultyPlanningTargets, planStagesByDifficulty, type DifficultyPlanningTarget } from "@/lib/stage-planning";
 import {
   createElevationProfile,
   createTrimmedRouteFromOriginal,
+  elevationMetricsForRange,
   projectLocationToRoute,
   rebuildContiguousStageSlices,
   routeBoundsForStage,
   routeDistanceKm,
+  sliceElevationProfile,
   toGpx,
   toGpxWithStages,
   trimRouteGeometry,
@@ -94,6 +97,7 @@ type RouteCalculation = {
   originalElevationDown?: number;
   originalDurationHours?: number;
   originalElevationProfile?: ElevationPoint[];
+  elevationSource?: "provider" | "gpx" | "estimated";
   trimStartKmOriginal?: number;
   trimEndKmOriginal?: number;
   startLocationName?: string;
@@ -179,12 +183,22 @@ type PendingDirectPlan = {
   values: PlannerForm;
   routeWaypoints: string[];
 };
-type StageGenerationMode = "distance" | "days" | "custom";
+type StageGenerationMode = "distance" | "days" | "difficulty" | "custom";
 type PendingStageGeneration = {
   mode: StageGenerationMode;
   targetKm?: number;
   travelDays?: number;
+  targetDifficulty?: DifficultyPlanningTarget;
   breakpoints: StageBreakpoint[];
+};
+type StagePlanPreviewItem = {
+  dayNumber: number;
+  startName: string;
+  endName: string;
+  distanceKm: number;
+  elevationUp?: number;
+  elevationDown?: number;
+  difficulty?: ReturnType<typeof calculateStageDifficulty>;
 };
 type PendingRoutePointSelection = {
   source: "map" | "place";
@@ -428,6 +442,7 @@ export function PlannerClient({
   const [stageBreakpoints, setStageBreakpoints] = useState<Array<StageBreakpoint & { id: string }>>([]);
   const [stageGenerationMode, setStageGenerationMode] = useState<StageGenerationMode>("distance");
   const [travelDays, setTravelDays] = useState(6);
+  const [difficultyTarget, setDifficultyTarget] = useState<DifficultyPlanningTarget>("moderate");
   const [newStagePointName, setNewStagePointName] = useState("");
   const [newStagePointKm, setNewStagePointKm] = useState(0);
   const [placeSearchQuery, setPlaceSearchQuery] = useState("");
@@ -532,9 +547,30 @@ export function PlannerClient({
     () => (routeTotalKm > 0 ? validateTravelDayCount(routeTotalKm, Number(travelDays)) : null),
     [routeTotalKm, travelDays]
   );
-  const stagePlanPreview = useMemo(() => {
+  const difficultyStagePlan = useMemo(
+    () =>
+      route && routeTotalKm > 0 && stageGenerationMode === "difficulty"
+        ? planStagesByDifficulty(route.geometryGeoJson, route.elevationProfile, difficultyTarget, {
+            elevationEstimated: route.elevationSource === "estimated" || route.routingProvider === "mock"
+          })
+        : null,
+    [difficultyTarget, route, routeTotalKm, stageGenerationMode]
+  );
+  const stagePlanPreview = useMemo<StagePlanPreviewItem[]>(() => {
     if (!route || routeTotalKm <= 0) {
       return [];
+    }
+
+    if (difficultyStagePlan) {
+      return difficultyStagePlan.stages.map((stage) => ({
+        dayNumber: stage.dayNumber,
+        startName: stage.startName,
+        endName: stage.endName,
+        distanceKm: stage.distanceKm,
+        elevationUp: stage.elevationUp,
+        elevationDown: stage.elevationDown,
+        difficulty: stage.difficulty
+      }));
     }
 
     const splitPoints =
@@ -560,7 +596,7 @@ export function PlannerClient({
       endName: names[index + 1],
       distanceKm: Number((splitPoints[index + 1] - startKm).toFixed(1))
     }));
-  }, [effectiveStageBreakpoints, route, routeTotalKm, stageGenerationMode, travelDayValidation]);
+  }, [difficultyStagePlan, effectiveStageBreakpoints, route, routeTotalKm, stageGenerationMode, travelDayValidation]);
   const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
   const lastTourSavedLabel = useMemo(() => formatSavedTime(lastTourSavedAt), [lastTourSavedAt]);
   const accommodationCandidatesByStageId = useMemo(() => {
@@ -623,6 +659,7 @@ export function PlannerClient({
         stageGenerationMode,
         targetKm: Number.isFinite(targetKm) ? targetKm : undefined,
         travelDays: Number.isFinite(safeTravelDays) ? safeTravelDays : undefined,
+        difficultyTarget,
         stageBreakpoints: stageBreakpoints.map((breakpoint) => ({
           id: breakpoint.id,
           name: breakpoint.name,
@@ -637,6 +674,7 @@ export function PlannerClient({
     [
       inputMode,
       currentLibraryTourId,
+      difficultyTarget,
       lastTourSavedAt,
       pois,
       route,
@@ -736,7 +774,12 @@ export function PlannerClient({
       setPois(stored.pois as Poi[]);
       setSelectedPoi(stored.pois.find((poi) => poi.id === stored.selectedPoiId) ?? stored.pois[0] ?? null);
       setSelectedStageId(stored.selectedStageId ?? null);
-      if (stored.stageGenerationMode === "distance" || stored.stageGenerationMode === "days" || stored.stageGenerationMode === "custom") {
+      if (
+        stored.stageGenerationMode === "distance" ||
+        stored.stageGenerationMode === "days" ||
+        stored.stageGenerationMode === "difficulty" ||
+        stored.stageGenerationMode === "custom"
+      ) {
         setStageGenerationMode(stored.stageGenerationMode);
       }
       if (typeof stored.targetKm === "number") {
@@ -744,6 +787,14 @@ export function PlannerClient({
       }
       if (typeof stored.travelDays === "number") {
         setTravelDays(stored.travelDays);
+      }
+      if (
+        stored.difficultyTarget === "easy" ||
+        stored.difficultyTarget === "moderate" ||
+        stored.difficultyTarget === "hard" ||
+        stored.difficultyTarget === "very_hard"
+      ) {
+        setDifficultyTarget(stored.difficultyTarget);
       }
       if (Array.isArray(stored.stageBreakpoints)) {
         setStageBreakpoints(
@@ -1070,25 +1121,41 @@ export function PlannerClient({
 
   async function generateStages(
     routeId = savedRoute?.id,
-    request: PendingStageGeneration = { mode: "distance", targetKm: plannerForm.getValues("targetKm"), breakpoints: [] }
+    request: PendingStageGeneration = { mode: "distance", targetKm: plannerForm.getValues("targetKm"), breakpoints: [] },
+    routeValue: RouteCalculation | SavedRoute | null = route
   ) {
     if (!routeId) {
       setStatus("Bitte zuerst eine Route planen.");
       return [];
     }
 
+    const elevationProfile = routeValue?.elevationProfile ?? [];
+    const elevationEstimated = routeValue?.elevationSource === "estimated" || routeValue?.routingProvider === "mock";
     const body =
       request.breakpoints.length > 0
-        ? { breakpoints: request.breakpoints }
+        ? { breakpoints: request.breakpoints, elevationProfile, elevationEstimated }
+        : request.mode === "difficulty"
+          ? { targetDifficulty: request.targetDifficulty, elevationProfile, elevationEstimated }
         : request.mode === "days"
-          ? { travelDays: request.travelDays }
-          : { targetKm: request.targetKm };
+          ? { travelDays: request.travelDays, elevationProfile, elevationEstimated }
+          : { targetKm: request.targetKm, elevationProfile, elevationEstimated };
     const response = await fetch(`/api/routes/${routeId}/stages/auto-generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    const payload = await response.json();
+    const payload = (await response.json()) as {
+      error?: string;
+      stages: Stage[];
+      planning?: {
+        targetLabel: string;
+        maxScore: number;
+        targetMet: boolean;
+        usedEstimatedElevation: boolean;
+        warnings: string[];
+        scores: number[];
+      };
+    };
     if (!response.ok) throw new Error(payload.error ?? "Etappen konnten nicht erzeugt werden.");
 
     setStages(payload.stages);
@@ -1097,6 +1164,10 @@ export function PlannerClient({
     setStatus(
       request.mode === "custom"
         ? `${payload.stages.length} individuelle Etappen erzeugt.`
+        : request.mode === "difficulty"
+          ? `${payload.stages.length} Etappen für Zielniveau ${payload.planning?.targetLabel ?? "Schwierigkeit"} erzeugt. Belastung ${
+              payload.planning?.scores.length ? `${Math.min(...payload.planning.scores)}-${Math.max(...payload.planning.scores)}/100` : "berechnet"
+            }.${payload.planning?.warnings.length ? ` ${payload.planning.warnings.join(" ")}` : ""}`
         : request.mode === "days"
           ? `${payload.stages.length} Etappen für ${request.travelDays} Reisetage erzeugt.`
           : `${payload.stages.length} Tagesetappen erzeugt.`
@@ -1121,6 +1192,17 @@ export function PlannerClient({
         setStatus(validation.message);
         return;
       }
+    }
+
+    if (
+      request.mode === "difficulty" &&
+      request.targetDifficulty !== "easy" &&
+      request.targetDifficulty !== "moderate" &&
+      request.targetDifficulty !== "hard" &&
+      request.targetDifficulty !== "very_hard"
+    ) {
+      setStatus("Bitte einen gültigen Schwierigkeitsgrad auswählen.");
+      return;
     }
 
     setIsBusy(true);
@@ -1178,6 +1260,22 @@ export function PlannerClient({
     if (stages.length > 0) {
       setPendingStageGeneration(request);
       setStatus("Etappen neu aus Reisetagen berechnen: Bestehende manuelle Etappenänderungen werden erst nach Bestätigung verworfen.");
+      return;
+    }
+
+    void runStageGeneration(request);
+  }
+
+  function requestStageGenerationByDifficulty() {
+    if (!savedRoute?.id) {
+      setStatus("Bitte zuerst eine Route speichern oder GPX importieren.");
+      return;
+    }
+
+    const request: PendingStageGeneration = { mode: "difficulty", targetDifficulty: difficultyTarget, breakpoints: [] };
+    if (stages.length > 0) {
+      setPendingStageGeneration(request);
+      setStatus("Etappen neu nach Schwierigkeit planen: Bestehende manuelle Etappenänderungen werden erst nach Bestätigung verworfen.");
       return;
     }
 
@@ -1273,9 +1371,13 @@ export function PlannerClient({
     try {
       const geometryGeoJson = trim.geometryGeoJson;
       const distanceKm = trim.distanceKm;
-      const elevationProfile = createElevationProfile(geometryGeoJson.coordinates);
-      const elevationUp = Math.round(distanceKm * 6.2);
-      const elevationDown = Math.round(distanceKm * 4.8);
+      const sourceElevationProfile = route.originalElevationProfile ?? route.elevationProfile;
+      const actualElevation = elevationMetricsForRange(sourceElevationProfile, trim.startKm, trim.endKm);
+      const slicedElevationProfile = sliceElevationProfile(sourceElevationProfile, trim.startKm, trim.endKm);
+      const elevationProfile =
+        slicedElevationProfile.length >= 2 ? slicedElevationProfile : createElevationProfile(geometryGeoJson.coordinates);
+      const elevationUp = actualElevation?.elevationUp ?? Math.round(distanceKm * 6.2);
+      const elevationDown = actualElevation?.elevationDown ?? Math.round(distanceKm * 4.8);
       const durationHours = Number((distanceKm / 17).toFixed(2));
       const baseDescription = descriptionWithoutTrimNotice(route.description);
       const description = `${baseDescription}\nGekürzt auf km ${trim.startKm.toFixed(1)} bis ${trim.endKm.toFixed(1)} der GPX-Grundroute.`.trim();
@@ -1505,7 +1607,7 @@ export function PlannerClient({
       const savedData: SavedRoute = { ...calculatedRoute, id: saved.route.id };
       setSavedRoute(savedData);
       const stageRequest = options.stageRequest ?? { mode: "distance", targetKm: values.targetKm, breakpoints: [] };
-      const generatedStages = await generateStages(saved.route.id, stageRequest);
+      const generatedStages = await generateStages(saved.route.id, stageRequest, savedData);
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
       if (options.seedFirstAccommodation && generatedStages[0]) {
         const candidate = rankStageAccommodationCandidates(generatedStages[0], savedData.geometryGeoJson, poiPayload?.pois ?? [])[0];
@@ -1739,7 +1841,7 @@ export function PlannerClient({
       return;
     }
 
-    const result = rebuildContiguousStageSlices(route.geometryGeoJson, stages, stageIndex, patch);
+    const result = rebuildContiguousStageSlices(route.geometryGeoJson, stages, stageIndex, patch, route.elevationProfile);
     if (!result.ok) {
       setStatus(result.message);
       return;
@@ -2107,6 +2209,8 @@ export function PlannerClient({
         <CardTitle>
           {pendingStageGeneration.mode === "days"
             ? "Etappen neu aus Reisetagen berechnen?"
+            : pendingStageGeneration.mode === "difficulty"
+              ? "Etappen neu nach Schwierigkeit planen?"
             : pendingStageGeneration.mode === "custom"
               ? "Individuelle Etappen neu erzeugen?"
               : "Etappen neu aus Länge berechnen?"}
@@ -2114,6 +2218,10 @@ export function PlannerClient({
         <CardDescription className="text-amber-950">
           {pendingStageGeneration.mode === "days"
             ? `Das erzeugt alle Etappen anhand von ${pendingStageGeneration.travelDays} Reisetagen neu. Bestehende manuelle Etappenänderungen werden verworfen.`
+            : pendingStageGeneration.mode === "difficulty"
+              ? `Das plant alle Etappen für das Zielniveau ${stageDifficultyLabel(
+                  pendingStageGeneration.targetDifficulty ?? "moderate"
+                )} neu. Steigungsreiche Abschnitte werden dabei kürzer angesetzt. Bestehende manuelle Etappenänderungen werden verworfen.`
             : pendingStageGeneration.mode === "custom"
               ? "Das erzeugt alle Etappen anhand der gesetzten Etappenpunkte neu. Bestehende manuelle Etappenänderungen werden verworfen."
               : "Das erzeugt alle Etappen anhand der Etappenlänge neu. Bestehende manuelle Etappenänderungen werden verworfen."}
@@ -2834,7 +2942,7 @@ export function PlannerClient({
                       Die GPX-Route bleibt die feste Grundlage. Orte dienen aktuell nur als Etappennamen oder werden auf den nächsten Punkt der bestehenden Route projiziert; sie verlegen die Route nicht automatisch.
                     </div>
                     <div className="grid gap-3 rounded-md border bg-white p-3">
-                      <div className="inline-flex w-full rounded-md border bg-white p-1 sm:w-fit">
+                      <div className="flex w-full flex-wrap rounded-md border bg-white p-1 sm:w-fit">
                         <button
                           aria-pressed={stageGenerationMode === "distance"}
                           className={cn(
@@ -2857,6 +2965,17 @@ export function PlannerClient({
                         >
                           Nach Reisetagen
                         </button>
+                        <button
+                          aria-pressed={stageGenerationMode === "difficulty"}
+                          className={cn(
+                            "flex-1 rounded px-3 py-2 text-sm font-medium transition sm:flex-none",
+                            stageGenerationMode === "difficulty" ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+                          )}
+                          type="button"
+                          onClick={() => setStageGenerationMode("difficulty")}
+                        >
+                          Nach Schwierigkeit
+                        </button>
                       </div>
                       {stageGenerationMode === "distance" ? (
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_auto]">
@@ -2869,7 +2988,7 @@ export function PlannerClient({
                             Etappen nach Länge erzeugen
                           </Button>
                         </div>
-                      ) : (
+                      ) : stageGenerationMode === "days" ? (
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,180px)_minmax(0,1fr)_auto]">
                           <div className="grid gap-1">
                             <Label htmlFor="travelDaysStageCreate">Reisetage</Label>
@@ -2890,6 +3009,30 @@ export function PlannerClient({
                           <Button className="self-end" disabled={!savedRoute || isBusy || !travelDayValidation?.ok} type="button" onClick={requestStageGenerationByDays}>
                             <CalendarDays className="h-4 w-4" />
                             Etappen für Tage erzeugen
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto]">
+                          <div className="grid gap-1">
+                            <Label htmlFor="difficultyTargetStageCreate">Ziel-Schwierigkeit</Label>
+                            <Select
+                              id="difficultyTargetStageCreate"
+                              value={difficultyTarget}
+                              onChange={(event) => setDifficultyTarget(event.target.value as DifficultyPlanningTarget)}
+                            >
+                              <option value="easy">Leicht</option>
+                              <option value="moderate">Mittel</option>
+                              <option value="hard">Schwer</option>
+                              <option value="very_hard">Sehr schwer</option>
+                            </Select>
+                          </div>
+                          <div className="self-end rounded-md bg-muted p-3 text-sm">
+                            Zielwert etwa {difficultyPlanningTargets[difficultyTarget].targetScore}/100, höchstens {difficultyPlanningTargets[difficultyTarget].maxScore}/100.
+                            Steigungsreiche Abschnitte werden kürzer geplant; die GPX-Arbeitsroute bleibt unverändert.
+                          </div>
+                          <Button className="self-end" disabled={!savedRoute || isBusy} type="button" onClick={requestStageGenerationByDifficulty}>
+                            <Activity className="h-4 w-4" />
+                            Nach Schwierigkeit planen
                           </Button>
                         </div>
                       )}
@@ -2970,14 +3113,39 @@ export function PlannerClient({
 
                     <div className="rounded-md border bg-muted p-3">
                       <div className="text-sm font-semibold">Ergebnisvorschau: {stagePlanPreview.length || "-"} Etappen</div>
+                      {difficultyStagePlan ? (
+                        <div className="mt-2 text-sm text-muted-foreground">
+                          {difficultyStagePlan.targetMet
+                            ? `Alle Vorschläge bleiben innerhalb des Zielniveaus ${difficultyStagePlan.targetLabel}.`
+                            : `Mindestens ein Abschnitt überschreitet das Zielniveau ${difficultyStagePlan.targetLabel}; die Route bleibt dennoch lückenlos.`}
+                          {difficultyStagePlan.usedEstimatedElevation ? " Die Vorschau verwendet geschätzte Höhendaten." : " Grundlage ist das Höhenprofil der Route."}
+                          {difficultyStagePlan.warnings.map((warning) => (
+                            <div key={warning} className="mt-1 text-amber-800">
+                              {warning}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                         {stagePlanPreview.map((stage) => (
                           <div key={stage.dayNumber} className="rounded-md bg-white p-3 text-sm">
-                            <div className="font-semibold">Tag {stage.dayNumber}</div>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="font-semibold">Tag {stage.dayNumber}</div>
+                              {stage.difficulty ? (
+                                <Badge variant="outline">
+                                  {stage.difficulty.label} · {stage.difficulty.effortScore}/100
+                                </Badge>
+                              ) : null}
+                            </div>
                             <div className="text-muted-foreground">
                               {stage.startName} - {stage.endName}
                             </div>
                             <div>{formatKm(stage.distanceKm)}</div>
+                            {typeof stage.elevationUp === "number" && typeof stage.elevationDown === "number" ? (
+                              <div className="text-muted-foreground">
+                                {stage.elevationUp} Hm bergauf · {stage.elevationDown} Hm bergab
+                              </div>
+                            ) : null}
                           </div>
                         ))}
                       </div>

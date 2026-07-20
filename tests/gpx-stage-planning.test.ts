@@ -9,7 +9,14 @@ import {
   type AccommodationStageInput
 } from "../src/lib/accommodations";
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
-import type { LineStringGeoJson } from "../src/lib/geo";
+import {
+  createValidatedStageSliceFromBounds,
+  elevationMetricsForRange,
+  routeDistanceKm,
+  sliceElevationProfile,
+  type ElevationPoint,
+  type LineStringGeoJson
+} from "../src/lib/geo";
 import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
 import {
   analyzeBRouterCycleCoverage,
@@ -20,8 +27,9 @@ import {
 } from "../src/lib/road-routing";
 import { configuredRoutingProvider } from "../src/lib/routing-provider";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
+import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
-import { routeCalculateSchema } from "../src/lib/validators";
+import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
 
 const routeGeometry: LineStringGeoJson = {
   type: "LineString",
@@ -31,6 +39,32 @@ const routeGeometry: LineStringGeoJson = {
     [13.1, 51.04]
   ]
 };
+
+function createLinearRoute(distanceKm: number, pointCount = 121): LineStringGeoJson {
+  const latitudeDelta = distanceKm / 111.195;
+  return {
+    type: "LineString",
+    coordinates: Array.from({ length: pointCount }, (_, index) => [
+      10,
+      48 + latitudeDelta * (index / (pointCount - 1))
+    ])
+  };
+}
+
+function createRollingElevationProfile(totalDistanceKm: number): ElevationPoint[] {
+  const points: ElevationPoint[] = [];
+  for (let distanceKm = 0; distanceKm < totalDistanceKm; distanceKm += 10) {
+    points.push({
+      distanceKm,
+      elevationM: Math.floor(distanceKm / 10) % 2 === 0 ? 100 : 250
+    });
+  }
+  points.push({
+    distanceKm: totalDistanceKm,
+    elevationM: Math.floor(totalDistanceKm / 10) % 2 === 0 ? 100 : 250
+  });
+  return points;
+}
 
 const stage: AccommodationStageInput & { distanceKm: number } = {
   id: "stage-1",
@@ -127,6 +161,7 @@ test("calculates accepted direct route expressions with distinct start and desti
     assert.equal(route.startName, payload.start);
     assert.equal(route.endName, payload.end);
     assert.ok(route.distanceKm > 20, `${expression} should produce a non-trivial route`);
+    assert.equal(route.elevationSource, "estimated");
     assert.notDeepEqual(route.waypoints[0], route.waypoints[route.waypoints.length - 1]);
   }
 });
@@ -278,6 +313,7 @@ test("combines routed BRouter segments without replacing them by straight lines"
 
   assert.equal(requestedUrls.length, 2);
   assert.equal(route.routingProvider, "brouter");
+  assert.equal(route.elevationSource, "provider");
   assert.equal(route.routingProfileName, "trekking");
   assert.equal(route.distanceKm, 428.5);
   assert.equal(route.geometryGeoJson.coordinates.length, 5);
@@ -289,6 +325,31 @@ test("combines routed BRouter segments without replacing them by straight lines"
   assert.equal(route.cycleRouteCoverage?.bicycleInfrastructureDistanceKm, 10);
   assert.equal(route.cycleRouteCoverage?.signedCycleRouteDistanceKm, 215);
   assert.equal(route.cycleRouteCoverage?.networkDistanceKm.ncn, 205);
+});
+
+test("marks BRouter elevation as estimated when route coordinates have no height values", async () => {
+  const fetcher = async () =>
+    new Response(
+      JSON.stringify(
+        brouterFeature(
+          [
+            [13.7373, 51.0504],
+            [13.82, 51.01],
+            [13.9407, 50.9625]
+          ],
+          { "track-length": "18000", "filtered ascend": "120", "total-time": "3600" }
+        )
+      ),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+
+  const route = await calculateRoadRoute(
+    { start: "Dresden", end: "Pirna", profile: "balanced" },
+    { baseUrl: "https://routing.example.test/brouter", fetcher }
+  );
+
+  assert.equal(route.elevationSource, "estimated");
+  assert.ok(route.elevationProfile.length >= 2);
 });
 
 test("reports routing provider failures instead of silently drawing a direct line", async () => {
@@ -394,4 +455,148 @@ test("recalculates difficulty when manual stage metrics change", () => {
   assert.ok(after.effortScore > before.effortScore);
   assert.equal(before.level, "easy");
   assert.equal(after.level, "hard");
+});
+
+test("slices and rebases the real elevation profile for a trimmed working route", () => {
+  const profile = [
+    { distanceKm: 0, elevationM: 100 },
+    { distanceKm: 10, elevationM: 200 },
+    { distanceKm: 20, elevationM: 100 }
+  ];
+
+  assert.deepEqual(sliceElevationProfile(profile, 5, 15), [
+    { distanceKm: 0, elevationM: 150 },
+    { distanceKm: 5, elevationM: 200 },
+    { distanceKm: 10, elevationM: 150 }
+  ]);
+  assert.deepEqual(elevationMetricsForRange(profile, 5, 15), {
+    elevationUp: 50,
+    elevationDown: 50,
+    elevationProfile: [
+      { distanceKm: 0, elevationM: 150 },
+      { distanceKm: 5, elevationM: 200 },
+      { distanceKm: 10, elevationM: 150 }
+    ]
+  });
+});
+
+test("uses real elevation values when cutting a stage from the route", () => {
+  const geometry = createLinearRoute(100);
+  const totalDistanceKm = routeDistanceKm(geometry.coordinates);
+  const profile = [
+    { distanceKm: 0, elevationM: 100 },
+    { distanceKm: totalDistanceKm / 2, elevationM: 600 },
+    { distanceKm: totalDistanceKm, elevationM: 200 }
+  ];
+
+  const stageSlice = createValidatedStageSliceFromBounds(
+    geometry,
+    totalDistanceKm * 0.25,
+    totalDistanceKm * 0.75,
+    0,
+    profile
+  );
+
+  assert.equal(stageSlice.ok, true);
+  if (stageSlice.ok) {
+    assert.equal(stageSlice.elevationUp, 250);
+    assert.equal(stageSlice.elevationDown, 200);
+  }
+});
+
+test("plans shorter easy stages on a hilly route than on a flat route of equal length", () => {
+  const geometry = createLinearRoute(240);
+  const totalDistanceKm = routeDistanceKm(geometry.coordinates);
+  const flatProfile = [
+    { distanceKm: 0, elevationM: 100 },
+    { distanceKm: totalDistanceKm, elevationM: 100 }
+  ];
+  const rollingProfile = createRollingElevationProfile(totalDistanceKm);
+
+  const flatPlan = planStagesByDifficulty(geometry, flatProfile, "easy");
+  const rollingPlan = planStagesByDifficulty(geometry, rollingProfile, "easy");
+
+  assert.ok(rollingPlan.stages.length > flatPlan.stages.length);
+  assert.ok(
+    Math.max(...rollingPlan.stages.map((stage) => stage.distanceKm)) <
+      Math.max(...flatPlan.stages.map((stage) => stage.distanceKm))
+  );
+  assert.equal(rollingPlan.targetMet, true);
+  assert.ok(rollingPlan.stages.every((stage) => stage.difficulty.effortScore <= rollingPlan.maxScore));
+});
+
+test("keeps difficulty-planned stages contiguous and uses fewer stages for a higher target", () => {
+  const geometry = createLinearRoute(300);
+  const totalDistanceKm = routeDistanceKm(geometry.coordinates);
+  const profile = createRollingElevationProfile(totalDistanceKm);
+  const easyPlan = planStagesByDifficulty(geometry, profile, "easy");
+  const moderatePlan = planStagesByDifficulty(geometry, profile, "moderate");
+
+  assert.ok(moderatePlan.stages.length <= easyPlan.stages.length);
+  assert.equal(easyPlan.stages[0].routeStartKm, 0);
+  assert.ok(Math.abs(easyPlan.stages[easyPlan.stages.length - 1].routeEndKm - totalDistanceKm) < 0.2);
+  for (let index = 1; index < easyPlan.stages.length; index += 1) {
+    assert.equal(easyPlan.stages[index].routeStartKm, easyPlan.stages[index - 1].routeEndKm);
+  }
+});
+
+test("falls back to estimated elevation with an explicit warning", () => {
+  const plan = planStagesByDifficulty(
+    createLinearRoute(120),
+    [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: 20, elevationM: 200 }
+    ],
+    "moderate"
+  );
+
+  assert.equal(plan.usedEstimatedElevation, true);
+  assert.ok(plan.stages.length > 0);
+  assert.ok(plan.warnings.some((warning) => warning.includes("geschätzte Höhendaten")));
+});
+
+test("marks a complete synthetic profile as estimated when its source says so", () => {
+  const geometry = createLinearRoute(120);
+  const totalDistanceKm = routeDistanceKm(geometry.coordinates);
+  const plan = planStagesByDifficulty(
+    geometry,
+    [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: totalDistanceKm, elevationM: 100 }
+    ],
+    "moderate",
+    { elevationEstimated: true }
+  );
+
+  assert.equal(plan.usedEstimatedElevation, true);
+  assert.ok(plan.warnings.some((warning) => warning.includes("geschätzte Höhendaten")));
+});
+
+test("validates and restores the selected difficulty planning mode", () => {
+  const request = autoStageSchema.parse({
+    targetDifficulty: "hard",
+    elevationEstimated: true,
+    elevationProfile: [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: 50, elevationM: 500 }
+    ]
+  });
+  assert.equal(request.targetDifficulty, "hard");
+  assert.equal(request.elevationEstimated, true);
+  assert.equal(request.elevationProfile.length, 2);
+
+  const stored = parseStoredTourState(
+    JSON.stringify({
+      route: { geometryGeoJson: routeGeometry },
+      stages: [],
+      pois: [],
+      inputMode: "gpx",
+      stageGenerationMode: "difficulty",
+      difficultyTarget: "hard",
+      updatedAt: "2026-07-20T12:00:00.000Z"
+    })
+  );
+
+  assert.equal(stored?.stageGenerationMode, "difficulty");
+  assert.equal(stored?.difficultyTarget, "hard");
 });

@@ -55,6 +55,7 @@ Je nach Paket prüfen:
 - Große Startkürzung, z. B. Start ab 300 km, bleibt stabil.
 - `Kürzung zurücksetzen` stellt die vollständige Originalroute wieder her.
 - Etappen können nach Länge und nach Reisetagen erzeugt werden.
+- Etappen können nach Ziel-Schwierigkeit erzeugt werden; hügelige Abschnitte führen bei gleichem Zielniveau zu kürzeren Vorschlägen als flache Abschnitte.
 - Manuelle Etappenänderungen aktualisieren Geometrie, Folgeetappen, Distanz, Höhenmeter und Fahrzeit.
 - Etappen zeigen Schwierigkeit, Belastungspunkte, Steigungsdichte und Hinweise aus Distanz/Höhenmetern.
 - Ungültige km- oder Reisetage-Eingaben werden verständlich abgelehnt.
@@ -131,6 +132,21 @@ Reale Wege in der Direktplanung gebündelt prüfen:
 - Speichern und erneutes Öffnen erhält die geroutete Geometrie.
 - Bei nicht erreichbarem Routingdienst erscheint eine Fehlermeldung; es wird keine Luftlinie erzeugt.
 - Mobile Ansicht erzeugt keinen horizontalen Overflow.
+
+## Paket 12
+
+Schwierigkeitsbasierte Etappenplanung gebündelt prüfen:
+
+- Im Schritt `Etappen erzeugen` zwischen Länge, Reisetagen und Schwierigkeit wechseln.
+- Für `leicht`, `mittel`, `schwer` und `sehr schwer` eine Ergebnisvorschau mit Distanz, Höhenmetern und Belastungspunkten anzeigen.
+- Bei einer hügeligen Route prüfen, dass das Zielniveau `leicht` steigungslastige Bereiche kürzer aufteilt als eine flache Route vergleichbarer Länge.
+- Prüfen, dass alle Etappengeometrien lückenlos aufeinander folgen und die Arbeitsroute weder verlassen noch verlagert wird.
+- Vorhandene manuelle Etappen dürfen erst nach ausdrücklicher Bestätigung ersetzt werden.
+- Wenn das Zielniveau in einem sehr belastenden Abschnitt nicht eingehalten werden kann, muss eine Warnung sichtbar bleiben.
+- Fehlende Höhendaten müssen als Schätzung gekennzeichnet sein und dürfen keine kaputte Geometrie erzeugen.
+- Route kürzen, manuelle Etappenänderung sowie Save/Load müssen weiterhin konsistente Höhenmeter und Geometrien erhalten.
+- Speichern und erneutes Öffnen erhält Erzeugungsmodus und gewähltes Zielniveau.
+- Mobile Ansicht erzeugt bei 360, 390, 430 und 768 px keinen horizontalen Overflow.
 
 ## Docker/RPi-Prüfung
 

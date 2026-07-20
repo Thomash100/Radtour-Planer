@@ -32,6 +32,7 @@ export type RouteCalculation = {
   durationHours: number;
   geometryGeoJson: LineStringGeoJson;
   elevationProfile: ReturnType<typeof createElevationProfile>;
+  elevationSource: "provider" | "gpx" | "estimated";
   waypoints: Array<{
     order: number;
     name: string;
@@ -277,6 +278,7 @@ export function calculateMockRoute(input: RouteCalculationInput): RouteCalculati
       coordinates
     },
     elevationProfile: createElevationProfile(coordinates),
+    elevationSource: "estimated",
     waypoints: orderedNames.map((name, order) => {
       const [lon, lat] = controlPoints[order];
       return { order, name, lat, lon };

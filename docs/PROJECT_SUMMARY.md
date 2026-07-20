@@ -13,6 +13,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Route anhand von Start-km und Ziel-km kürzen; Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet.
 - Etappen nach gewünschter Etappenlänge erzeugen.
 - Etappen nach Anzahl Reisetage erzeugen.
+- Etappen nach einem Ziel-Schwierigkeitsgrad erzeugen; steigungslastige Abschnitte werden auf Basis des vorhandenen Höhenprofils kürzer geplant.
 - Etappen manuell bearbeiten; Geometrie, Distanz, Höhenmeter und Fahrzeit werden aus der aktuellen Arbeitsroute neu berechnet.
 - Etappen nach Schwierigkeit und Belastung bewerten; Distanz, Höhenmeter, Steigungsdichte, Belastungspunkte und Hinweise werden je Etappe angezeigt.
 - Farbige Etappen direkt auf der Karte anzeigen und anklicken.
@@ -48,6 +49,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung abgeschlossen.
 - Paket 10: Etappenbewertung nach Schwierigkeit und Belastung abgeschlossen.
 - Paket 11: Reale Fahrradwege in der Direktplanung in Arbeit auf Branch `codex/package-11-real-road-routing`.
+- Paket 12: Schwierigkeitsbasierte Etappenplanung in Arbeit auf Branch `codex/package-12-difficulty-aware-stage-planning`.
 
 Letzter nachgezogener Deployment-Stand vor Paket 11:
 
@@ -184,3 +186,18 @@ Enthalten:
 - Docker-/RPi-Konfiguration und Datenschutz-/Betriebshinweise
 
 Details und Grenzen: [docs/REAL_ROAD_ROUTING.md](REAL_ROAD_ROUTING.md).
+
+## Paket 12: Etappenplanung nach Schwierigkeit
+
+Paket 12 verwendet die erklärbare Belastungsbewertung aus Paket 10 erstmals als Planungsziel. Der Nutzer wählt `leicht`, `mittel`, `schwer` oder `sehr schwer`; die App erzeugt daraufhin lückenlose Etappen entlang der unveränderten Arbeitsroute. Steigungsreiche Abschnitte werden kürzer angesetzt, flache Abschnitte können länger werden.
+
+Enthalten:
+
+- Vorschau mit Distanz, Höhenmetern, Einstufung und Belastungspunkten je Etappe
+- echte Höhenprofilwerte beim Kürzen, automatischen Erzeugen und manuellen Nachbearbeiten
+- explizite Bestätigung, bevor bestehende oder manuell geänderte Etappen ersetzt werden
+- persistiertes Zielniveau im lokalen TourState
+- Warnung, wenn Höhendaten geschätzt werden oder ein Abschnitt das Zielniveau nicht einhalten kann
+- keine Änderung der GPX-/BRouter-Geometrie und kein automatisches Neu-Routing
+
+Formel, Zielwerte und Grenzen: [docs/STAGE_DIFFICULTY_MVP.md](STAGE_DIFFICULTY_MVP.md).
