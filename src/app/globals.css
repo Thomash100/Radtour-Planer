@@ -48,6 +48,37 @@ textarea {
   font: inherit;
 }
 
+/*
+ * Stage cards must keep a usable content width even on wide screens where the
+ * planner already has two fixed sidebars. The previous optional third grid
+ * column could squeeze the accommodation area until names wrapped one letter
+ * per line. Actions now stay below the main content and candidate cards use an
+ * auto-fitting minimum width instead of forcing two narrow columns.
+ */
+[data-stage-card-id] {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+[data-stage-card-id] > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 768px) {
+  [data-stage-card-id] .md\:grid-cols-2 {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  [data-stage-card-id] {
+    grid-template-columns: 150px minmax(0, 1fr) !important;
+  }
+
+  [data-stage-card-id] > :last-child {
+    flex-direction: row !important;
+  }
+}
+
 .maplibregl-ctrl-attrib {
   font-size: 11px;
 }
