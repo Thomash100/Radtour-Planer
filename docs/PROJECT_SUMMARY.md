@@ -1,14 +1,15 @@
 # Projektzusammenfassung
 
-Stand: 2026-06-30
+Stand: 2026-07-20
 
 ## Produktstand
 
-BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Basis einer vorhandenen GPX-Route. Der aktuelle Schwerpunkt ist die Vorführ- und Reviewfähigkeit des GPX-Workflows, nicht eine produktive Buchungs- oder Routingplattform.
+BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Basis einer vorhandenen GPX-Route oder einer direkt berechneten Fahrradroute. Der aktuelle Schwerpunkt ist eine prüfbare Tour-, Etappen- und Reiseplanung, nicht eine produktive Buchungsplattform.
 
 ## Aktueller MVP-Funktionsumfang
 
 - GPX-Datei laden und als feste geometrische Grundlage verwenden.
+- Start, Ziel und Zwischenziele direkt eingeben und über BRouter auf realen OpenStreetMap-Wegen verbinden; Fahrradwege und ausgeschilderte Radwanderwege können gezielt bevorzugt werden.
 - Route anhand von Start-km und Ziel-km kürzen; Kürzungen werden idempotent aus der unveränderten Original-GPX-Geometrie abgeleitet.
 - Etappen nach gewünschter Etappenlänge erzeugen.
 - Etappen nach Anzahl Reisetage erzeugen.
@@ -30,7 +31,8 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Keine produktive externe Unterkunfts-API.
 - Unterkunftskandidaten kommen im MVP aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
 - Keine produktive POI-Massenabfrage.
-- Keine neue Routing-API; direkte Planung nutzt weiterhin Mockrouting.
+- Die direkte Planung nutzt die öffentliche BRouter-Instanz ohne zugesichertes SLA; ein eigener oder vertraglich geeigneter Provider ist vor produktivem Betrieb zu entscheiden.
+- Freie Ortssuche ist nicht Bestandteil des Routingpakets; die Direktplanung nutzt weiterhin den lokalen MVP-Ortskatalog.
 - Orte und Unterkünfte verlegen die GPX-Route nicht automatisch.
 - Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
 - Wetter, Oberfläche, individuelle Leistungsfähigkeit und E-Bike-Akkureichweite werden in der Etappenbewertung noch nicht berücksichtigt.
@@ -42,13 +44,14 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 1: GPX-Grundbedienung abgeschlossen.
 - Paket 2: Planung nach Reisetagen und Städte/Orte entlang der Route abgeschlossen.
 - Paket 3: Unterkünfte je Etappe abgeschlossen.
-- Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung in Arbeit auf Branch `codex/package-4-mvp-release-readiness`.
-- Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung in Arbeit auf Branch `codex/packages-5-7-tour-data-release`.
-- Paket 10: Etappenbewertung nach Schwierigkeit und Belastung in Arbeit auf Branch `codex/package-10-stage-difficulty`.
+- Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung abgeschlossen.
+- Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung abgeschlossen.
+- Paket 10: Etappenbewertung nach Schwierigkeit und Belastung abgeschlossen.
+- Paket 11: Reale Fahrradwege in der Direktplanung in Arbeit auf Branch `codex/package-11-real-road-routing`.
 
-Letzter nachgezogener Deployment-Stand vor Paket 4:
+Letzter nachgezogener Deployment-Stand vor Paket 11:
 
-- `private`: `a238223a82700c11600f31bf1e0534dce8eabbbb`
+- `private`: `f3dad175f995b5b3f55f1887755757e202ce6e1a`
 - RPi-Smoke: erfolgreich
 - Prisma: nicht aktualisiert
 - Plesk: unverändert
@@ -62,7 +65,7 @@ Umgesetzt bzw. vorbereitet:
 
 - Startseite beschreibt den aktuellen MVP-Stand und bevorzugt GPX als Einstieg.
 - Demo-Tour wird nur nach ausdrücklicher Aktion geladen und zeigt den MVP mit Reisetagen, Orten, Etappen und Unterkunftskandidaten.
-- Direkte Planung ist als Mockrouting gekennzeichnet.
+- Direkte Planung ist als MVP-Modus gekennzeichnet; seit Paket 11 verwendet sie reale BRouter-/OpenStreetMap-Wege.
 - Footer zeigt Version, Build-Datum und MVP-Status.
 - Impressum, Datenschutz, Nutzungsbedingungen und MVP-Hinweis sind als prüfpflichtige Platzhalter vorbereitet.
 - Basis-Metadaten, OpenGraph, Robots und Sitemap sind vorbereitet; Indexierung bleibt wegen MVP-/Teststatus gesperrt.
@@ -163,3 +166,21 @@ Nicht enthalten:
 - E-Bike-Akkureichweite
 - medizinische oder sicherheitsrelevante Eignungsprüfung
 - automatische Neuoptimierung der Etappen ohne Nutzerbestätigung
+
+## Paket 11: Reale Fahrradwege
+
+Paket 11 ersetzt die künstliche Direktverbindung zwischen Start, Ziel und Zwischenpunkten durch einen konfigurierbaren BRouter-Provider. Lange Touren werden abschnittsweise an ihren Kontrollpunkten berechnet und ohne stillen Luftlinien-Fallback zusammengefügt.
+
+Enthalten:
+
+- BRouter-GeoJSON als tatsächliche Arbeitsgeometrie
+- OSM-basierte Fahrradwege für direkte Routen
+- getrennte Profile für sichere Fahrradinfrastruktur (`safety`) und ausgeschilderte Radwanderwege (`trekking`)
+- Kilometer-/Prozentanzeige für erfasste Fahrradinfrastruktur und internationale, nationale, regionale oder lokale OSM-Radroutennetze
+- Distanz, Fahrzeit und Höhenprofil aus dem Provider
+- Profilabbildung auf `safety`, `trekking` und `fastbike`
+- verständliche Provider- und Timeoutfehler
+- expliziter Offline-Testmodus über `ROUTING_PROVIDER=mock`
+- Docker-/RPi-Konfiguration und Datenschutz-/Betriebshinweise
+
+Details und Grenzen: [docs/REAL_ROAD_ROUTING.md](REAL_ROAD_ROUTING.md).

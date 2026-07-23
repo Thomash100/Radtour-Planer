@@ -7,6 +7,7 @@ Lokaler Prototyp fuer die Planung mehrtaegiger Radtouren mit Route, Etappen, POI
 - Next.js App Router mit TypeScript
 - Tailwind CSS und shadcn/ui-kompatible Komponenten
 - MapLibre GL JS mit OpenStreetMap-Rastertiles
+- BRouter fuer reale Fahrradwege in der direkten Routenplanung
 - React Hook Form und Zod
 - Prisma ORM mit PostgreSQL/PostGIS
 - Redis und BullMQ Worker fuer Hintergrundjobs
@@ -172,8 +173,8 @@ npm run worker
 ## MVP-Flows
 
 1. `/planer` oeffnen.
-2. Start, Ziel, Zwischenziele und Routingprofil waehlen.
-3. `Route planen` berechnet eine Mockroute, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI aus der lokalen Seed-Datenbank.
+2. Start, Ziel, Zwischenziele und Routingprofil waehlen; `Fahrradwege bevorzugen` nutzt sichere Fahrradinfrastruktur, `Radwanderwege bevorzugen` das ausgeschilderte OSM-Radroutennetz.
+3. `Route planen` berechnet ueber BRouter eine Fahrradroute auf realen OpenStreetMap-Wegen, weist die erfassten Radwege-Anteile aus, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI.
 4. Etappen in der Timeline bei Bedarf manuell anpassen und speichern.
 5. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant, Mindestbewertung, Hunde, Fahrradstellplatz und weitere Kategorien nutzen.
 6. Partner-POI auswaehlen und eine Unterkunfts- oder Gepaecktransfer-Anfrage senden.
@@ -228,7 +229,7 @@ npm run build
 
 ## Architekturhinweise
 
-- Routing ist bewusst als austauschbares Mock-Modul in `src/lib/mock-routing.ts` gekapselt. GraphHopper oder OpenRouteService koennen spaeter hinter `POST /api/routes/calculate` eingebunden werden.
+- `POST /api/routes/calculate` verwendet standardmaessig den austauschbaren BRouter-Provider. `ROUTING_PROVIDER=mock` ist nur ein expliziter Offline-/Entwicklungsmodus; Fehler erzeugen keine Luftlinie.
 - Route-Geometrien werden als GeoJSON in Prisma `Json` gespeichert. PostGIS ist im Datenbankcontainer aktiviert; echte `geometry`-Spalten koennen spaeter fuer produktive Korridorabfragen ergaenzt werden.
 - POI-Suche berechnet im MVP die Entfernung zur Route in TypeScript. Fuer Produktion sollte das in PostGIS mit gecachten OSM-Extrakten oder einem kommerziellen Provider laufen.
 - `POST /api/poi/sync-osm` legt einen BullMQ-Job an; der Worker enthaelt aktuell einen Platzhalter.

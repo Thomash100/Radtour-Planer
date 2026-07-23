@@ -49,6 +49,7 @@ import {
   type StageAccommodation
 } from "@/lib/accommodations";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
+import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
 import { calculateStageDifficulty, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import {
   createElevationProfile,
@@ -100,6 +101,11 @@ type RouteCalculation = {
   elevationProfile: ElevationPoint[];
   waypoints: Array<{ order: number; name: string; lat: number; lon: number }>;
   coordinateCorrections?: string[];
+  routingProvider?: "brouter" | "mock";
+  routingProfileName?: string;
+  routingAttribution?: string;
+  routingDataNotice?: string;
+  cycleRouteCoverage?: CycleRouteCoverage;
 };
 
 type SavedRoute = RouteCalculation & {
@@ -213,10 +219,26 @@ const categoryOptions = [
 
 const profileLabels: Record<string, string> = {
   balanced: "ausgewogen",
-  cycleways: "möglichst Fahrradwege",
+  cycleways: "Fahrradwege bevorzugen",
   low_elevation: "wenig Steigung",
-  touristic: "touristisch",
+  touristic: "Radwanderwege bevorzugen",
   sportive: "sportlich"
+};
+
+const profileDescriptions: Record<string, string> = {
+  balanced: "Ausgewogene Fahrradroute mit BRouter trekking.",
+  cycleways: "Bevorzugt sichere Wege und in OSM erfasste Fahrradinfrastruktur.",
+  low_elevation: "Berücksichtigt Steigungen, garantiert aber nicht die höhenärmste Route.",
+  touristic: "Bevorzugt ausgeschilderte internationale, nationale, regionale und lokale Radrouten.",
+  sportive: "Zügige Fahrradroute mit dem BRouter-Profil fastbike."
+};
+
+const cycleRouteNetworks: CycleRouteNetwork[] = ["icn", "ncn", "rcn", "lcn"];
+const cycleRouteNetworkLabels: Record<CycleRouteNetwork, string> = {
+  icn: "international",
+  ncn: "national",
+  rcn: "regional",
+  lcn: "lokal"
 };
 
 const cityAnchors: Array<{ name: string; aliases?: string[]; coordinate: Position }> = [
@@ -434,6 +456,7 @@ export function PlannerClient({
     }
   });
   const targetKmValue = plannerForm.watch("targetKm");
+  const profileValue = plannerForm.watch("profile");
 
   const leadForm = useForm<LeadForm>({
     resolver: zodResolver(leadSchema),
@@ -1493,7 +1516,10 @@ export function PlannerClient({
         }
       }
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
-      setStatus(`${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${poiNotice}`);
+      const routingNotice = calculatedRoute.routingDataNotice ? ` ${calculatedRoute.routingDataNotice}` : "";
+      setStatus(
+        `${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${routingNotice}${poiNotice}`
+      );
       setPlannerStep(options.finalStep ?? "overview");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
@@ -1966,7 +1992,7 @@ export function PlannerClient({
           <Route className="h-5 w-5 text-primary" />
           Direkte Routeneingabe
         </CardTitle>
-        <CardDescription>Start, Ziel, Zwischenziele und Profil festlegen. Das MVP nutzt weiterhin Mockrouting.</CardDescription>
+        <CardDescription>Start, Ziel, Zwischenziele und Profil festlegen. Die Strecke wird über reale Fahrradwege berechnet.</CardDescription>
       </CardHeader>
       <CardContent>
         <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => requestDirectRoutePlan(values))}>
@@ -2033,6 +2059,7 @@ export function PlannerClient({
                   </option>
                 ))}
               </Select>
+              <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="targetKm">Tages-km</Label>
@@ -2170,7 +2197,7 @@ export function PlannerClient({
           <Card>
             <CardHeader>
               <CardTitle>Direkte Planung ansehen</CardTitle>
-              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben. Im MVP weiterhin Mockrouting.</CardDescription>
+              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben und über reale Fahrradwege verbinden.</CardDescription>
             </CardHeader>
             <CardContent>
               <Button className="w-full" type="button" onClick={() => {
@@ -2316,6 +2343,37 @@ export function PlannerClient({
                 </span>
               </div>
             )}
+            {inputMode === "direct" && route.cycleRouteCoverage?.dataAvailable ? (
+              <div className="space-y-3 border-y py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <strong className="text-sm">Radwege-Anteil laut OSM</strong>
+                  {cycleRouteNetworks
+                    .filter((network) => route.cycleRouteCoverage!.networkDistanceKm[network] > 0)
+                    .map((network) => (
+                      <Badge key={network} variant="outline">
+                        {cycleRouteNetworkLabels[network]}: {formatKm(route.cycleRouteCoverage!.networkDistanceKm[network])}
+                      </Badge>
+                    ))}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 border-l-4 border-sky-600 pl-3">
+                    <span className="text-sm text-muted-foreground">Fahrradinfrastruktur</span>
+                    <strong className="shrink-0 text-sm">
+                      {formatKm(route.cycleRouteCoverage.bicycleInfrastructureDistanceKm)} ({route.cycleRouteCoverage.bicycleInfrastructurePercent} %)
+                    </strong>
+                  </div>
+                  <div className="flex min-w-0 items-baseline justify-between gap-3 border-l-4 border-emerald-600 pl-3">
+                    <span className="text-sm text-muted-foreground">Ausgeschilderte Radwanderwege</span>
+                    <strong className="shrink-0 text-sm">
+                      {formatKm(route.cycleRouteCoverage.signedCycleRouteDistanceKm)} ({route.cycleRouteCoverage.signedCycleRoutePercent} %)
+                    </strong>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Aus den Weg- und Radroutennetz-Merkmalen der BRouter-/OSM-Daten. Fehlende Kennzeichnungen und aktuelle Sperrungen sind möglich.
+                </p>
+              </div>
+            ) : null}
             <RouteMap
               pois={pois}
               route={route.geometryGeoJson}
@@ -2334,9 +2392,21 @@ export function PlannerClient({
               <CardDescription>{route.startName} - {route.endName}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-                MVP-Hinweis: Direkte Eingabe nutzt Mockrouting und ist noch keine produktive Fahrradnavigation.
-              </p>
+              {inputMode === "direct" ? (
+                <p
+                  className={cn(
+                    "rounded-md border p-3 text-sm",
+                    route.routingProvider === "brouter"
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+                      : "border-amber-200 bg-amber-50 text-amber-950"
+                  )}
+                >
+                  {route.routingProvider === "brouter"
+                    ? `${route.routingDataNotice ?? `Reale Fahrradroute über BRouter (${route.routingProfileName ?? "trekking"}) auf Basis von OpenStreetMap.`} Routenverlauf vor der Fahrt prüfen.`
+                    : "MVP-Hinweis: Diese Route verwendet Testgeometrie und ist keine reale Fahrradnavigation."}
+                  {route.routingAttribution ? ` Quelle: ${route.routingAttribution}.` : ""}
+                </p>
+              ) : null}
               {route.coordinateCorrections?.length ? (
                 <p className="rounded-md border bg-white p-3 text-sm text-muted-foreground">
                   Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
@@ -2447,7 +2517,7 @@ export function PlannerClient({
                     </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="profile">Profil</Label>
                     <Select id="profile" {...plannerForm.register("profile")}>
@@ -2457,6 +2527,7 @@ export function PlannerClient({
                         </option>
                       ))}
                     </Select>
+                    <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="targetKm">Tages-km</Label>

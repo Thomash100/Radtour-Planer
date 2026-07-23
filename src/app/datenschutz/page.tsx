@@ -18,6 +18,7 @@ export default function PrivacyPage() {
           items: [
             "Der Planer speichert den vollständigen TourState im Browser, damit Touren erneut geöffnet werden können.",
             "Serverseitige Routen- und Etappendaten werden für den App-Betrieb verarbeitet, wenn die App über den privaten Next.js-Stack läuft.",
+            "Bei direkter Routenplanung werden Start-, Ziel- und Zwischenkoordinaten an den konfigurierten BRouter-Dienst übertragen, damit eine Fahrradroute auf OpenStreetMap-Wegen berechnet werden kann.",
             "Unterkunftskandidaten stammen im MVP aus vorhandenen POI-Daten oder lokalen Testdaten; es ist keine produktive externe Unterkunfts-API angebunden."
           ]
         },
@@ -26,7 +27,7 @@ export default function PrivacyPage() {
           items: [
             "Verantwortlicher, Kontakt, Rechtsgrundlagen, Speicherdauer und Betroffenenrechte.",
             "Einsatz von Cookies, Local Storage, Logs, Monitoring und möglichen Analysewerkzeugen.",
-            "Datenverarbeitung durch Hosting, Karten-/Tile-Anbieter, Geocoding-, POI- oder Unterkunftsdienste."
+            "Datenverarbeitung durch Hosting, Karten-/Tile-Anbieter, BRouter, Geocoding-, POI- oder Unterkunftsdienste."
           ]
         }
       ]}

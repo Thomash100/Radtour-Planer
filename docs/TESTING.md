@@ -75,7 +75,7 @@ Zusätzlich prüfen:
 - Startseite beschreibt den aktuellen MVP ohne produktive Überversprechen.
 - GPX ist als empfohlener Einstieg erkennbar.
 - Demo-Tour wird nur durch ausdrückliche Aktion geladen.
-- Direkte Planung ist als Mockrouting bzw. eingeschränkter MVP-Modus gekennzeichnet.
+- Direkte Planung ist als BRouter-/OpenStreetMap-Fahrradroute gekennzeichnet und weist auf die notwendige Routenprüfung hin.
 - Impressum, Datenschutz, Nutzungsbedingungen und MVP-Hinweis öffnen ohne Fehler.
 - Rechtliche Seiten enthalten nur prüfpflichtige Platzhalter und keine erfundenen Betreiberangaben.
 - Footer zeigt MVP-Status, Version und Build-Datum.
@@ -115,6 +115,22 @@ Zusätzlich gebündelt prüfen:
 - Manuelle Änderungen an Distanz oder Höhenmetern aktualisieren die Bewertung sofort.
 - Speichern und erneutes Öffnen erhält Etappenwerte; die Bewertung wird daraus erneut berechnet.
 - Die Bewertung behauptet keine Fitness-, Wetter-, Sicherheits- oder E-Bike-Akkugarantie.
+
+## Paket 11
+
+Reale Wege in der Direktplanung gebündelt prüfen:
+
+- Flensburg nach Swinemünde planen; die Geometrie folgt Straßen und Fahrradwegen und besteht nicht nur aus Kontrollpunkten.
+- Hamburg nach Dresden planen; die vorhandenen Korridorpunkte werden über reale Wege verbunden.
+- Ein eigenes Zwischenziel hinzufügen und prüfen, dass die Route dieses Ziel in der richtigen Reihenfolge anfährt.
+- Profil `Fahrradwege bevorzugen` verwendet BRouter `safety`, `Radwanderwege bevorzugen` verwendet `trekking` und `sportlich` verwendet `fastbike`.
+- Die Radwege-Auswertung zeigt Kilometer und Anteil für erfasste Fahrradinfrastruktur und ausgeschilderte OSM-Radroutennetze.
+- Vorhandene Netzebenen (`international`, `national`, `regional`, `lokal`) werden angezeigt; mehrfach markierte Abschnitte werden in der Radwanderwege-Gesamtsumme nicht doppelt gezählt.
+- Distanz, Fahrzeit und Höhenprofil werden angezeigt.
+- Etappen lassen sich aus der realen Arbeitsroute erzeugen und farbig darstellen.
+- Speichern und erneutes Öffnen erhält die geroutete Geometrie.
+- Bei nicht erreichbarem Routingdienst erscheint eine Fehlermeldung; es wird keine Luftlinie erzeugt.
+- Mobile Ansicht erzeugt keinen horizontalen Overflow.
 
 ## Docker/RPi-Prüfung
 

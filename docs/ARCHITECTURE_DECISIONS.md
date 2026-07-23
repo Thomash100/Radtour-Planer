@@ -113,3 +113,20 @@ Konsequenz:
 
 - Kein unklarer Zwischenstand.
 - PRs enthalten Tests, Build-Ergebnis, manuelle Pruefpunkte und offene Risiken.
+
+## ADR-009: Reale Direktplanung über RoutingProvider
+
+Entscheidung: Die direkte Routenplanung verwendet standardmäßig BRouter auf Basis von OpenStreetMap. Der Provider bleibt über Umgebungsvariablen austauschbar.
+
+Begruendung:
+
+- Start, Ziel und Zwischenziele dürfen nicht als Luftlinie oder künstlich gekrümmte Testlinie dargestellt werden.
+- BRouter unterstützt Fahrradrouting und liefert eine echte Wegegeometrie ohne neue Datenbankstruktur.
+- Eine Provider-Grenze ermöglicht später eine eigene BRouter-Instanz oder einen vertraglich geeigneten Dienst.
+
+Konsequenz:
+
+- Routingfehler führen zu einer sichtbaren Fehlermeldung, nie zu einem stillen Luftlinien-Fallback.
+- Lange Routen werden sequenziell an Zwischenpunkten berechnet, um einzelne Provideranfragen begrenzt zu halten.
+- Öffentliche BRouter-Dienste sind nur für MVP/Test vorgesehen; Produktion braucht eine gesonderte Betriebsentscheidung.
+- Die Übertragung von Routenkoordinaten und die OSM-Attribution sind in Datenschutz- und Betriebsprüfung einzubeziehen.
