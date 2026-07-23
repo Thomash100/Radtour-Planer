@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Download, FileJson, FolderOpen, Trash2, Upload } from "lucide-react";
+import { ClipboardList, Copy, Download, FileJson, FolderOpen, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -249,6 +249,12 @@ export function TourLibraryClient() {
                     <Link href={`/planer?tour=${encodeURIComponent(entry.id)}`}>
                       <FolderOpen className="h-4 w-4" />
                       Öffnen
+                    </Link>
+                  </Button>
+                  <Button asChild variant="secondary">
+                    <Link href={`/auftrag?tour=${encodeURIComponent(entry.id)}`}>
+                      <ClipboardList className="h-4 w-4" />
+                      Reiseauftrag
                     </Link>
                   </Button>
                   <Button type="button" variant="outline" onClick={() => exportTour(entry)}>

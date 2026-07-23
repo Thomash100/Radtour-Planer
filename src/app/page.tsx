@@ -3,6 +3,7 @@ import {
   Bed,
   CalendarDays,
   CheckCircle2,
+  ClipboardList,
   FileText,
   FolderOpen,
   Map,
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button";
 export const metadata: Metadata = {
   title: "BikeTripHub MVP | GPX-Radtour planen",
   description:
-    "MVP für mehrtägige Radtourplanung auf GPX-Basis mit Routenkürzung, Etappen, Orten, Unterkünften und lokaler Speicherung."
+    "MVP für mehrtägige Radtourplanung mit realen Fahrradwegen, Etappen, Unterkünften und lokaler Reiseorganisation."
 };
 
 const primaryActions = [
@@ -50,6 +51,13 @@ const primaryActions = [
     title: "Tourverwaltung",
     text: "Touren umbenennen, duplizieren, löschen sowie als JSON exportieren oder importieren.",
     variant: "outline" as const
+  },
+  {
+    href: "/auftraege",
+    icon: ClipboardList,
+    title: "Reiseaufträge",
+    text: "Aus gespeicherten Touren Reisedaten, Unterkünfte und Gepäcktransport organisieren.",
+    variant: "outline" as const
   }
 ];
 
@@ -58,7 +66,12 @@ const mvpSteps = [
   { icon: CalendarDays, label: "Etappen planen", text: "Etappen nach Länge oder Reisetagen erzeugen und bearbeiten." },
   { icon: Map, label: "Orte übernehmen", text: "Orte/Städte werden auf die GPX-Route projiziert, nicht neu geroutet." },
   { icon: Bed, label: "Unterkunft vormerken", text: "Kandidaten je Etappe speichern, ohne Buchung oder externe Pflicht-API." },
-  { icon: Save, label: "Tour speichern", text: "Alle Änderungen werden im vollständigen Browser-TourState erhalten." }
+  { icon: Save, label: "Tour speichern", text: "Alle Änderungen werden im vollständigen Browser-TourState erhalten." },
+  {
+    icon: ClipboardList,
+    label: "Reise organisieren",
+    text: "Reiseauftrag, Unterkunftsanfragen und Gepäckstatus lokal dokumentieren."
+  }
 ];
 
 const limitations = [
@@ -78,10 +91,10 @@ export default function HomePage() {
             <h1 className="mt-5 text-4xl font-bold leading-tight text-slate-950 sm:text-6xl">BikeTripHub</h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-700">
               Der aktuelle MVP plant mehrtägige Radtouren auf Basis einer festen GPX-Route: kürzen,
-              Etappen erzeugen, Orte entlang der Route übernehmen, Unterkünfte je Etappe vormerken
-              und die gesamte Tour wieder öffnen.
+              Etappen erzeugen, Orte entlang der Route übernehmen, Unterkünfte je Etappe vormerken,
+              die Tour wieder öffnen und daraus einen Reiseauftrag vorbereiten.
             </p>
-            <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mt-8 grid gap-3 sm:grid-cols-2">
               {primaryActions.map((action) => {
                 const Icon = action.icon;
                 return (
@@ -112,7 +125,8 @@ export default function HomePage() {
               </Button>
             </div>
             <p className="mt-3 text-sm text-muted-foreground">
-              Die direkte Planung nutzt weiterhin Mockrouting. Für die fachliche MVP-Prüfung ist GPX der stabile Einstieg.
+              Die direkte Planung nutzt BRouter und reale OpenStreetMap-Wege. GPX bleibt zusätzlich eine feste,
+              vollständig kontrollierbare Routengrundlage.
             </p>
           </div>
 
