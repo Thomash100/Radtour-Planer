@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-20
+Stand: 2026-07-23
 
 ## Produktstand
 
@@ -22,13 +22,20 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunftskandidaten je Etappe anzeigen, vormerken oder als Übernachtungspunkt auswählen.
 - Unterkunft abseits der GPX-Route als Abstecher kennzeichnen.
 - Gesamte Tour speichern und erneut öffnen.
+- Aus einer gespeicherten Tour einen lokalen Reiseauftrag mit Reisedaten, Teilnehmern, Etappen, Unterkunfts- und Gepäckstatus erzeugen.
+- Reiseaufträge speichern, erneut öffnen, umbenennen, duplizieren sowie als JSON exportieren und importieren.
+- Kopierbare, ausdrücklich unverbindliche Unterkunfts- und Gepäcktransport-Anfragen erzeugen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
+
+Reiseaufträge werden getrennt als lokale organisatorische Snapshots gespeichert. Sie enthalten keine neue Routengeometrie und verändern die zugrunde liegende Tour nicht.
 
 ## Bekannte Einschränkungen
 
 - Keine echte Buchung, Reservierung oder Zahlung.
 - Keine Nutzerkonten.
+- Reiseaufträge und darin enthaltene Kontaktdaten werden nur lokal im Browser gespeichert; JSON-Exporte müssen geschützt abgelegt werden.
+- Keine serverseitige Auftragsverwaltung, automatische E-Mail oder Synchronisierung zwischen nachträglich geänderter Tour und bestehendem Auftrag.
 - Keine produktive externe Unterkunfts-API.
 - Unterkunftskandidaten kommen im MVP aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
 - Keine produktive POI-Massenabfrage.
@@ -48,13 +55,14 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung abgeschlossen.
 - Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung abgeschlossen.
 - Paket 10: Etappenbewertung nach Schwierigkeit und Belastung abgeschlossen.
-- Paket 11: Reale Fahrradwege in der Direktplanung in Arbeit auf Branch `codex/package-11-real-road-routing`.
-- Paket 12: Schwierigkeitsbasierte Etappenplanung in Arbeit auf Branch `codex/package-12-difficulty-aware-stage-planning`.
+- Paket 11: Reale Fahrradwege und Radwanderwege abgeschlossen.
+- Paket 12: Schwierigkeitsbasierte Etappenplanung abgeschlossen.
+- Paket 13: Reiseauftrag und Reiseorganisation auf Branch `codex/package-13-travel-order`, lokaler Paketreview ausstehend.
 
-Letzter nachgezogener Deployment-Stand vor Paket 11:
+Aktueller Integrationsstand vor Paket 13:
 
-- `private`: `f3dad175f995b5b3f55f1887755757e202ce6e1a`
-- RPi-Smoke: erfolgreich
+- `private`: `e23c843ba825cc11204b88412babbde59b1fcd83`
+- Paket-11-/Paket-12-RPi-/Browser-Prüfung: erfolgreich
 - Prisma: nicht aktualisiert
 - Plesk: unverändert
 - keine produktive externe Unterkunfts-API
@@ -201,3 +209,21 @@ Enthalten:
 - keine Änderung der GPX-/BRouter-Geometrie und kein automatisches Neu-Routing
 
 Formel, Zielwerte und Grenzen: [docs/STAGE_DIFFICULTY_MVP.md](STAGE_DIFFICULTY_MVP.md).
+
+## Paket 13: Reiseauftrag und Reiseorganisation
+
+Paket 13 ergänzt eine lokale Auftragsebene oberhalb einer gespeicherten Tour. Tourgeometrie und Etappen bleiben unverändert; der Auftrag dokumentiert ausschließlich den organisatorischen Reise- und Kommunikationsstand.
+
+Enthalten:
+
+- Auftrag aus gespeicherter Tour erzeugen
+- Reisedaten, Teilnehmer, Fahrräder, E-Bikes und Gepäck erfassen
+- Etappendaten automatisch ab Startdatum verteilen
+- Unterkunftsstatus, Anfrage, Rückmeldung, Fahrradunterstellung und Gepäckannahme je Etappe dokumentieren
+- Gepäcktransport global und je Etappe dokumentieren
+- Auftrag speichern, öffnen, umbenennen, duplizieren und löschen
+- JSON-Export/-Import
+- kopierbare Auftrags-, Unterkunfts- und Gepäcktransporttexte
+- klare Hinweise auf lokale Speicherung und fehlende Buchungs-/Zahlungsfunktion
+
+Details und Grenzen: [docs/TRAVEL_ORDER_MVP.md](TRAVEL_ORDER_MVP.md).

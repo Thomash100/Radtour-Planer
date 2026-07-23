@@ -12,13 +12,13 @@ export const metadata: Metadata = {
     template: "%s | BikeTripHub"
   },
   description:
-    "MVP für mehrtägige Radtourplanung auf GPX-Basis mit Routenkürzung, Etappen, Orten, Unterkünften und lokaler Speicherung.",
+    "MVP für mehrtägige Radtourplanung mit realen Fahrradwegen, Etappen, Unterkünften und lokaler Reiseorganisation.",
   applicationName: "BikeTripHub",
   keywords: ["Radtour", "GPX", "Etappenplanung", "Radreise", "BikeTripHub"],
   openGraph: {
     title: "BikeTripHub MVP",
     description:
-      "GPX-Routen laden, kürzen, in Etappen aufteilen, Orte projizieren und Unterkünfte je Etappe vormerken.",
+      "Fahrradrouten und GPX-Tracks planen, in Etappen aufteilen, Unterkünfte vormerken und Reiseaufträge dokumentieren.",
     type: "website",
     locale: "de_DE"
   },
@@ -64,6 +64,9 @@ export default function RootLayout({
               </Link>
               <Link className="hover:text-slate-900" href="/touren">
                 Tourverwaltung
+              </Link>
+              <Link className="hover:text-slate-900" href="/auftraege">
+                Reiseaufträge
               </Link>
             </nav>
           </div>

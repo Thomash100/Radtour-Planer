@@ -148,6 +148,26 @@ Schwierigkeitsbasierte Etappenplanung gebündelt prüfen:
 - Speichern und erneutes Öffnen erhält Erzeugungsmodus und gewähltes Zielniveau.
 - Mobile Ansicht erzeugt bei 360, 390, 430 und 768 px keinen horizontalen Overflow.
 
+## Paket 13
+
+Reiseauftrag und Reiseorganisation gebündelt prüfen:
+
+- `/touren` zeigt für jede gespeicherte Tour die Aktion `Reiseauftrag`.
+- `/auftraege` listet lokale Reiseaufträge und gespeicherte Touren getrennt.
+- Aus einer Tour wird ein Auftrag mit allen Etappen, Kennzahlen und vorhandenen Unterkunftszuordnungen erzeugt.
+- Ein Startdatum verteilt Datum und Enddatum lückenlos über alle Reisetage.
+- Teilnehmer, Fahrräder, E-Bikes, Gepäck und Kontaktangaben lassen sich erfassen.
+- Der Datenschutzhinweis erklärt die lokale Speicherung und den vollständigen JSON-Export.
+- Je Etappe kann eine Unterkunft gewählt und als offen, angefragt, bestätigt, abgelehnt oder `Alternative nötig` markiert werden.
+- Fahrradunterstellung, Gepäckannahme, Anfrage- und Rückmeldedatum bleiben nach Save/Load erhalten.
+- Eine geänderte Unterkunft aktualisiert Ziel und folgende Abholunterkunft für den Gepäcktransport.
+- Gepäcktransport lässt sich global und je Etappe dokumentieren.
+- Auftragsübersicht, Unterkunftsanfrage und Gepäcktransport-Anfrage sind kopierbar.
+- Reiseauftrag lässt sich speichern, öffnen, umbenennen, duplizieren und löschen.
+- JSON-Export und erneuter Import erhalten den vollständigen Auftragsstand.
+- UI und Texte behaupten keine Buchung, Reservierung, Zahlung, Live-Verfügbarkeit oder automatische E-Mail.
+- `/auftrag` und `/auftraege` erzeugen bei 360, 390, 430, 768 und 1280 px keinen horizontalen Overflow.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

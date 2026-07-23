@@ -20,7 +20,8 @@ export default function MvpNoticePage() {
             "Etappen bearbeiten, farbig auf der Karte anzeigen und direkt aus der Karte auswählen.",
             "Orte/Städte lokal auf die vorhandene GPX-Route projizieren und als Start, Ziel oder Etappenpunkt übernehmen.",
             "Unterkunftskandidaten je Etappe vormerken oder als Übernachtungspunkt auswählen.",
-            "Die gesamte Tour im Browser-TourState speichern und erneut öffnen."
+            "Die gesamte Tour im Browser-TourState speichern und erneut öffnen.",
+            "Aus einer gespeicherten Tour einen lokalen Reiseauftrag mit Etappen-, Unterkunfts- und Gepäckstatus erstellen und als JSON exportieren."
           ]
         },
         {
@@ -28,6 +29,7 @@ export default function MvpNoticePage() {
           items: [
             "Keine produktive Routing-API und keine automatische Routenverlagerung zu Orten oder Unterkünften.",
             "Keine echte Unterkunfts- oder Buchungs-API, keine Zahlung und keine Nutzerkonten.",
+            "Keine automatische Anfrage, E-Mail, Reservierung, Live-Verfügbarkeitsprüfung oder Beauftragung eines Gepäcktransports.",
             "Keine produktive POI-Massenabfrage; MVP-Daten können lokal oder beispielhaft sein.",
             "Keine Aussage zur Einsatzreife für öffentliche Produktivnutzung ohne separate Prüfung."
           ]

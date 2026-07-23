@@ -50,3 +50,16 @@ Zusätzlich gibt es einen Etappen-GPX-Export:
 - JSON-Dateien enthalten Planungsdaten und sollten nicht ungeprüft veröffentlicht werden.
 - Duplizierte Touren sind lokale Kopien; sie lösen keine Datenbank-Duplizierung aus.
 - Export/Import ersetzt keine Backupstrategie für Serverdaten.
+
+## Reiseaufträge
+
+Paket 13 nutzt gespeicherte Touren als unveränderte fachliche Grundlage für lokale Reiseaufträge. Der Einstieg ist je Tour über `Reiseauftrag` oder gesammelt unter `/auftraege` möglich.
+
+Touren und Reiseaufträge bleiben getrennte Datensätze:
+
+- Eine Tour enthält Route, Geometrie, Etappen und Planungsdaten.
+- Ein Reiseauftrag enthält den organisatorischen Snapshot mit Reisedaten, Kontakten, Unterkunftsanfragen und Gepäckstatus.
+- Änderungen am Auftrag verändern die Tour nicht.
+- Änderungen an der Tour überschreiben einen bestehenden Auftrag nicht automatisch.
+
+Details: [docs/TRAVEL_ORDER_MVP.md](TRAVEL_ORDER_MVP.md).

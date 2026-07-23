@@ -1,4 +1,4 @@
-import { Bike, Building2, FlaskConical, FolderOpen, Map, ShieldCheck } from "lucide-react";
+import { Bike, Building2, ClipboardList, FlaskConical, FolderOpen, Map, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 const links = [
   { href: "/planer", label: "Planer", icon: Map },
   { href: "/touren", label: "Touren", icon: FolderOpen },
+  { href: "/auftraege", label: "Aufträge", icon: ClipboardList },
   { href: "/partner", label: "Partner", icon: Building2 },
   { href: "/mvp-hinweis", label: "MVP", icon: FlaskConical },
   { href: "/admin/partner", label: "Admin", icon: ShieldCheck }
@@ -34,9 +35,16 @@ export function ShellNav() {
             );
           })}
         </nav>
-        <Button asChild size="sm">
-          <Link href="/planer?mode=gpx">GPX laden</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild className="md:hidden" size="icon" variant="outline">
+            <Link aria-label="Reiseaufträge öffnen" href="/auftraege" title="Reiseaufträge">
+              <ClipboardList className="h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/planer?mode=gpx">GPX laden</Link>
+          </Button>
+        </div>
       </div>
     </header>
   );
