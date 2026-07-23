@@ -349,11 +349,11 @@ async function fetchBRouterSegment(
   }
 }
 
-function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints = 480): ElevationPoint[] {
+function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints = 480) {
   const twoDimensionalCoordinates = coordinates.map(([lon, lat]) => [lon, lat] satisfies Position);
   const distances = cumulativeDistances(twoDimensionalCoordinates);
-  const hasElevation = coordinates.some((coordinate) => Number.isFinite(coordinate[2]));
-  const fallbackProfile = hasElevation ? null : createElevationProfile(twoDimensionalCoordinates);
+  const hasCompleteElevation = coordinates.every((coordinate) => Number.isFinite(coordinate[2]));
+  const fallbackProfile = hasCompleteElevation ? null : createElevationProfile(twoDimensionalCoordinates);
   const sampleStep = Math.max(1, Math.ceil(coordinates.length / maxPoints));
   const profile: ElevationPoint[] = [];
 
@@ -375,7 +375,7 @@ function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints
     });
   }
 
-  return profile;
+  return { profile, isEstimated: !hasCompleteElevation };
 }
 
 export async function calculateRoadRoute(input: RouteCalculationInput, options: RoadRoutingOptions = {}): Promise<RouteCalculation> {
@@ -441,6 +441,7 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
   const brouterProfile = brouterProfileByRoutingProfile[profile];
   const distanceKm = Number(segments.reduce((sum, segment) => sum + segment.distanceKm, 0).toFixed(1));
   const cycleRouteCoverage = combineCycleRouteCoverage(segments, distanceKm);
+  const routedElevation = createRoutedElevationProfile(coordinates);
   const preferenceNotice =
     profile === "cycleways"
       ? "Das Profil safety bevorzugt sichere Wege und erfasste Fahrradinfrastruktur."
@@ -461,7 +462,8 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
       type: "LineString",
       coordinates: geometryCoordinates
     },
-    elevationProfile: createRoutedElevationProfile(coordinates),
+    elevationProfile: routedElevation.profile,
+    elevationSource: routedElevation.isEstimated ? "estimated" : "provider",
     waypoints: orderedNames.map((name, order) => {
       const [lon, lat] = snappedControlPoints[order];
       return { order, name, lat, lon };

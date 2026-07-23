@@ -10,6 +10,7 @@ import {
   type LineStringGeoJson
 } from "@/lib/geo";
 import { prisma } from "@/lib/prisma";
+import { planStagesByDifficulty } from "@/lib/stage-planning";
 import { autoStageSchema } from "@/lib/validators";
 
 type Context = {
@@ -20,7 +21,9 @@ type Context = {
 
 export async function POST(request: Request, { params }: Context) {
   try {
-    const { breakpoints, targetKm, travelDays } = autoStageSchema.parse(await readJson(request));
+    const { breakpoints, targetKm, travelDays, targetDifficulty, elevationProfile, elevationEstimated } = autoStageSchema.parse(
+      await readJson(request)
+    );
     const route = await prisma.route.findUnique({ where: { id: params.id } });
     if (!route) {
       return NextResponse.json({ error: "Route not found" }, { status: 404 });
@@ -33,12 +36,17 @@ export async function POST(request: Request, { params }: Context) {
       return NextResponse.json({ error: travelDayValidation.message }, { status: 400 });
     }
 
+    const difficultyPlan = targetDifficulty
+      ? planStagesByDifficulty(geometry, elevationProfile, targetDifficulty, { elevationEstimated })
+      : null;
     const splitStages =
       breakpoints.length > 0
-        ? splitRouteByBreakpoints(geometry, breakpoints)
-        : travelDayValidation
-          ? splitRouteIntoStageCount(geometry, travelDayValidation.travelDays)
-          : splitRouteIntoStages(geometry, targetKm);
+        ? splitRouteByBreakpoints(geometry, breakpoints, elevationProfile)
+        : difficultyPlan
+          ? difficultyPlan.stages
+          : travelDayValidation
+            ? splitRouteIntoStageCount(geometry, travelDayValidation.travelDays, elevationProfile)
+            : splitRouteIntoStages(geometry, targetKm, elevationProfile);
     const generatedStages = splitStages.map((stage, index) => ({
       ...stage,
       startName: index === 0 ? route.startName : stage.startName,
@@ -64,7 +72,21 @@ export async function POST(request: Request, { params }: Context) {
       orderBy: { dayNumber: "asc" }
     });
 
-    return NextResponse.json({ stages });
+    return NextResponse.json({
+      stages,
+      planning: difficultyPlan
+        ? {
+            mode: "difficulty",
+            target: difficultyPlan.target,
+            targetLabel: difficultyPlan.targetLabel,
+            maxScore: difficultyPlan.maxScore,
+            targetMet: difficultyPlan.targetMet,
+            usedEstimatedElevation: difficultyPlan.usedEstimatedElevation,
+            warnings: difficultyPlan.warnings,
+            scores: difficultyPlan.stages.map((stage) => stage.difficulty.effortScore)
+          }
+        : undefined
+    });
   } catch (error) {
     return apiError(error);
   }

@@ -12,7 +12,7 @@ Je Etappe werden aktuell folgende Werte verwendet:
 - Steigungsdichte in Höhenmetern bergauf pro Kilometer
 - geschätzte Fahrzeit aus der vorhandenen MVP-Geschwindigkeit
 
-Die Bewertung verändert die Route nicht automatisch und optimiert keine Etappen neu. Auffällige Etappen erhalten Hinweise und Vorschläge zur Entlastung.
+Die Bewertung verändert die Route nicht. Auffällige Etappen erhalten Hinweise und Vorschläge zur Entlastung. Im Schritt `Etappen erzeugen` kann der Nutzer zusätzlich ausdrücklich eine neue, zusammenhängende Aufteilung nach Ziel-Schwierigkeit anfordern.
 
 ## MVP-Formel
 
@@ -42,6 +42,21 @@ Belastungspunkte = clamp(round(Rohbelastung / 1,9), 0, 100)
 
 Die Schwellen sind MVP-Werte und müssen nach echten Tourdaten, Nutzerfeedback und weiteren Routentypen kalibriert werden.
 
+## Etappen nach Ziel-Schwierigkeit planen
+
+Neben Etappenlänge und Reisetagen stehen vier Zielniveaus zur Verfügung:
+
+- `leicht`: Zielwert etwa `28`, maximal `34` Punkte
+- `mittel`: Zielwert etwa `50`, maximal `64` Punkte
+- `schwer`: Zielwert etwa `76`, maximal `89` Punkte
+- `sehr schwer`: Zielwert etwa `94`, maximal `100` Punkte
+
+Die Planung untersucht fortlaufende Abschnitte der aktuellen Arbeitsroute. Sie sucht Etappengrenzen, deren Belastung möglichst nahe am Zielwert liegt und den Maximalwert nicht überschreitet. Abschnitte mit vielen Höhenmetern werden dadurch in der Regel kürzer als flache Abschnitte. Alle Vorschläge bleiben lückenlose Teile derselben GPX- oder BRouter-Geometrie; es findet kein neues Routing statt.
+
+Die Ergebnisvorschau zeigt je Tag Distanz, Höhenmeter und Belastungspunkte. Sind vorhandene Etappen gespeichert oder manuell bearbeitet, werden sie erst nach einer ausdrücklichen Bestätigung ersetzt. Kann ein sehr belastender Abschnitt selbst bei einer kurzen Etappe das Zielniveau nicht einhalten, bleibt die Route vollständig und die App zeigt eine Warnung.
+
+Wenn ein echtes Höhenprofil vorhanden ist, werden dessen interpolierte Werte für Route, Kürzung und Etappenschnitt verwendet. Fehlt es, bleibt die Planung funktionsfähig, kennzeichnet die verwendeten Höhendaten aber ausdrücklich als geschätzt.
+
 ## Zusatzhinweise
 
 Die App markiert Etappen unter anderem bei:
@@ -60,7 +75,7 @@ Typische Vorschläge sind:
 - Pausen sowie Brems- und Technikreserve einplanen
 - zusätzlichen Reisetag oder kürzere Tagesdistanz prüfen
 
-Die Vorschläge sind bewusst Hinweise. Eine automatische Neuaufteilung erfolgt nur nach gesonderter Bestätigung in bestehenden Etappenfunktionen.
+Die Vorschläge sind bewusst Hinweise. Eine Neuaufteilung erfolgt nur nach Auswahl des Zielniveaus und ausdrücklicher Aktion; vorhandene Etappen werden nur nach gesonderter Bestätigung ersetzt.
 
 ## Referenzfälle
 
@@ -78,6 +93,6 @@ Nicht berücksichtigt werden im MVP:
 - individuelle Fitness, Alter, Gesundheit oder Gruppendynamik
 - E-Bike-Akkureichweite, Ladeplanung oder Unterstützungsstufe
 - medizinische oder sicherheitsrelevante Eignung
-- automatische Neuoptimierung der Route
+- automatische Neuoptimierung oder Verlagerung der Route
 
 Die Bewertung ist damit eine nachvollziehbare Planungsanzeige, keine Garantie für reale Befahrbarkeit oder Sicherheit.

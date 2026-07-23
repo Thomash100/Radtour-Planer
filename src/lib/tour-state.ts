@@ -1,6 +1,7 @@
 import type { StageAccommodation } from "@/lib/accommodations";
 import type { LineStringGeoJson } from "@/lib/geo";
 import type { CycleRouteCoverage } from "@/lib/mock-routing";
+import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
 
@@ -24,6 +25,7 @@ export type StoredRoute = {
   originalElevationDown?: number;
   originalDurationHours?: number;
   originalElevationProfile?: Array<{ distanceKm: number; elevationM: number }>;
+  elevationSource?: "provider" | "gpx" | "estimated";
   trimStartKmOriginal?: number;
   trimEndKmOriginal?: number;
   startLocationName?: string;
@@ -64,7 +66,7 @@ export type StoredPoi = {
   partnerId?: string | null;
 };
 
-export type StoredStageGenerationMode = "distance" | "days" | "custom";
+export type StoredStageGenerationMode = "distance" | "days" | "difficulty" | "custom";
 
 export type StoredStageBreakpoint = {
   id?: string;
@@ -84,6 +86,7 @@ export type StoredTourState = {
   stageGenerationMode?: StoredStageGenerationMode;
   targetKm?: number;
   travelDays?: number;
+  difficultyTarget?: StageDifficultyLevel;
   stageBreakpoints?: StoredStageBreakpoint[];
   stageAccommodations?: Record<string, StageAccommodation>;
   status?: string;
