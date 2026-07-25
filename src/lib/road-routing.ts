@@ -4,6 +4,7 @@ import {
   createElevationProfile,
   cumulativeDistances,
   haversineKm,
+  pointAtDistance,
   routeDistanceKm,
   type ElevationPoint,
   type Position
@@ -37,12 +38,70 @@ const brouterResponseSchema = z.union([
   })
 ]);
 
-export const brouterProfileByRoutingProfile: Record<RoutingProfile, string> = {
-  balanced: "trekking",
-  cycleways: "safety",
-  low_elevation: "trekking",
-  touristic: "trekking",
-  sportive: "fastbike"
+type BRouterProfileConfiguration = {
+  providerProfile: string;
+  displayName: string;
+  parameters: Record<string, string>;
+  notice: string;
+};
+
+export const brouterProfileConfigurationByRoutingProfile: Record<RoutingProfile, BRouterProfileConfiguration> = {
+  balanced: {
+    providerProfile: "trekking",
+    displayName: "trekking / ausgewogen",
+    parameters: {
+      "profile:consider_elevation": "1",
+      "profile:ignore_cycleroutes": "1",
+      "profile:stick_to_cycleroutes": "0"
+    },
+    notice: "Ausgewogene Trekkingroute ohne zusätzliche Bindung an ausgeschilderte Radroutennetze."
+  },
+  cycleways: {
+    providerProfile: "safety",
+    displayName: "safety / Fahrradwege",
+    parameters: {},
+    notice: "Das Profil safety bevorzugt sichere Wege und erfasste Fahrradinfrastruktur."
+  },
+  low_elevation: {
+    providerProfile: "trekking",
+    displayName: "trekking / wenig Steigung",
+    parameters: {
+      "profile:consider_elevation": "1",
+      "profile:ignore_cycleroutes": "1",
+      "profile:stick_to_cycleroutes": "0",
+      "profile:uphillcost": "500",
+      "profile:downhillcost": "500"
+    },
+    notice: "Das Trekkingprofil gewichtet Anstiege und Abfahrten stärker und bevorzugt dadurch höhenärmere Verbindungen."
+  },
+  touristic: {
+    providerProfile: "trekking",
+    displayName: "trekking / Radwanderwege",
+    parameters: {
+      "profile:consider_elevation": "1",
+      "profile:ignore_cycleroutes": "0",
+      "profile:stick_to_cycleroutes": "1"
+    },
+    notice: "Das Trekkingprofil bindet ausgeschilderte Radwanderwege aus dem OSM-Radroutennetz besonders stark ein."
+  },
+  sportive: {
+    providerProfile: "fastbike",
+    displayName: "fastbike / sportlich",
+    parameters: {},
+    notice: "Das Profil fastbike bevorzugt eine zügige, sportliche Fahrradroute."
+  }
+};
+
+export const brouterProfileByRoutingProfile = Object.fromEntries(
+  Object.entries(brouterProfileConfigurationByRoutingProfile).map(([profile, configuration]) => [
+    profile,
+    configuration.providerProfile
+  ])
+) as Record<RoutingProfile, string>;
+
+const brouterCorridorConfiguration = {
+  providerProfile: "shortest",
+  parameters: {}
 };
 
 const fallbackSpeedKmh: Record<RoutingProfile, number> = {
@@ -279,23 +338,46 @@ function parseBRouterPayload(payload: unknown, profile: RoutingProfile): RoutedS
   };
 }
 
-export function buildBRouterUrl(baseUrl: string, start: Position, end: Position, profile: RoutingProfile) {
+function buildBRouterRequestUrl(
+  baseUrl: string,
+  start: Position,
+  end: Position,
+  configuration: Pick<BRouterProfileConfiguration, "providerProfile" | "parameters">
+) {
   const url = new URL(baseUrl);
   const formatCoordinate = ([lon, lat]: Position) => `${lon.toFixed(6)},${lat.toFixed(6)}`;
   url.searchParams.set("lonlats", `${formatCoordinate(start)}|${formatCoordinate(end)}`);
-  url.searchParams.set("profile", brouterProfileByRoutingProfile[profile]);
+  url.searchParams.set("profile", configuration.providerProfile);
   url.searchParams.set("alternativeidx", "0");
   url.searchParams.set("format", "geojson");
+  for (const [key, value] of Object.entries(configuration.parameters)) {
+    url.searchParams.set(key, value);
+  }
   return url;
 }
 
-export function createRoutingAnchors(start: Position, end: Position, maxSegmentKm = 80) {
+export function buildBRouterUrl(baseUrl: string, start: Position, end: Position, profile: RoutingProfile) {
+  return buildBRouterRequestUrl(baseUrl, start, end, brouterProfileConfigurationByRoutingProfile[profile]);
+}
+
+export function createRoutingAnchorsFromRoutedPath(coordinates: Position[], maxSegmentKm = 80) {
+  if (coordinates.length < 2) {
+    throw new RoutingProviderError("Der Fahrradrouting-Dienst hat keinen verwendbaren Korridor für die Segmentierung geliefert.");
+  }
+
   const safeMaxSegmentKm = Number.isFinite(maxSegmentKm) && maxSegmentKm >= 10 ? maxSegmentKm : 80;
-  const sectionCount = Math.max(1, Math.ceil(haversineKm(start, end) / safeMaxSegmentKm));
+  const totalDistanceKm = routeDistanceKm(coordinates);
+  const sectionCount = Math.max(1, Math.ceil(totalDistanceKm / safeMaxSegmentKm));
+  const sectionDistanceKm = totalDistanceKm / sectionCount;
 
   return Array.from({ length: sectionCount + 1 }, (_, index) => {
-    const ratio = index / sectionCount;
-    return [start[0] + (end[0] - start[0]) * ratio, start[1] + (end[1] - start[1]) * ratio] satisfies Position;
+    if (index === 0) {
+      return coordinates[0];
+    }
+    if (index === sectionCount) {
+      return coordinates[coordinates.length - 1];
+    }
+    return pointAtDistance(coordinates, sectionDistanceKm * index);
   });
 }
 
@@ -303,11 +385,13 @@ async function fetchBRouterSegment(
   start: Position,
   end: Position,
   profile: RoutingProfile,
-  options: Required<Pick<RoadRoutingOptions, "baseUrl" | "timeoutMs" | "fetcher">>
+  options: Required<Pick<RoadRoutingOptions, "baseUrl" | "timeoutMs" | "fetcher">>,
+  configuration: Pick<BRouterProfileConfiguration, "providerProfile" | "parameters"> =
+    brouterProfileConfigurationByRoutingProfile[profile]
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs);
-  const url = buildBRouterUrl(options.baseUrl, start, end, profile);
+  const url = buildBRouterRequestUrl(options.baseUrl, start, end, configuration);
 
   try {
     const response = await options.fetcher(url, {
@@ -347,6 +431,62 @@ async function fetchBRouterSegment(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchRoutedSections(
+  start: Position,
+  end: Position,
+  profile: RoutingProfile,
+  options: Required<Pick<RoadRoutingOptions, "baseUrl" | "timeoutMs" | "fetcher">>,
+  maxSegmentKm: number
+) {
+  const directDistanceKm = haversineKm(start, end);
+  const corridorUsesSelectedProfile = directDistanceKm <= maxSegmentKm;
+  let routedCorridor: RoutedSegment;
+
+  try {
+    routedCorridor = await fetchBRouterSegment(
+      start,
+      end,
+      profile,
+      options,
+      corridorUsesSelectedProfile ? brouterProfileConfigurationByRoutingProfile[profile] : brouterCorridorConfiguration
+    );
+  } catch (error) {
+    if (directDistanceKm <= maxSegmentKm) {
+      throw error;
+    }
+    throw new RoutingProviderError(
+      `Die lange Verbindung konnte nicht zuerst als routbarer Korridor berechnet werden. Es wurden keine frei erzeugten Luftlinien-Hilfspunkte gesetzt. Bitte ein nachvollziehbares Zwischenziel ergänzen. Ursache: ${
+        error instanceof Error ? error.message : "Routing fehlgeschlagen."
+      }`
+    );
+  }
+
+  if (routedCorridor.distanceKm <= maxSegmentKm) {
+    if (corridorUsesSelectedProfile) {
+      return [routedCorridor];
+    }
+    return [await fetchBRouterSegment(start, end, profile, options)];
+  }
+
+  const routedCoordinates = routedCorridor.coordinates.map(([lon, lat]) => [lon, lat] satisfies Position);
+  const anchors = createRoutingAnchorsFromRoutedPath(routedCoordinates, maxSegmentKm);
+  const sections: RoutedSegment[] = [];
+
+  for (let index = 1; index < anchors.length; index += 1) {
+    try {
+      sections.push(await fetchBRouterSegment(anchors[index - 1], anchors[index], profile, options));
+    } catch (error) {
+      throw new RoutingProviderError(
+        `Die Segmentierung entlang des zuvor berechneten routbaren Korridors ist in Teil ${index}/${anchors.length - 1} fehlgeschlagen. Es wurde keine Luftlinie ergänzt: ${
+          error instanceof Error ? error.message : "Routing fehlgeschlagen."
+        }`
+      );
+    }
+  }
+
+  return sections;
 }
 
 function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints = 480) {
@@ -393,19 +533,19 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
   const snappedControlPoints: RoutedCoordinate[] = [];
 
   for (let index = 1; index < controlPoints.length; index += 1) {
-    const anchors = createRoutingAnchors(controlPoints[index - 1], controlPoints[index], routingOptions.maxSegmentKm);
-    const sectionSegments: RoutedSegment[] = [];
-
-    for (let anchorIndex = 1; anchorIndex < anchors.length; anchorIndex += 1) {
-      try {
-        const segment = await fetchBRouterSegment(anchors[anchorIndex - 1], anchors[anchorIndex], profile, routingOptions);
-        segments.push(segment);
-        sectionSegments.push(segment);
-      } catch (error) {
-        const section = `${orderedNames[index - 1]} - ${orderedNames[index]}`;
-        const part = anchors.length > 2 ? ` (Teil ${anchorIndex}/${anchors.length - 1})` : "";
-        throw new RoutingProviderError(`${section}${part}: ${error instanceof Error ? error.message : "Routing fehlgeschlagen."}`);
-      }
+    let sectionSegments: RoutedSegment[];
+    try {
+      sectionSegments = await fetchRoutedSections(
+        controlPoints[index - 1],
+        controlPoints[index],
+        profile,
+        routingOptions,
+        routingOptions.maxSegmentKm
+      );
+      segments.push(...sectionSegments);
+    } catch (error) {
+      const section = `${orderedNames[index - 1]} - ${orderedNames[index]}`;
+      throw new RoutingProviderError(`${section}: ${error instanceof Error ? error.message : "Routing fehlgeschlagen."}`);
     }
 
     if (index === 1) {
@@ -438,16 +578,10 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
   }
 
   const geometryCoordinates = coordinates.map(([lon, lat]) => [lon, lat] satisfies Position);
-  const brouterProfile = brouterProfileByRoutingProfile[profile];
+  const brouterProfile = brouterProfileConfigurationByRoutingProfile[profile];
   const distanceKm = Number(segments.reduce((sum, segment) => sum + segment.distanceKm, 0).toFixed(1));
   const cycleRouteCoverage = combineCycleRouteCoverage(segments, distanceKm);
   const routedElevation = createRoutedElevationProfile(coordinates);
-  const preferenceNotice =
-    profile === "cycleways"
-      ? "Das Profil safety bevorzugt sichere Wege und erfasste Fahrradinfrastruktur."
-      : profile === "touristic"
-        ? "Das Profil trekking bevorzugt ausgeschilderte Radwanderwege aus dem OSM-Radroutennetz."
-        : `Berechnet mit dem BRouter-Profil ${brouterProfile}.`;
 
   return {
     name: `${input.start.trim()} nach ${input.end.trim()}`,
@@ -469,9 +603,9 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
       return { order, name, lat, lon };
     }),
     routingProvider: "brouter",
-    routingProfileName: brouterProfile,
+    routingProfileName: brouterProfile.displayName,
     routingAttribution: "BRouter / OpenStreetMap-Mitwirkende",
-    routingDataNotice: `Reale Fahrradroute auf Basis von OpenStreetMap. ${preferenceNotice}`,
+    routingDataNotice: `Reale Fahrradroute auf Basis von OpenStreetMap. ${brouterProfile.notice}`,
     cycleRouteCoverage
   };
 }

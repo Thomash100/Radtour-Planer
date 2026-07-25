@@ -187,6 +187,10 @@ Pruefpunkte:
 - `/api/health` technischer Healthcheck
 - `/planer` laedt ohne Konsolenfehler
 - Route mit Start, Ziel und mindestens einem Zwischenziel berechnen
+- vorhandene gespeicherte Tour oeffnen, einen BRouter-Fehler provozieren und pruefen, dass Route, Etappen, POI und Unterkuenfte erhalten bleiben
+- die Profile `ausgewogen`, `wenig Steigung`, `Fahrradwege bevorzugen`, `Radwanderwege bevorzugen` und `sportlich` mit derselben Strecke vergleichen
+- Flensburg nach Swinemuende sowie Hamburg nach Dresden ohne Luftlinien-Hilfspunkte pruefen
+- 20 Zwischenziele anlegen und pruefen, dass das 21. mit verstaendlichem Hinweis verhindert wird
 - Start-, Ziel- und Zwischenzielmarker sind auf der Karte sichtbar
 - Etappenlinien sind farbig unterscheidbar
 - Kartenresize funktioniert nach Seitenleisten-/Viewport-Aenderungen
@@ -211,6 +215,9 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis `docker compose -f docker-compose.rpi.yml build`
 - Ergebnis Healthcheck `/api/health`
 - Ergebnis `/planer`
+- Ergebnis Fehlerfall mit erhaltener bestehender Tour
+- Ergebnis Profilvergleich und Langstreckenrouting
+- Ergebnis Zwischenziellimit 20/21
 - Ergebnis GPX-Import
 - Ergebnis Karte, Marker, POI und Etappenfarben
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich

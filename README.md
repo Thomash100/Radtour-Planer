@@ -173,7 +173,7 @@ npm run worker
 ## MVP-Flows
 
 1. `/planer` oeffnen.
-2. Start, Ziel, Zwischenziele und Routingprofil waehlen; `Fahrradwege bevorzugen` nutzt sichere Fahrradinfrastruktur, `Radwanderwege bevorzugen` das ausgeschilderte OSM-Radroutennetz.
+2. Start, Ziel, bis zu 20 Zwischenziele und Routingprofil waehlen; `wenig Steigung`, `Fahrradwege bevorzugen`, `Radwanderwege bevorzugen`, `ausgewogen` und `sportlich` erzeugen getrennte BRouter-Anfragen.
 3. `Route planen` berechnet ueber BRouter eine Fahrradroute auf realen OpenStreetMap-Wegen, weist die erfassten Radwege-Anteile aus, speichert sie als Arbeitsroute, erzeugt Etappen und laedt POI.
 4. Etappen in der Timeline bei Bedarf manuell anpassen und speichern.
 5. Filterchips fuer Unterkunft, Gepaeck, Werkstatt, Restaurant, Mindestbewertung, Hunde, Fahrradstellplatz und weitere Kategorien nutzen.
@@ -229,7 +229,8 @@ npm run build
 
 ## Architekturhinweise
 
-- `POST /api/routes/calculate` verwendet standardmaessig den austauschbaren BRouter-Provider. `ROUTING_PROVIDER=mock` ist nur ein expliziter Offline-/Entwicklungsmodus; Fehler erzeugen keine Luftlinie.
+- `POST /api/routes/calculate` verwendet standardmaessig den austauschbaren BRouter-Provider. `ROUTING_PROVIDER=mock` ist nur ein expliziter Offline-/Entwicklungsmodus; Fehler erzeugen keine Luftlinie und ersetzen keine bereits vorhandene Tour.
+- Lange Verbindungen werden nur ueber explizite Zwischenziele oder Punkte einer zuvor gerouteten BRouter-Korridorlinie geteilt; frei interpolierte Luftlinien-Hilfspunkte sind ausgeschlossen.
 - Route-Geometrien werden als GeoJSON in Prisma `Json` gespeichert. PostGIS ist im Datenbankcontainer aktiviert; echte `geometry`-Spalten koennen spaeter fuer produktive Korridorabfragen ergaenzt werden.
 - POI-Suche berechnet im MVP die Entfernung zur Route in TypeScript. Fuer Produktion sollte das in PostGIS mit gecachten OSM-Extrakten oder einem kommerziellen Provider laufen.
 - `POST /api/poi/sync-osm` legt einen BullMQ-Job an; der Worker enthaelt aktuell einen Platzhalter.

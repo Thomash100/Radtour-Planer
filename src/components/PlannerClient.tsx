@@ -48,8 +48,10 @@ import {
   type AccommodationStatus,
   type StageAccommodation
 } from "@/lib/accommodations";
+import { replaceRouteAfterSuccessfulCalculation } from "@/lib/direct-route-replacement";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
+import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import { difficultyPlanningTargets, planStagesByDifficulty, type DifficultyPlanningTarget } from "@/lib/stage-planning";
 import {
@@ -240,10 +242,10 @@ const profileLabels: Record<string, string> = {
 };
 
 const profileDescriptions: Record<string, string> = {
-  balanced: "Ausgewogene Fahrradroute mit BRouter trekking.",
+  balanced: "Ausgewogene Trekkingroute ohne zusätzliche Bindung an ausgeschilderte Radroutennetze.",
   cycleways: "Bevorzugt sichere Wege und in OSM erfasste Fahrradinfrastruktur.",
-  low_elevation: "Berücksichtigt Steigungen, garantiert aber nicht die höhenärmste Route.",
-  touristic: "Bevorzugt ausgeschilderte internationale, nationale, regionale und lokale Radrouten.",
+  low_elevation: "Gewichtet Anstiege und Abfahrten stärker; eine absolut höhenärmste Route wird nicht garantiert.",
+  touristic: "Bindet ausgeschilderte internationale, nationale, regionale und lokale Radrouten besonders stark ein.",
   sportive: "Zügige Fahrradroute mit dem BRouter-Profil fastbike."
 };
 
@@ -490,6 +492,7 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const waypointLimitReached = waypoints.length >= MAX_ROUTE_WAYPOINTS;
   const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
   const originalRouteGeometry = route?.originalGeometryGeoJson ?? route?.geometryGeoJson ?? null;
   const originalRouteTotalKm = useMemo(
@@ -1298,6 +1301,11 @@ export function PlannerClient({
   }
 
   function requestDirectRoutePlan(values: PlannerForm, routeWaypoints = waypoints) {
+    if (routeWaypoints.length > MAX_ROUTE_WAYPOINTS) {
+      setStatus(routeWaypointLimitMessage());
+      return;
+    }
+
     const routeInput = normalizeDirectRouteInput({ start: values.start, end: values.end });
     if (!routeInput.ok) {
       setStatus(routeInput.error);
@@ -1326,7 +1334,6 @@ export function PlannerClient({
       return;
     }
 
-    setInputMode("direct");
     void planRoute(nextPlan.values, nextPlan.routeWaypoints);
   }
 
@@ -1344,7 +1351,6 @@ export function PlannerClient({
 
     const nextPlan = pendingDirectPlan;
     setPendingDirectPlan(null);
-    setInputMode("direct");
     void planRoute(nextPlan.values, nextPlan.routeWaypoints);
   }
 
@@ -1565,35 +1571,42 @@ export function PlannerClient({
     } = {}
   ) {
     setIsBusy(true);
-    setCurrentLibraryTourId(null);
-    setTourKind(options.tourKind ?? (inputMode === "demo" ? "demo" : "user"));
-    setLeadStatus("");
-    setCalculation(null);
-    setSavedRoute(null);
-    setStages([]);
-    setStageBreakpoints([]);
-    setStageFeedback({});
-    setStageAccommodations({});
-    setLastTourSavedAt(null);
-    setPois([]);
-    setSelectedPoi(null);
+    let replacementCommitted = false;
     try {
-      setStatus("Route wird berechnet.");
-      const calculateResponse = await fetch("/api/routes/calculate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          start: values.start,
-          end: values.end,
-          profile: values.profile,
-          waypoints: routeWaypoints
-        })
-      });
-      const calculated = await calculateResponse.json();
-      if (!calculateResponse.ok) throw new Error(calculated.error ?? "Routing fehlgeschlagen.");
-
-      const calculatedRoute = routeWithOriginalGeometry(calculated);
-      setCalculation(calculatedRoute);
+      const calculatedRoute = await replaceRouteAfterSuccessfulCalculation(
+        async () => {
+          setStatus("Route wird berechnet. Die vorhandene Tour bleibt bis zum erfolgreichen Abschluss erhalten.");
+          const calculateResponse = await fetch("/api/routes/calculate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              start: values.start,
+              end: values.end,
+              profile: values.profile,
+              waypoints: routeWaypoints
+            })
+          });
+          const calculated = await calculateResponse.json();
+          if (!calculateResponse.ok) throw new Error(calculated.error ?? "Routing fehlgeschlagen.");
+          return routeWithOriginalGeometry(calculated);
+        },
+        (nextRoute) => {
+          setCurrentLibraryTourId(null);
+          setTourKind(options.tourKind ?? (inputMode === "demo" ? "demo" : "user"));
+          setInputMode(options.tourKind === "demo" ? "demo" : "direct");
+          setLeadStatus("");
+          setCalculation(nextRoute);
+          setSavedRoute(null);
+          setStages([]);
+          setStageBreakpoints([]);
+          setStageFeedback({});
+          setStageAccommodations({});
+          setLastTourSavedAt(null);
+          setPois([]);
+          setSelectedPoi(null);
+          replacementCommitted = true;
+        }
+      );
       setStatus("Route berechnet, Arbeitsroute wird gespeichert.");
 
       const saveResponse = await fetch("/api/routes", {
@@ -1624,7 +1637,8 @@ export function PlannerClient({
       );
       setPlannerStep(options.finalStep ?? "overview");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Unbekannter Fehler.");
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
+      setStatus(!replacementCommitted && route ? `${message} Die bestehende Tour bleibt unverändert.` : message);
     } finally {
       setIsBusy(false);
     }
@@ -1724,6 +1738,11 @@ export function PlannerClient({
   }
 
   function addWaypoint() {
+    if (waypointLimitReached) {
+      setStatus(routeWaypointLimitMessage());
+      return;
+    }
+
     const trimmed = newWaypoint.trim();
     if (!trimmed) return;
     setWaypoints((current) => [...current, trimmed]);
@@ -2135,6 +2154,7 @@ export function PlannerClient({
               ))}
               <div className="flex gap-2">
                 <Input
+                  disabled={waypointLimitReached}
                   placeholder="z. B. Magdeburg"
                   value={newWaypoint}
                   onChange={(event) => setNewWaypoint(event.target.value)}
@@ -2145,10 +2165,21 @@ export function PlannerClient({
                     }
                   }}
                 />
-                <Button aria-label="Zwischenziel hinzufügen" size="icon" type="button" variant="secondary" onClick={addWaypoint}>
+                <Button
+                  aria-label="Zwischenziel hinzufügen"
+                  disabled={waypointLimitReached}
+                  size="icon"
+                  title={waypointLimitReached ? routeWaypointLimitMessage() : undefined}
+                  type="button"
+                  variant="secondary"
+                  onClick={addWaypoint}
+                >
                   <CirclePlus className="h-4 w-4" />
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                {waypointLimitReached ? routeWaypointLimitMessage() : `${waypoints.length} von ${MAX_ROUTE_WAYPOINTS} Zwischenzielen verwendet.`}
+              </p>
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -2609,6 +2640,7 @@ export function PlannerClient({
                     ))}
                     <div className="flex gap-2">
                       <Input
+                        disabled={waypointLimitReached}
                         placeholder="z. B. Traunstein"
                         value={newWaypoint}
                         onChange={(event) => setNewWaypoint(event.target.value)}
@@ -2619,10 +2651,23 @@ export function PlannerClient({
                           }
                         }}
                       />
-                <Button aria-label="Zwischenziel hinzufügen" size="icon" type="button" variant="secondary" onClick={addWaypoint}>
+                      <Button
+                        aria-label="Zwischenziel hinzufügen"
+                        disabled={waypointLimitReached}
+                        size="icon"
+                        title={waypointLimitReached ? routeWaypointLimitMessage() : undefined}
+                        type="button"
+                        variant="secondary"
+                        onClick={addWaypoint}
+                      >
                         <CirclePlus className="h-4 w-4" />
                       </Button>
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {waypointLimitReached
+                        ? routeWaypointLimitMessage()
+                        : `${waypoints.length} von ${MAX_ROUTE_WAYPOINTS} Zwischenzielen verwendet.`}
+                    </p>
                   </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">

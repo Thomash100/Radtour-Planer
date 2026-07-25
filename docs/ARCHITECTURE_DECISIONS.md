@@ -127,6 +127,8 @@ Begruendung:
 Konsequenz:
 
 - Routingfehler führen zu einer sichtbaren Fehlermeldung, nie zu einem stillen Luftlinien-Fallback.
-- Lange Routen werden sequenziell an Zwischenpunkten berechnet, um einzelne Provideranfragen begrenzt zu halten.
+- Eine vorhandene Tour wird erst ersetzt, nachdem der neue Provideraufruf erfolgreich abgeschlossen wurde.
+- Lange Routen werden sequenziell an expliziten Zwischenpunkten oder an Punkten einer zuvor von BRouter berechneten Korridorlinie geroutet. Frei interpolierte Luftlinienpunkte sind keine zulässigen internen Zwischenziele.
+- Die fünf sichtbaren Routingprofile müssen unterschiedliche Providerprofile oder dokumentierte `profile:*`-Parameter verwenden.
 - Öffentliche BRouter-Dienste sind nur für MVP/Test vorgesehen; Produktion braucht eine gesonderte Betriebsentscheidung.
 - Die Übertragung von Routenkoordinaten und die OSM-Attribution sind in Datenschutz- und Betriebsprüfung einzubeziehen.

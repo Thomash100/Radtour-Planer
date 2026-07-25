@@ -9,8 +9,10 @@ import {
   type AccommodationStageInput
 } from "../src/lib/accommodations";
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
+import { replaceRouteAfterSuccessfulCalculation } from "../src/lib/direct-route-replacement";
 import {
   createValidatedStageSliceFromBounds,
+  distancePointToLineKm,
   elevationMetricsForRange,
   routeDistanceKm,
   sliceElevationProfile,
@@ -20,12 +22,14 @@ import {
 import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
 import {
   analyzeBRouterCycleCoverage,
+  brouterProfileConfigurationByRoutingProfile,
   brouterProfileByRoutingProfile,
   buildBRouterUrl,
   calculateRoadRoute,
-  createRoutingAnchors
+  createRoutingAnchorsFromRoutedPath
 } from "../src/lib/road-routing";
 import { configuredRoutingProvider } from "../src/lib/routing-provider";
+import { MAX_ROUTE_WAYPOINTS } from "../src/lib/routing-limits";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
@@ -176,6 +180,51 @@ test("reports unknown places instead of routing to fallback coordinates", () => 
   );
 });
 
+test("commits a direct-route replacement only after calculation succeeds", async () => {
+  let currentRoute = "bestehende Tour";
+
+  await assert.rejects(
+    () =>
+      replaceRouteAfterSuccessfulCalculation(
+        async () => {
+          throw new Error("BRouter nicht erreichbar");
+        },
+        (nextRoute) => {
+          currentRoute = nextRoute;
+        }
+      ),
+    /BRouter nicht erreichbar/
+  );
+  assert.equal(currentRoute, "bestehende Tour");
+
+  await replaceRouteAfterSuccessfulCalculation(
+    async () => "neue Route",
+    (nextRoute) => {
+      currentRoute = nextRoute;
+    }
+  );
+  assert.equal(currentRoute, "neue Route");
+});
+
+test("accepts 20 intermediate destinations and rejects the 21st", () => {
+  const accepted = routeCalculateSchema.safeParse({
+    start: "Hamburg",
+    end: "Berlin",
+    waypoints: Array.from({ length: MAX_ROUTE_WAYPOINTS }, (_, index) => `Ort ${index + 1}`)
+  });
+  const rejected = routeCalculateSchema.safeParse({
+    start: "Hamburg",
+    end: "Berlin",
+    waypoints: Array.from({ length: MAX_ROUTE_WAYPOINTS + 1 }, (_, index) => `Ort ${index + 1}`)
+  });
+
+  assert.equal(accepted.success, true);
+  assert.equal(rejected.success, false);
+  if (!rejected.success) {
+    assert.match(rejected.error.issues[0].message, /Maximal 20 Zwischenziele/);
+  }
+});
+
 function brouterFeature(
   coordinates: number[][],
   properties: Record<string, unknown> = {}
@@ -200,14 +249,24 @@ function brouterFeature(
   };
 }
 
-test("builds BRouter requests for real bicycle profiles", () => {
-  const url = buildBRouterUrl("https://routing.example.test/brouter", [13.7373, 51.0504], [13.9407, 50.9625], "sportive");
+test("builds technically distinct BRouter requests for all advertised bicycle profiles", () => {
+  const profiles = ["balanced", "cycleways", "low_elevation", "touristic", "sportive"] as const;
+  const urls = profiles.map((profile) =>
+    buildBRouterUrl("https://routing.example.test/brouter", [13.7373, 51.0504], [13.9407, 50.9625], profile)
+  );
 
-  assert.equal(url.searchParams.get("profile"), "fastbike");
-  assert.equal(url.searchParams.get("format"), "geojson");
-  assert.equal(url.searchParams.get("lonlats"), "13.737300,51.050400|13.940700,50.962500");
+  assert.equal(new Set(urls.map((url) => url.search)).size, profiles.length);
+  assert.equal(urls[0].searchParams.get("profile:ignore_cycleroutes"), "1");
+  assert.equal(urls[1].searchParams.get("profile"), "safety");
+  assert.equal(urls[2].searchParams.get("profile:uphillcost"), "500");
+  assert.equal(urls[2].searchParams.get("profile:downhillcost"), "500");
+  assert.equal(urls[3].searchParams.get("profile:stick_to_cycleroutes"), "1");
+  assert.equal(urls[4].searchParams.get("profile"), "fastbike");
+  assert.equal(urls[4].searchParams.get("format"), "geojson");
+  assert.equal(urls[4].searchParams.get("lonlats"), "13.737300,51.050400|13.940700,50.962500");
   assert.equal(brouterProfileByRoutingProfile.cycleways, "safety");
   assert.equal(brouterProfileByRoutingProfile.touristic, "trekking");
+  assert.match(brouterProfileConfigurationByRoutingProfile.low_elevation.displayName, /wenig Steigung/);
 });
 
 test("reports bicycle infrastructure and signed cycle-route networks from BRouter messages", () => {
@@ -253,12 +312,104 @@ test("keeps cycle-route coverage in the stored browser tour state", () => {
   assert.equal(stored?.route?.cycleRouteCoverage?.bicycleInfrastructurePercent, 60);
 });
 
-test("splits long provider requests into short internal routing sections", () => {
-  const anchors = createRoutingAnchors([9.9937, 53.5511], [13.405, 52.52], 80);
+test("derives long-route anchors from a previously routed corridor", () => {
+  const routedCorridor = [
+    [9.9937, 53.5511],
+    [10.8, 54.15],
+    [12.2, 54.0],
+    [13.405, 52.52]
+  ] satisfies LineStringGeoJson["coordinates"];
+  const anchors = createRoutingAnchorsFromRoutedPath(routedCorridor, 80);
 
   assert.ok(anchors.length > 2);
-  assert.deepEqual(anchors[0], [9.9937, 53.5511]);
-  assert.deepEqual(anchors[anchors.length - 1], [13.405, 52.52]);
+  assert.deepEqual(anchors[0], routedCorridor[0]);
+  assert.deepEqual(anchors[anchors.length - 1], routedCorridor[routedCorridor.length - 1]);
+  assert.ok(anchors.every((anchor) => distancePointToLineKm(anchor, routedCorridor) < 0.5));
+  assert.ok(
+    anchors.slice(1).every((anchor, index) => routeDistanceKm([anchors[index], anchor]) <= 80.1),
+    "routed sections should respect the configured maximum"
+  );
+  assert.notDeepEqual(anchors[Math.floor(anchors.length / 2)], [
+    (routedCorridor[0][0] + routedCorridor[routedCorridor.length - 1][0]) / 2,
+    (routedCorridor[0][1] + routedCorridor[routedCorridor.length - 1][1]) / 2
+  ]);
+});
+
+test("segments a long request only with anchors from the routed BRouter corridor", async () => {
+  const routedCorridor = [
+    [9.9937, 53.5511, 10],
+    [10.8, 54.15, 20],
+    [12.2, 54.0, 35],
+    [13.405, 52.52, 50]
+  ];
+  const requestedUrls: URL[] = [];
+  const fetcher = async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    requestedUrls.push(url);
+    if (requestedUrls.length === 1) {
+      return new Response(
+        JSON.stringify(
+          brouterFeature(routedCorridor, {
+            "track-length": String(routeDistanceKm(routedCorridor.map(([lon, lat]) => [lon, lat])) * 1000),
+            "filtered ascend": "200",
+            "total-time": "48000"
+          })
+        ),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    const [start, end] = (url.searchParams.get("lonlats") ?? "").split("|").map((value) => value.split(",").map(Number));
+    const distanceKm = routeDistanceKm([start as [number, number], end as [number, number]]);
+    return new Response(
+      JSON.stringify(
+        brouterFeature(
+          [
+            [start[0], start[1], 20],
+            [end[0], end[1], 30]
+          ],
+          {
+            "track-length": String(distanceKm * 1000),
+            "filtered ascend": "60",
+            "total-time": String((distanceKm / 15) * 3600)
+          }
+        )
+      ),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+
+  const route = await calculateRoadRoute(
+    { start: "Hamburg", end: "Berlin", profile: "touristic" },
+    { baseUrl: "https://routing.example.test/brouter", maxSegmentKm: 100, fetcher }
+  );
+
+  assert.ok(requestedUrls.length > 2);
+  assert.equal(requestedUrls[0].searchParams.get("profile"), "shortest");
+  assert.equal(requestedUrls[0].searchParams.has("profile:ignore_cycleroutes"), false);
+  assert.ok(
+    requestedUrls.slice(1).every((url) => url.searchParams.get("profile:stick_to_cycleroutes") === "1")
+  );
+  const corridor2d = routedCorridor.map(([lon, lat]) => [lon, lat] as [number, number]);
+  const internalAnchors = requestedUrls.slice(2).map((url) => {
+    const [lon, lat] = (url.searchParams.get("lonlats") ?? "").split("|")[0].split(",").map(Number);
+    return [lon, lat] as [number, number];
+  });
+  assert.ok(internalAnchors.every((anchor) => distancePointToLineKm(anchor, corridor2d) < 0.5));
+  assert.equal(route.routingProfileName, "trekking / Radwanderwege");
+});
+
+test("reports a clear error when a long routable corridor cannot be established", async () => {
+  const fetcher = async () => new Response("routing engine unavailable", { status: 503 });
+
+  await assert.rejects(
+    () =>
+      calculateRoadRoute(
+        { start: "Hamburg", end: "Berlin", profile: "balanced" },
+        { baseUrl: "https://routing.example.test/brouter", maxSegmentKm: 80, fetcher }
+      ),
+    /keine frei erzeugten Luftlinien-Hilfspunkte/
+  );
 });
 
 test("combines routed BRouter segments without replacing them by straight lines", async () => {
@@ -314,7 +465,7 @@ test("combines routed BRouter segments without replacing them by straight lines"
   assert.equal(requestedUrls.length, 2);
   assert.equal(route.routingProvider, "brouter");
   assert.equal(route.elevationSource, "provider");
-  assert.equal(route.routingProfileName, "trekking");
+  assert.equal(route.routingProfileName, "trekking / ausgewogen");
   assert.equal(route.distanceKm, 428.5);
   assert.equal(route.geometryGeoJson.coordinates.length, 5);
   assert.deepEqual(route.geometryGeoJson.coordinates[1], [13.66, 51.14]);

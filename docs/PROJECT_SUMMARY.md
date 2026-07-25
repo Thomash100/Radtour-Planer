@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-20
+Stand: 2026-07-25
 
 ## Produktstand
 
@@ -23,14 +23,14 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunft abseits der GPX-Route als Abstecher kennzeichnen.
 - Gesamte Tour speichern und erneut öffnen.
 
-Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
+Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
 
 ## Bekannte Einschränkungen
 
 - Keine echte Buchung, Reservierung oder Zahlung.
 - Keine Nutzerkonten.
-- Keine produktive externe Unterkunfts-API.
-- Unterkunftskandidaten kommen im MVP aus vorhandenen POI-Daten oder lokalen MVP-Testdaten.
+- Reale Unterkunftskandidaten können im Entwicklungs-/MVP-Betrieb aus OpenStreetMap/Overpass ergänzt werden; eine produktionsfähige Unterkunftsquelle ist noch nicht abgeschlossen.
+- Lokale MVP-Testdaten bleiben als ausdrücklich markierter Entwicklungsfallback vorhanden.
 - Keine produktive POI-Massenabfrage.
 - Die direkte Planung nutzt die öffentliche BRouter-Instanz ohne zugesichertes SLA; ein eigener oder vertraglich geeigneter Provider ist vor produktivem Betrieb zu entscheiden.
 - Freie Ortssuche ist nicht Bestandteil des Routingpakets; die Direktplanung nutzt weiterhin den lokalen MVP-Ortskatalog.
@@ -48,13 +48,15 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 4: MVP-Releasefähigkeit und Veröffentlichungsvorbereitung abgeschlossen.
 - Paket 5-7: Tourverwaltung, Planungsdatenqualität und Produktions-/Releasevorbereitung abgeschlossen.
 - Paket 10: Etappenbewertung nach Schwierigkeit und Belastung abgeschlossen.
-- Paket 11: Reale Fahrradwege in der Direktplanung in Arbeit auf Branch `codex/package-11-real-road-routing`.
-- Paket 12: Schwierigkeitsbasierte Etappenplanung in Arbeit auf Branch `codex/package-12-difficulty-aware-stage-planning`.
+- Paket 11: Reale Fahrradwege in der Direktplanung abgeschlossen und über PR #59 in `private` gemergt.
+- Paket 12: Schwierigkeitsbasierte Etappenplanung abgeschlossen und über PR #60 in `private` gemergt.
+- Konsolidierung Paket 11/12: Nach-Merge-Punkte in Arbeit auf Branch `codex/consolidate-routing-stage-planning`; manueller RPi-Stopppunkt vor Merge.
+- Paket 13 / Reiseauftrag: PR #61 bleibt bis nach Routing-/Etappen- und Unterkunftskonsolidierung Draft.
 
-Letzter nachgezogener Deployment-Stand vor Paket 11:
+Aktueller Integrationsstand nach Paket 12:
 
-- `private`: `f3dad175f995b5b3f55f1887755757e202ce6e1a`
-- RPi-Smoke: erfolgreich
+- `private`: `e23c843ba825cc11204b88412babbde59b1fcd83`
+- gemeinsamer Paket-11-/12-RPi- und Browser-Smoke: erfolgreich dokumentiert
 - Prisma: nicht aktualisiert
 - Plesk: unverändert
 - keine produktive externe Unterkunfts-API
@@ -171,13 +173,14 @@ Nicht enthalten:
 
 ## Paket 11: Reale Fahrradwege
 
-Paket 11 ersetzt die künstliche Direktverbindung zwischen Start, Ziel und Zwischenpunkten durch einen konfigurierbaren BRouter-Provider. Lange Touren werden abschnittsweise an ihren Kontrollpunkten berechnet und ohne stillen Luftlinien-Fallback zusammengefügt.
+Paket 11 ersetzt die künstliche Direktverbindung zwischen Start, Ziel und Zwischenpunkten durch einen konfigurierbaren BRouter-Provider. Lange Touren werden abschnittsweise an expliziten Kontrollpunkten oder an Punkten einer zuvor gerouteten BRouter-Korridorlinie berechnet und ohne stillen Luftlinien-Fallback zusammengefügt.
 
 Enthalten:
 
 - BRouter-GeoJSON als tatsächliche Arbeitsgeometrie
 - OSM-basierte Fahrradwege für direkte Routen
-- getrennte Profile für sichere Fahrradinfrastruktur (`safety`) und ausgeschilderte Radwanderwege (`trekking`)
+- technisch getrennte Requests für `ausgewogen`, `wenig Steigung`, `Fahrradwege bevorzugen`, `Radwanderwege bevorzugen` und `sportlich`
+- sichere Fahrradinfrastruktur über `safety`, Radwanderwege über `trekking` mit `stick_to_cycleroutes=1`, höhenärmere Planung über verstärkte Höhenkosten
 - Kilometer-/Prozentanzeige für erfasste Fahrradinfrastruktur und internationale, nationale, regionale oder lokale OSM-Radroutennetze
 - Distanz, Fahrzeit und Höhenprofil aus dem Provider
 - Profilabbildung auf `safety`, `trekking` und `fastbike`
@@ -201,3 +204,14 @@ Enthalten:
 - keine Änderung der GPX-/BRouter-Geometrie und kein automatisches Neu-Routing
 
 Formel, Zielwerte und Grenzen: [docs/STAGE_DIFFICULTY_MVP.md](STAGE_DIFFICULTY_MVP.md).
+
+## Konsolidierung nach Paket 11 und 12
+
+Der Nach-Merge-Abschnitt führt keine neue Produktfunktion ein. Er schließt vier Reviewpunkte:
+
+- vorhandene Tour bei BRouter-Fehler vollständig erhalten
+- sichtbare Routingprofile technisch und fachlich trennen
+- lange Routen nur mit Segmentpunkten einer gerouteten Korridorlinie teilen
+- maximal 20 Zwischenziele konsistent in UI und API erzwingen
+
+Die bestehenden GPX-, Save/Load-, Höhenprofil-, Belastungs- und Schwierigkeitsflows bleiben unverändert. Der Abschnitt endet am dokumentierten manuellen Raspberry-Pi-/Browser-Stopppunkt.
