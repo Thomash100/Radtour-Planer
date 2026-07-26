@@ -151,6 +151,26 @@ Schwierigkeitsbasierte Etappenplanung gebündelt prüfen:
 - Speichern und erneutes Öffnen erhält Erzeugungsmodus und gewähltes Zielniveau.
 - Mobile Ansicht erzeugt bei 360, 390, 430 und 768 px keinen horizontalen Overflow.
 
+## Paket 13
+
+Unterkunftsplanung gebündelt prüfen:
+
+- Hotel, Pension, Hostel, Campingplatz und Ferienwohnung einzeln filtern.
+- maximale Entfernung zur Route und zum Etappenende verändern und Trefferliste prüfen.
+- `Nur Fahrradmerkmale` zeigt ausschließlich Unterkünfte mit mindestens einem belegten Merkmal.
+- Fahrradabstellplatz, abschließbarer Fahrradraum, E-Bike-Lademöglichkeit und Gepäckaufbewahrung nur gegen tatsächlich vorhandene Quelldaten anzeigen.
+- Kartenmarker unterscheiden Unterkunftstyp sowie `vorgeschlagen`, `vorgemerkt` und `Übernachtung`; Marker-Titel nennt die Entfernung zur Route.
+- Unterkunft vormerken und als Übernachtung wählen.
+- Auswahl in Etappe, lokalem TourState, Tour-JSON und Reiseplan erneut öffnen.
+- Unterkunft abseits der Route wählen: BRouter berechnet Hin- und Rückweg, zeigt beide Distanzen separat und zeichnet eine gestrichelte Abstecherlinie.
+- Hauptroute vor und nach Unterkunftsauswahl vergleichen; sie muss unverändert bleiben.
+- BRouter-Fehler provozieren; die bisherige Unterkunftsauswahl muss unverändert bleiben.
+- ohne `ACCOMMODATION_API_URL` darf Produktion keine öffentliche Overpass-Instanz als stillen Fallback verwenden.
+- `LocalTestProvider` erscheint nur bei ausdrücklicher Konfiguration.
+- OSM-Quelle und ODbL-Attribution sichtbar prüfen.
+- Reiseplan zeigt Tag, Unterkunft, Typ, Status, Entfernung, Quelle, belegte Merkmale und gegebenenfalls BRouter-Abstecher.
+- mobile Ansicht erzeugt keinen horizontalen Overflow; Browserkonsole bleibt fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

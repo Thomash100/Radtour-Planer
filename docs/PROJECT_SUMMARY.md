@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-25
+Stand: 2026-07-26
 
 ## Produktstand
 
@@ -19,8 +19,9 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Farbige Etappen direkt auf der Karte anzeigen und anklicken.
 - Karte und Höhenprofil in einer gemeinsamen Visualisierungsfläche umschalten.
 - Orte/Städte aus lokaler MVP-Liste auf die GPX-Arbeitsroute projizieren und nach Bestätigung als Start, Ziel oder Etappenpunkt übernehmen.
-- Unterkunftskandidaten je Etappe anzeigen, vormerken oder als Übernachtungspunkt auswählen.
-- Unterkunft abseits der GPX-Route als Abstecher kennzeichnen.
+- Unterkunftskandidaten nach Typ, Routen-/Etappenendentfernung und belegten Fahrradmerkmalen filtern.
+- Unterkunft je Etappe vormerken oder als Übernachtung persistent auswählen.
+- Unterkunft abseits der Hauptroute als echten BRouter-Hin- und Rückweg separat routen und darstellen.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
@@ -29,12 +30,12 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 
 - Keine echte Buchung, Reservierung oder Zahlung.
 - Keine Nutzerkonten.
-- Reale Unterkunftskandidaten können im Entwicklungs-/MVP-Betrieb aus OpenStreetMap/Overpass ergänzt werden; eine produktionsfähige Unterkunftsquelle ist noch nicht abgeschlossen.
-- Lokale MVP-Testdaten bleiben als ausdrücklich markierter Entwicklungsfallback vorhanden.
+- Externe Unterkunftskandidaten benötigen einen explizit konfigurierten Entwicklungs- oder Produktionsprovider; ohne Endpunkt werden nur lokale Datenbank-POI geladen.
+- Lokale Unterkunftstestdaten erscheinen nur bei ausdrücklicher Aktivierung des `LocalTestProvider`.
 - Keine produktive POI-Massenabfrage.
 - Die direkte Planung nutzt die öffentliche BRouter-Instanz ohne zugesichertes SLA; ein eigener oder vertraglich geeigneter Provider ist vor produktivem Betrieb zu entscheiden.
 - Freie Ortssuche ist nicht Bestandteil des Routingpakets; die Direktplanung nutzt weiterhin den lokalen MVP-Ortskatalog.
-- Orte und Unterkünfte verlegen die GPX-Route nicht automatisch.
+- Orte verlegen die GPX-Route nicht automatisch; Unterkunftsabstecher werden separat geroutet und verändern die Hauptroute nicht.
 - Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
 - Wetter, Oberfläche, individuelle Leistungsfähigkeit und E-Bike-Akkureichweite werden in der Etappenbewertung noch nicht berücksichtigt.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
@@ -51,15 +52,27 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 11: Reale Fahrradwege in der Direktplanung abgeschlossen und über PR #59 in `private` gemergt.
 - Paket 12: Schwierigkeitsbasierte Etappenplanung abgeschlossen und über PR #60 in `private` gemergt.
 - Konsolidierung Paket 11/12: Nach-Merge-Punkte in Arbeit auf Branch `codex/consolidate-routing-stage-planning`; manueller RPi-Stopppunkt vor Merge.
-- Paket 13 / Reiseauftrag: PR #61 bleibt bis nach Routing-/Etappen- und Unterkunftskonsolidierung Draft.
+- Paket 13: Unterkunftsplanung auf Branch `codex/accommodation-planning-consolidation` implementiert und lokal geprüft; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Reiseauftrag: PR #61 bleibt bis nach Abschluss und ausdrücklicher Merge-Freigabe für Paket 13 zurückgestellt.
 
-Aktueller Integrationsstand nach Paket 12:
+Ausgangsbasis für Paket 13:
 
-- `private`: `e23c843ba825cc11204b88412babbde59b1fcd83`
-- gemeinsamer Paket-11-/12-RPi- und Browser-Smoke: erfolgreich dokumentiert
-- Prisma: nicht aktualisiert
+- `private`: `7239b41b674150a0679b2b1bfffe8d13b3edbadc` (Merge von PR #62)
+- lokale `private`-Basis aktualisiert
+- Raspberry-Pi-Aktualisierung benötigt weiterhin gültige SSH-Anmeldedaten
+- Prisma: `StageAccommodation` ergänzt; Deployment verwendet weiterhin `prisma db push`
 - Plesk: unverändert
-- keine produktive externe Unterkunfts-API
+- keine fest verdrahtete produktive Unterkunfts-API
+
+Lokaler Paket-13-Prüfstand:
+
+- 39 Tests erfolgreich
+- Typecheck und Lint erfolgreich
+- Produktionsbuild erfolgreich; lokale Build-Umgebung hat keine erreichbare PostgreSQL-Instanz, die dynamischen Seiten wurden dennoch korrekt gebaut
+- Browser-Smoke mit importierter Tour erfolgreich: typisierte Marker, Status, Save/Load, belegte Fahrradmerkmale und BRouter-Abstecher sichtbar
+- responsive Prüfung bei mobiler Breite ohne horizontalen Überlauf und ohne Browserfehler
+- Docker lokal nicht verfügbar
+- Raspberry-Pi-Aktualisierung und -Abnahme wegen fehlender SSH-Authentifizierung noch offen
 
 ## Paket 4: Release-Readiness
 

@@ -1,4 +1,9 @@
-import type { StageAccommodation } from "@/lib/accommodations";
+import {
+  accommodationTypeFromTags,
+  type AccommodationDataQuality,
+  type AccommodationStatus,
+  type StageAccommodation
+} from "@/lib/accommodations";
 import type { LineStringGeoJson } from "@/lib/geo";
 import type { CycleRouteCoverage } from "@/lib/mock-routing";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
@@ -94,6 +99,63 @@ export type StoredTourState = {
   updatedAt: string;
 };
 
+function normalizeStageAccommodation(value: unknown): StageAccommodation | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const coordinate = record.coordinate;
+  const type =
+    accommodationTypeFromTags({ accommodationType: record.type }) ??
+    accommodationTypeFromTags({ tourism: record.type });
+  if (
+    !type ||
+    !Array.isArray(coordinate) ||
+    coordinate.length < 2 ||
+    !Number.isFinite(Number(coordinate[0])) ||
+    !Number.isFinite(Number(coordinate[1])) ||
+    typeof record.id !== "string" ||
+    typeof record.stageId !== "string" ||
+    typeof record.name !== "string"
+  ) {
+    return null;
+  }
+
+  const legacyStatus = record.status;
+  const status: AccommodationStatus =
+    legacyStatus === "selected" || legacyStatus === "overnight"
+      ? "overnight"
+      : legacyStatus === "planned" || legacyStatus === "bookmarked"
+        ? "bookmarked"
+        : "suggested";
+  const legacyDataQuality = record.dataQuality;
+  const dataQuality: AccommodationDataQuality =
+    legacyDataQuality === "local-test"
+      ? "development"
+      : ["partner", "osm", "poi", "manual", "development"].includes(String(legacyDataQuality))
+        ? (legacyDataQuality as AccommodationDataQuality)
+        : "poi";
+  const rawFeatures =
+    record.features && typeof record.features === "object" ? (record.features as Record<string, unknown>) : {};
+  const features = {
+    ...(rawFeatures.bikeParking === true ? { bikeParking: true as const } : {}),
+    ...(rawFeatures.lockableBikeRoom === true ? { lockableBikeRoom: true as const } : {}),
+    ...(rawFeatures.ebikeCharging === true ? { ebikeCharging: true as const } : {}),
+    ...(rawFeatures.luggageStorage === true ? { luggageStorage: true as const } : {})
+  };
+
+  return {
+    ...(record as unknown as StageAccommodation),
+    type,
+    coordinate: [Number(coordinate[0]), Number(coordinate[1])],
+    source: typeof record.source === "string" && record.source ? record.source : "POI",
+    dataQuality,
+    status,
+    features,
+    routingStatus: record.routingStatus === "routed" || record.routingStatus === "failed" ? record.routingStatus : "not_required",
+    routingMessage: typeof record.routingMessage === "string" ? record.routingMessage : null,
+    detour: record.detour && typeof record.detour === "object" ? (record.detour as StageAccommodation["detour"]) : null
+  };
+}
+
 export function parseStoredTourState(raw: string | null): StoredTourState | null {
   if (!raw) {
     return null;
@@ -104,7 +166,15 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
     if (!parsed || typeof parsed !== "object" || !parsed.route || parsed.route.geometryGeoJson?.type !== "LineString") {
       return null;
     }
-    return parsed;
+    const stageAccommodations = Object.fromEntries(
+      Object.entries(parsed.stageAccommodations ?? {})
+        .map(([stageId, accommodation]) => [stageId, normalizeStageAccommodation(accommodation)] as const)
+        .filter((entry): entry is readonly [string, StageAccommodation] => entry[1] !== null)
+    );
+    return {
+      ...parsed,
+      stageAccommodations
+    };
   } catch {
     return null;
   }

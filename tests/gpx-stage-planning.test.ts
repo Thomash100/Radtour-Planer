@@ -3,11 +3,20 @@ import test from "node:test";
 
 import {
   accommodationDataQualityLabel,
+  accommodationFeaturesFromTags,
   accommodationTypeFromTags,
+  evidencedAccommodationFeatures,
   rankStageAccommodationCandidates,
   type AccommodationPoiInput,
   type AccommodationStageInput
 } from "../src/lib/accommodations";
+import {
+  DevelopmentProvider,
+  LocalTestProvider,
+  ProductionProvider,
+  createAccommodationProvider
+} from "../src/lib/accommodation-providers";
+import { calculateAccommodationDetour } from "../src/lib/accommodation-routing";
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import { replaceRouteAfterSuccessfulCalculation } from "../src/lib/direct-route-replacement";
 import {
@@ -80,8 +89,9 @@ const stage: AccommodationStageInput & { distanceKm: number } = {
 
 test("labels real OSM accommodation data distinctly", () => {
   assert.equal(accommodationDataQualityLabel("osm"), "OSM-Daten");
-  assert.equal(accommodationTypeFromTags({ tourism: "guest_house" }), "Pension/Gästehaus");
-  assert.equal(accommodationTypeFromTags({ tourism: "camp_site" }), "Camping");
+  assert.equal(accommodationTypeFromTags({ tourism: "guest_house" }), "pension");
+  assert.equal(accommodationTypeFromTags({ tourism: "camp_site" }), "camping");
+  assert.equal(accommodationTypeFromTags({}), null);
 });
 
 test("ranks OSM accommodation candidates without treating them as booking data", () => {
@@ -106,11 +116,104 @@ test("ranks OSM accommodation candidates without treating them as booking data",
   const [candidate] = rankStageAccommodationCandidates(stage, routeGeometry, [poi]);
 
   assert.equal(candidate.name, "Hotel Elberadweg");
-  assert.equal(candidate.type, "Hotel");
+  assert.equal(candidate.type, "hotel");
   assert.equal(candidate.source, "OpenStreetMap");
   assert.equal(candidate.dataQuality, "osm");
-  assert.equal(candidate.status, "candidate");
+  assert.equal(candidate.status, "suggested");
   assert.equal(candidate.link, "https://hotel.example.invalid");
+});
+
+test("stores only explicitly evidenced bicycle accommodation features", () => {
+  const features = accommodationFeaturesFromTags({
+    bicycle_parking: "yes",
+    "bicycle_parking:lockable": "no",
+    "service:bicycle:charging": "customers"
+  });
+
+  assert.deepEqual(evidencedAccommodationFeatures(features), ["bikeParking", "ebikeCharging"]);
+  assert.equal(features.lockableBikeRoom, undefined);
+  assert.equal(features.luggageStorage, undefined);
+});
+
+test("applies accommodation type, route, stage-end and bicycle-feature filters without generated fallback", () => {
+  const pois: AccommodationPoiInput[] = [
+    {
+      id: "hotel",
+      name: "Hotel",
+      category: "ACCOMMODATION",
+      lat: 51.0402,
+      lon: 13.1002,
+      source: "manual",
+      tagsJson: { tourism: "hotel" }
+    },
+    {
+      id: "camp",
+      name: "Camping",
+      category: "ACCOMMODATION",
+      lat: 51.0402,
+      lon: 13.1002,
+      source: "manual",
+      tagsJson: { tourism: "camp_site", bicycle_parking: "yes" }
+    }
+  ];
+
+  const candidates = rankStageAccommodationCandidates(stage, routeGeometry, pois, 12, {
+    types: ["camping"],
+    maxDistanceToRouteKm: 2,
+    maxDistanceToStageEndKm: 2,
+    bicycleFeaturesOnly: true
+  });
+  assert.deepEqual(candidates.map((candidate) => candidate.type), ["camping"]);
+  assert.deepEqual(
+    rankStageAccommodationCandidates(stage, routeGeometry, [], 12, {
+      types: ["hotel"],
+      maxDistanceToRouteKm: 5,
+      maxDistanceToStageEndKm: 5
+    }),
+    []
+  );
+});
+
+test("selects accommodation providers explicitly and keeps production endpoint configuration-only", async () => {
+  assert.ok(createAccommodationProvider({ NODE_ENV: "production" }) instanceof ProductionProvider);
+  assert.ok(createAccommodationProvider({ NODE_ENV: "development" }) instanceof DevelopmentProvider);
+  assert.ok(createAccommodationProvider({ ACCOMMODATION_PROVIDER: "local-test" }) instanceof LocalTestProvider);
+
+  const result = await new ProductionProvider({ endpoint: "" }).search({
+    routeId: "route-1",
+    geometry: routeGeometry,
+    corridorKm: 5
+  });
+  assert.equal(result.pois.length, 0);
+  assert.match(result.warning ?? "", /nicht konfiguriert/i);
+});
+
+test("routes accommodation detours with separate BRouter out-and-back geometry", async () => {
+  const calls: Array<{ start: [number, number]; end: [number, number] }> = [];
+  const detour = await calculateAccommodationDetour(
+    [13.1, 51.04],
+    [13.11, 51.045],
+    "balanced",
+    async (start, end) => {
+      calls.push({ start, end });
+      return {
+        coordinates: [
+          [start[0], start[1]],
+          [end[0], end[1]]
+        ],
+        distanceKm: calls.length === 1 ? 1.2 : 1.3,
+        elevationUp: 0,
+        elevationDown: 0,
+        durationSeconds: 0
+      };
+    }
+  );
+
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], { start: [13.1, 51.04], end: [13.11, 51.045] });
+  assert.deepEqual(calls[1], { start: [13.11, 51.045], end: [13.1, 51.04] });
+  assert.equal(detour.distanceKm, 2.5);
+  assert.equal(detour.geometryGeoJson.coordinates.length, 3);
 });
 
 test("parses direct route expressions with supported separators", () => {

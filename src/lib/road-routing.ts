@@ -126,7 +126,7 @@ export type RoadRoutingOptions = {
   fetcher?: Fetcher;
 };
 
-type RoutedSegment = {
+export type RoutedSegment = {
   coordinates: RoutedCoordinate[];
   distanceKm: number;
   elevationUp: number;
@@ -134,6 +134,11 @@ type RoutedSegment = {
   durationSeconds: number;
   cycleRouteCoverage: CycleRouteCoverage;
 };
+
+export type BRouterCoordinateRoute = Pick<
+  RoutedSegment,
+  "coordinates" | "distanceKm" | "elevationUp" | "elevationDown" | "durationSeconds"
+>;
 
 const cycleRouteNetworks: CycleRouteNetwork[] = ["icn", "ncn", "rcn", "lcn"];
 
@@ -431,6 +436,20 @@ async function fetchBRouterSegment(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export async function calculateBRouterCoordinateRoute(
+  start: Position,
+  end: Position,
+  profile: RoutingProfile,
+  options: RoadRoutingOptions = {}
+): Promise<BRouterCoordinateRoute> {
+  const configuredTimeoutMs = Number(process.env.ROUTING_TIMEOUT_MS ?? 60_000);
+  return fetchBRouterSegment(start, end, profile, {
+    baseUrl: options.baseUrl ?? process.env.BROUTER_BASE_URL ?? "https://brouter.de/brouter",
+    timeoutMs: options.timeoutMs ?? (Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 60_000),
+    fetcher: options.fetcher ?? fetch
+  });
 }
 
 async function fetchRoutedSections(

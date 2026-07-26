@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: Context) {
       where: { id: params.id },
       include: {
         waypoints: { orderBy: { order: "asc" } },
-        stages: { orderBy: { dayNumber: "asc" } },
+        stages: { include: { accommodation: true }, orderBy: { dayNumber: "asc" } },
         bookingLeads: {
           include: { partner: true },
           orderBy: { createdAt: "desc" }

@@ -3,24 +3,20 @@ import { PoiCategory } from "@prisma/client";
 import { distancePointToLineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 import type { RoutePoi } from "@/lib/route-pois";
 
-const defaultOverpassEndpoint = "https://overpass-api.de/api/interpreter";
 const overpassAccommodationTypes = [
   "hotel",
   "guest_house",
   "hostel",
-  "motel",
   "camp_site",
   "caravan_site",
   "apartment",
   "chalet",
-  "bed_and_breakfast",
-  "alpine_hut",
-  "wilderness_hut"
+  "bed_and_breakfast"
 ] as const;
 
 export type OsmAccommodationFetchOptions = {
   corridorKm: number;
-  endpoint?: string;
+  endpoint: string;
   timeoutMs?: number;
   maxSamplePoints?: number;
 };
@@ -104,12 +100,10 @@ function normalizeAddress(tags: Record<string, string> | undefined) {
 
 function accommodationTypeLabel(tourism: string | null) {
   if (tourism === "hotel") return "Hotel";
-  if (tourism === "guest_house" || tourism === "bed_and_breakfast") return "Pension/Gästehaus";
+  if (tourism === "guest_house" || tourism === "bed_and_breakfast") return "Pension";
   if (tourism === "hostel") return "Hostel";
-  if (tourism === "motel") return "Motel";
-  if (tourism === "camp_site" || tourism === "caravan_site") return "Camping";
+  if (tourism === "camp_site" || tourism === "caravan_site") return "Campingplatz";
   if (tourism === "apartment" || tourism === "chalet") return "Ferienwohnung";
-  if (tourism === "alpine_hut" || tourism === "wilderness_hut") return "Hütte";
   return "Unterkunft";
 }
 
@@ -165,7 +159,14 @@ export async function fetchOsmAccommodationPois(
   geometry: LineStringGeoJson,
   options: OsmAccommodationFetchOptions
 ): Promise<OsmAccommodationFetchResult> {
-  const endpoint = options.endpoint ?? process.env.OVERPASS_API_URL ?? defaultOverpassEndpoint;
+  const endpoint = options.endpoint.trim();
+  if (!endpoint) {
+    return {
+      pois: [],
+      source: "openstreetmap",
+      warning: "OSM-Unterkunftsdaten sind deaktiviert, weil kein Datenendpunkt konfiguriert ist."
+    };
+  }
   const timeoutMs = boundedNumber(options.timeoutMs ?? 3500, 3500, 1000, 12000);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
