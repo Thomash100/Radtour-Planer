@@ -193,6 +193,7 @@ Pruefpunkte:
 - 20 Zwischenziele anlegen und pruefen, dass das 21. mit verstaendlichem Hinweis verhindert wird
 - Start-, Ziel- und Zwischenzielmarker sind auf der Karte sichtbar
 - Etappenlinien sind farbig unterscheidbar
+- im Schritt `Etappen erzeugen` auf `Nach Schwierigkeit` wechseln, ein Zielniveau wählen und `Nach Schwierigkeit planen` auslösen; die Bestätigung zum Ersetzen der vorhandenen Etappen muss unmittelbar sichtbar und bedienbar sein
 - Kartenresize funktioniert nach Seitenleisten-/Viewport-Aenderungen
 - Demo-Route laesst sich anzeigen
 - GPX-Import mit `trkpt`, `rtept` oder `wpt` testen
@@ -218,6 +219,7 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis Fehlerfall mit erhaltener bestehender Tour
 - Ergebnis Profilvergleich und Langstreckenrouting
 - Ergebnis Zwischenziellimit 20/21
+- Ergebnis Etappenplanung nach Schwierigkeit einschliesslich sichtbarer Ersetzungsbestaetigung
 - Ergebnis GPX-Import
 - Ergebnis Karte, Marker, POI und Etappenfarben
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich

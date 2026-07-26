@@ -53,7 +53,7 @@ Neben Etappenlänge und Reisetagen stehen vier Zielniveaus zur Verfügung:
 
 Die Planung untersucht fortlaufende Abschnitte der aktuellen Arbeitsroute. Sie sucht Etappengrenzen, deren Belastung möglichst nahe am Zielwert liegt und den Maximalwert nicht überschreitet. Abschnitte mit vielen Höhenmetern werden dadurch in der Regel kürzer als flache Abschnitte. Alle Vorschläge bleiben lückenlose Teile derselben GPX- oder BRouter-Geometrie; es findet kein neues Routing statt.
 
-Die Ergebnisvorschau zeigt je Tag Distanz, Höhenmeter und Belastungspunkte. Sind vorhandene Etappen gespeichert oder manuell bearbeitet, werden sie erst nach einer ausdrücklichen Bestätigung ersetzt. Kann ein sehr belastender Abschnitt selbst bei einer kurzen Etappe das Zielniveau nicht einhalten, bleibt die Route vollständig und die App zeigt eine Warnung.
+Die Ergebnisvorschau zeigt je Tag Distanz, Höhenmeter und Belastungspunkte. Sind vorhandene Etappen gespeichert oder manuell bearbeitet, werden sie erst nach einer ausdrücklichen Bestätigung ersetzt. Diese Bestätigung erscheint direkt im Schritt `Etappen erzeugen` und wird automatisch fokussiert. Kann ein sehr belastender Abschnitt selbst bei einer kurzen Etappe das Zielniveau nicht einhalten, bleibt die Route vollständig und die App zeigt eine Warnung.
 
 Wenn ein echtes Höhenprofil vorhanden ist, werden dessen interpolierte Werte für Route, Kürzung und Etappenschnitt verwendet. Fehlt es, bleibt die Planung funktionsfähig, kennzeichnet die verwendeten Höhendaten aber ausdrücklich als geschätzt.
 

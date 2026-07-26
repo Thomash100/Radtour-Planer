@@ -144,7 +144,7 @@ Schwierigkeitsbasierte Etappenplanung gebündelt prüfen:
 - Für `leicht`, `mittel`, `schwer` und `sehr schwer` eine Ergebnisvorschau mit Distanz, Höhenmetern und Belastungspunkten anzeigen.
 - Bei einer hügeligen Route prüfen, dass das Zielniveau `leicht` steigungslastige Bereiche kürzer aufteilt als eine flache Route vergleichbarer Länge.
 - Prüfen, dass alle Etappengeometrien lückenlos aufeinander folgen und die Arbeitsroute weder verlassen noch verlagert wird.
-- Vorhandene manuelle Etappen dürfen erst nach ausdrücklicher Bestätigung ersetzt werden.
+- Vorhandene Etappen dürfen erst nach ausdrücklicher Bestätigung ersetzt werden. Die Bestätigung muss direkt im Schritt `Etappen erzeugen` sichtbar werden und automatisch in den Fokus rücken.
 - Wenn das Zielniveau in einem sehr belastenden Abschnitt nicht eingehalten werden kann, muss eine Warnung sichtbar bleiben.
 - Fehlende Höhendaten müssen als Schätzung gekennzeichnet sein und dürfen keine kaputte Geometrie erzeugen.
 - Route kürzen, manuelle Etappenänderung sowie Save/Load müssen weiterhin konsistente Höhenmeter und Geometrien erhalten.

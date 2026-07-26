@@ -461,6 +461,7 @@ export function PlannerClient({
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
   const stageCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const stageGenerationConfirmationRef = useRef<HTMLDivElement | null>(null);
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -740,6 +741,19 @@ export function PlannerClient({
 
     return () => window.clearTimeout(scrollTimer);
   }, [plannerStep, selectedStageId]);
+
+  useEffect(() => {
+    if (!pendingStageGeneration || plannerStep !== "stage-create") {
+      return;
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      stageGenerationConfirmationRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      stageGenerationConfirmationRef.current?.focus({ preventScroll: true });
+    }, 80);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, [pendingStageGeneration, plannerStep]);
 
   const selectStageForEditing = useCallback(
     (stageId: string) => {
@@ -1278,7 +1292,9 @@ export function PlannerClient({
     const request: PendingStageGeneration = { mode: "difficulty", targetDifficulty: difficultyTarget, breakpoints: [] };
     if (stages.length > 0) {
       setPendingStageGeneration(request);
-      setStatus("Etappen neu nach Schwierigkeit planen: Bestehende manuelle Etappenänderungen werden erst nach Bestätigung verworfen.");
+      setStatus(
+        "Bitte die sichtbare Bestätigung abschließen. Bestehende Etappenänderungen werden erst danach durch die Planung nach Schwierigkeit ersetzt."
+      );
       return;
     }
 
@@ -2235,9 +2251,15 @@ export function PlannerClient({
   ) : null;
 
   const stageGenerationConfirmationCard = pendingStageGeneration ? (
-    <Card className="border-amber-300 bg-amber-50">
+    <Card
+      ref={stageGenerationConfirmationRef}
+      aria-labelledby="stage-generation-confirmation-title"
+      className="border-amber-300 bg-amber-50"
+      role="alertdialog"
+      tabIndex={-1}
+    >
       <CardHeader>
-        <CardTitle>
+        <CardTitle id="stage-generation-confirmation-title">
           {pendingStageGeneration.mode === "days"
             ? "Etappen neu aus Reisetagen berechnen?"
             : pendingStageGeneration.mode === "difficulty"
@@ -2587,7 +2609,6 @@ export function PlannerClient({
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       {workflowHeader}
       {directRouteReplacementCard}
-      {stageGenerationConfirmationCard}
       <section className={cn("grid gap-4", inputMode === "gpx" ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[360px_minmax(0,1fr)_340px]")}>
         {inputMode !== "gpx" && (
         <aside className="space-y-4">
@@ -2982,6 +3003,7 @@ export function PlannerClient({
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {stageGenerationConfirmationCard}
                   <div className="space-y-4">
                     <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
                       Die GPX-Route bleibt die feste Grundlage. Orte dienen aktuell nur als Etappennamen oder werden auf den nächsten Punkt der bestehenden Route projiziert; sie verlegen die Route nicht automatisch.

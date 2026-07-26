@@ -199,6 +199,7 @@ Enthalten:
 - Vorschau mit Distanz, Höhenmetern, Einstufung und Belastungspunkten je Etappe
 - echte Höhenprofilwerte beim Kürzen, automatischen Erzeugen und manuellen Nachbearbeiten
 - explizite Bestätigung, bevor bestehende oder manuell geänderte Etappen ersetzt werden
+- die Ersetzungsbestätigung erscheint direkt im Arbeitsschritt `Etappen erzeugen` und wird nach Auswahl der Schwierigkeitsplanung automatisch fokussiert
 - persistiertes Zielniveau im lokalen TourState
 - Warnung, wenn Höhendaten geschätzt werden oder ein Abschnitt das Zielniveau nicht einhalten kann
 - keine Änderung der GPX-/BRouter-Geometrie und kein automatisches Neu-Routing
@@ -213,5 +214,7 @@ Der Nach-Merge-Abschnitt führt keine neue Produktfunktion ein. Er schließt vie
 - sichtbare Routingprofile technisch und fachlich trennen
 - lange Routen nur mit Segmentpunkten einer gerouteten Korridorlinie teilen
 - maximal 20 Zwischenziele konsistent in UI und API erzwingen
+
+Ein während der manuellen Prüfung erkannter Integrationsfehler wurde im selben Abschnitt korrigiert: Da neu berechnete Routen bereits Distanz-Etappen enthalten, verlangte die Schwierigkeitsplanung eine Bestätigung, zeigte diese aber außerhalb des sichtbaren Arbeitsschritts. Die Bestätigung befindet sich nun direkt bei der Etappenerzeugung und wird automatisch fokussiert.
 
 Die bestehenden GPX-, Save/Load-, Höhenprofil-, Belastungs- und Schwierigkeitsflows bleiben unverändert. Der Abschnitt endet am dokumentierten manuellen Raspberry-Pi-/Browser-Stopppunkt.
