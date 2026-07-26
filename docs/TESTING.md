@@ -124,13 +124,16 @@ Reale Wege in der Direktplanung gebündelt prüfen:
 - Flensburg nach Swinemünde planen; die Geometrie folgt Straßen und Fahrradwegen und besteht nicht nur aus Kontrollpunkten.
 - Hamburg nach Dresden planen; die vorhandenen Korridorpunkte werden über reale Wege verbunden.
 - Ein eigenes Zwischenziel hinzufügen und prüfen, dass die Route dieses Ziel in der richtigen Reihenfolge anfährt.
-- Profil `Fahrradwege bevorzugen` verwendet BRouter `safety`, `Radwanderwege bevorzugen` verwendet `trekking` und `sportlich` verwendet `fastbike`.
+- Die Profile `ausgewogen`, `wenig Steigung`, `Fahrradwege bevorzugen`, `Radwanderwege bevorzugen` und `sportlich` vergleichen; Providerhinweis, Geometrie oder Kennzahlen müssen die getrennten BRouter-Anfragen nachvollziehbar machen.
+- `Fahrradwege bevorzugen` verwendet `safety`, `Radwanderwege bevorzugen` verwendet `trekking` mit starker Radroutennetzbindung, `wenig Steigung` verstärkte Höhenkosten und `sportlich` `fastbike`.
 - Die Radwege-Auswertung zeigt Kilometer und Anteil für erfasste Fahrradinfrastruktur und ausgeschilderte OSM-Radroutennetze.
 - Vorhandene Netzebenen (`international`, `national`, `regional`, `lokal`) werden angezeigt; mehrfach markierte Abschnitte werden in der Radwanderwege-Gesamtsumme nicht doppelt gezählt.
 - Distanz, Fahrzeit und Höhenprofil werden angezeigt.
 - Etappen lassen sich aus der realen Arbeitsroute erzeugen und farbig darstellen.
 - Speichern und erneutes Öffnen erhält die geroutete Geometrie.
-- Bei nicht erreichbarem Routingdienst erscheint eine Fehlermeldung; es wird keine Luftlinie erzeugt.
+- Bei nicht erreichbarem Routingdienst erscheint eine Fehlermeldung; es wird keine Luftlinie erzeugt und eine vorhandene Tour bleibt einschließlich Etappen, POI und Unterkunftszuordnungen erhalten.
+- Eine lange Route verwendet keine frei interpolierten Luftlinien-Hilfspunkte. Kann kein routbarer BRouter-Korridor ermittelt werden, fordert die App ein nachvollziehbares Zwischenziel an.
+- 20 Zwischenziele können angelegt werden. Danach sind Eingabe und Hinzufügen deaktiviert; eine direkte API-Anfrage mit 21 Zwischenzielen wird ebenfalls abgelehnt.
 - Mobile Ansicht erzeugt keinen horizontalen Overflow.
 
 ## Paket 12
@@ -141,7 +144,7 @@ Schwierigkeitsbasierte Etappenplanung gebündelt prüfen:
 - Für `leicht`, `mittel`, `schwer` und `sehr schwer` eine Ergebnisvorschau mit Distanz, Höhenmetern und Belastungspunkten anzeigen.
 - Bei einer hügeligen Route prüfen, dass das Zielniveau `leicht` steigungslastige Bereiche kürzer aufteilt als eine flache Route vergleichbarer Länge.
 - Prüfen, dass alle Etappengeometrien lückenlos aufeinander folgen und die Arbeitsroute weder verlassen noch verlagert wird.
-- Vorhandene manuelle Etappen dürfen erst nach ausdrücklicher Bestätigung ersetzt werden.
+- Vorhandene Etappen dürfen erst nach ausdrücklicher Bestätigung ersetzt werden. Die Bestätigung muss direkt im Schritt `Etappen erzeugen` sichtbar werden und automatisch in den Fokus rücken.
 - Wenn das Zielniveau in einem sehr belastenden Abschnitt nicht eingehalten werden kann, muss eine Warnung sichtbar bleiben.
 - Fehlende Höhendaten müssen als Schätzung gekennzeichnet sein und dürfen keine kaputte Geometrie erzeugen.
 - Route kürzen, manuelle Etappenänderung sowie Save/Load müssen weiterhin konsistente Höhenmeter und Geometrien erhalten.

@@ -1,6 +1,6 @@
 # Reale Fahrradwege in der Direktplanung
 
-Stand: 2026-07-20
+Stand: 2026-07-25
 
 ## Ziel
 
@@ -19,17 +19,22 @@ ROUTING_TIMEOUT_MS=60000
 ROUTING_MAX_SEGMENT_KM=80
 ```
 
-Die MVP-Profile werden so abgebildet:
+Die MVP-Profile erzeugen technisch getrennte BRouter-Anfragen:
 
-| Planerprofil | BRouter-Profil |
-| --- | --- |
-| ausgewogen | `trekking` |
-| Fahrradwege bevorzugen | `safety` |
-| wenig Steigung | `trekking` |
-| Radwanderwege bevorzugen | `trekking` |
-| sportlich | `fastbike` |
+| Planerprofil | BRouter-Konfiguration | Fachliche Wirkung |
+| --- | --- | --- |
+| ausgewogen | `trekking`, `ignore_cycleroutes=1` | ausgewogene Wege-, Oberflächen- und Höhenbewertung ohne zusätzliche Bindung an ausgeschilderte Radrouten |
+| Fahrradwege bevorzugen | `safety` | sichere Wege und erfasste Fahrradinfrastruktur stärker gewichten |
+| wenig Steigung | `trekking`, `ignore_cycleroutes=1`, `uphillcost=500`, `downhillcost=500` | Anstiege und Abfahrten deutlich stärker gewichten |
+| Radwanderwege bevorzugen | `trekking`, `stick_to_cycleroutes=1` | ausgeschilderte OSM-Radroutennetze besonders stark einbinden |
+| sportlich | `fastbike` | zügige, sportliche Verbindung bevorzugen |
 
-`safety` gewichtet sichere, für Fahrräder geeignete Wege stärker. Das BRouter-Profil `trekking` berücksichtigt das ausgeschilderte OSM-Radroutennetz und macht solche Abschnitte in seiner Kostenfunktion besonders günstig. Dadurch kann die Route bewusst internationalen, nationalen, regionalen oder lokalen Radwanderwegen folgen. Insbesondere `wenig Steigung` bleibt im MVP eine Präferenz, aber keine Garantie für die höhenärmste mögliche Strecke.
+Die Parameter werden über die von BRouter unterstützten `profile:*`-URL-Parameter übergeben. BRouter beschreibt diese Schnittstelle im
+[ServerHandler](https://github.com/abrensch/brouter/blob/master/brouter-server/src/main/java/btools/server/request/ServerHandler.java);
+die verwendeten Optionen stammen aus dem offiziellen
+[`trekking.brf`](https://github.com/abrensch/brouter/blob/master/misc/profiles2/trekking.brf).
+
+Die Profile sind Präferenzen, keine Garantien. Wenn zwischen zwei Orten nur eine sinnvolle Verbindung existiert, können Ergebnisse trotz unterschiedlicher Requests gleich ausfallen. `wenig Steigung` garantiert insbesondere nicht die absolut höhenärmste mögliche Route.
 
 ## Fahrradwege und Radwanderwege
 
@@ -49,7 +54,9 @@ Ein Abschnitt kann zugleich Fahrradinfrastruktur und Teil eines Radwanderwegs se
 
 ## Lange Strecken
 
-Lange Touren werden nacheinander zwischen den bekannten Zwischenpunkten berechnet und anschließend zu einer durchgängigen GeoJSON-Linie verbunden. Abschnitte mit mehr als `ROUTING_MAX_SEGMENT_KM` Luftliniendistanz erhalten zusätzlich interne Hilfspunkte, weil die öffentliche BRouter-Instanz lange Einzelanfragen früh abbrechen kann. Diese Hilfspunkte erscheinen nicht als Nutzer-Zwischenziele. Das reduziert lange Einzelanfragen und bewahrt die vom Nutzer festgelegte Reihenfolge. Zwischen zwei Provider-Abschnitten wird keine größere Lücke durch eine Luftlinie geschlossen.
+Lange Touren werden nacheinander zwischen den bekannten Zwischenpunkten berechnet und anschließend zu einer durchgängigen GeoJSON-Linie verbunden. Für einen Abschnitt oberhalb von `ROUTING_MAX_SEGMENT_KM` wird zuerst über das BRouter-Profil `shortest` ein routbarer Korridor angefordert. Die internen Segmentpunkte werden anschließend entlang genau dieser Providergeometrie abgeleitet. Erst danach werden die kürzeren Teilstücke mit dem vom Nutzer gewählten Fahrradprofil berechnet.
+
+Es werden keine frei interpolierten Punkte auf der Luftlinie zwischen Start und Ziel mehr als verpflichtende Zwischenziele verwendet. Kann BRouter keinen routbaren Korridor liefern oder schlägt ein Teilstück fehl, bricht die Berechnung mit einer verständlichen Meldung ab. Die App ergänzt weder eine Geometrieabkürzung noch eine Luftlinie.
 
 Für ausgewählte lange Demo-Korridore ergänzt die vorhandene lokale Ortsliste sinnvolle Zwischenorte. Vom Nutzer gesetzte Zwischenziele haben Vorrang.
 
@@ -59,6 +66,7 @@ Für ausgewählte lange Demo-Korridore ergänzt die vorhandene lokale Ortsliste 
 - Die Radwege-Anteile hängen von Vollständigkeit und Aktualität der OSM-Weg- und Radroutenmerkmale ab. Sie garantieren weder eine lückenlose Beschilderung noch eine aktuell freie oder für das konkrete Fahrrad geeignete Strecke.
 - Ortsauflösung verwendet weiterhin den lokalen MVP-Ortskatalog; eine freie produktive Ortssuche ist nicht Bestandteil dieses Pakets.
 - Die öffentliche BRouter-Instanz hat kein zugesichertes SLA und priorisiert kurze Anfragen. Für einen produktiven Betrieb ist eine eigene BRouter-Instanz oder ein vertraglich geeigneter Routingprovider zu entscheiden.
+- Scheitert die Korridorberechnung einer langen Verbindung am Providerlimit, fordert die App ein nachvollziehbares Zwischenziel an, statt einen freien Hilfspunkt zu erfinden.
 - Bei einer Routinganfrage werden die Koordinaten der Start-, Ziel- und Zwischenpunkte serverseitig an den konfigurierten BRouter-Dienst übertragen.
 - Die Route bleibt eine Planungshilfe. Befahrbarkeit, Sperrungen, Verkehrsregeln und aktuelle Bedingungen müssen vor und während der Fahrt geprüft werden.
 - `ROUTING_PROVIDER=mock` bleibt nur als ausdrücklich aktivierbarer Offline-/Entwicklungsmodus erhalten. Es gibt keinen stillen Mock-Fallback.
@@ -67,6 +75,10 @@ Für ausgewählte lange Demo-Korridore ergänzt die vorhandene lokale Ortsliste 
 
 - Flensburg nach Swinemünde folgt realen Straßen und Radwegen.
 - Hamburg nach Dresden folgt realen Straßen und Radwegen.
+- Eine vorhandene Tour bleibt bei einem BRouter-Fehler einschließlich Etappen, POI und Unterkunftszuordnungen erhalten.
+- Alle fünf Planerprofile erzeugen fachlich nachvollziehbare, technisch unterschiedliche BRouter-Anfragen.
+- Lange Abschnitte verwenden ausschließlich Punkte einer zuvor gerouteten Korridorlinie; bei fehlender Korridorroute erscheint ein klarer Fehler.
+- 20 Zwischenziele sind zulässig; das 21. wird im UI und im API-Schema abgelehnt.
 - Ein manuelles Zwischenziel bleibt Bestandteil der Route.
 - Die Linie enthält deutlich mehr als nur die eingegebenen Kontrollpunkte.
 - Distanz und Fahrzeit stammen aus dem Routingdienst.

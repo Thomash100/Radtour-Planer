@@ -1,10 +1,16 @@
 import { BookingLeadType, LeadStatus, PartnerCategory, SubscriptionPlan } from "@prisma/client";
 import { z } from "zod";
 
+import { MAX_ROUTE_WAYPOINTS } from "@/lib/routing-limits";
+
 export const routeCalculateSchema = z.object({
   start: z.string().min(2),
   end: z.string().min(2),
-  waypoints: z.array(z.string().min(2)).max(20).optional().default([]),
+  waypoints: z
+    .array(z.string().min(2))
+    .max(MAX_ROUTE_WAYPOINTS, `Maximal ${MAX_ROUTE_WAYPOINTS} Zwischenziele sind möglich.`)
+    .optional()
+    .default([]),
   profile: z
     .enum(["balanced", "cycleways", "low_elevation", "touristic", "sportive"])
     .optional()
