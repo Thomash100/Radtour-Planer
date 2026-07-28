@@ -40,6 +40,8 @@ export type MapPoi = {
   source?: string | null;
   tagsJson: Record<string, unknown>;
   distanceToRouteKm?: number;
+  accommodationType?: "hotel" | "pension" | "hostel" | "camping" | "apartment";
+  accommodationStatus?: "suggested" | "bookmarked" | "overnight";
   partnerId?: string | null;
   partner?: {
     id: string;
@@ -71,6 +73,7 @@ export type MapWaypoint = {
 
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
+  accommodationDetours?: LineStringGeoJson[];
   pois?: MapPoi[];
   stages?: Stage[];
   stageBreakpoints?: Array<{ name: string; distanceKm: number }>;
@@ -103,6 +106,7 @@ const emptyPois: MapPoi[] = [];
 const emptyStages: Stage[] = [];
 const emptyStageBreakpoints: Array<{ name: string; distanceKm: number }> = [];
 const emptyWaypoints: MapWaypoint[] = [];
+const emptyAccommodationDetours: LineStringGeoJson[] = [];
 const maxFitJumpKm = 120;
 const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
@@ -131,6 +135,14 @@ const categoryStyles: Record<string, { color: string; label: string }> = {
   SIGHT: { color: "#7c3aed", label: "!" },
   SWIMMING: { color: "#0ea5e9", label: "~" },
   EBIKE_CHARGING: { color: "#65a30d", label: "E" }
+};
+
+const accommodationMarkerStyles: Record<NonNullable<MapPoi["accommodationType"]>, { color: string; label: string }> = {
+  hotel: { color: "#0f766e", label: "H" },
+  pension: { color: "#0369a1", label: "P" },
+  hostel: { color: "#7c3aed", label: "JH" },
+  camping: { color: "#15803d", label: "C" },
+  apartment: { color: "#b45309", label: "FW" }
 };
 
 export function categoryIcon(category: string) {
@@ -576,6 +588,7 @@ function enforceRouteLayerOrder(map: maplibregl.Map) {
     "route-line",
     "stage-lines-casing",
     "stage-lines",
+    "accommodation-detours",
     "selected-stage-casing",
     "selected-stage-line",
     stageHitLayerId
@@ -599,6 +612,7 @@ function routeLayerDebug(map: maplibregl.Map) {
     "route-line",
     "stage-lines-casing",
     "stage-lines",
+    "accommodation-detours",
     "selected-stage-casing",
     "selected-stage-line",
     stageHitLayerId
@@ -653,6 +667,13 @@ function ensureRouteLayers(map: maplibregl.Map) {
 
   if (!map.getSource("stages")) {
     map.addSource("stages", {
+      type: "geojson",
+      data: emptyFeatureCollection()
+    });
+  }
+
+  if (!map.getSource("accommodation-detours")) {
+    map.addSource("accommodation-detours", {
       type: "geojson",
       data: emptyFeatureCollection()
     });
@@ -754,6 +775,23 @@ function ensureRouteLayers(map: maplibregl.Map) {
         "line-color": ["get", "color"],
         "line-opacity": 1,
         "line-width": selectedStageLineWidth
+      }
+    });
+  }
+
+  if (!map.getLayer("accommodation-detours")) {
+    map.addLayer({
+      id: "accommodation-detours",
+      type: "line",
+      source: "accommodation-detours",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      paint: {
+        "line-color": "#d97706",
+        "line-width": 5,
+        "line-dasharray": [1.5, 1.5]
       }
     });
   }
@@ -896,6 +934,7 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
 
 export function RouteMap({
   route,
+  accommodationDetours = emptyAccommodationDetours,
   pois = emptyPois,
   stages = emptyStages,
   stageBreakpoints = emptyStageBreakpoints,
@@ -1229,6 +1268,29 @@ export function RouteMap({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    const update = () => {
+      const source = map.getSource("accommodation-detours") as GeoJSONSource | undefined;
+      source?.setData({
+        type: "FeatureCollection",
+        features: accommodationDetours
+          .filter((detour) => detour.type === "LineString" && detour.coordinates.length >= 2)
+          .map((detour) => ({
+            type: "Feature" as const,
+            properties: {},
+            geometry: detour
+          }))
+      });
+    };
+
+    return runWhenMapReady(map, update);
+  }, [accommodationDetours]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map || routePointSelectionEnabled || !onSelectStage) {
       return;
     }
@@ -1304,14 +1366,28 @@ export function RouteMap({
         return;
       }
 
-      const style = categoryStyles[poi.category] ?? { color: "#475569", label: "P" };
+      const style =
+        poi.category === "ACCOMMODATION" && poi.accommodationType
+          ? accommodationMarkerStyles[poi.accommodationType]
+          : categoryStyles[poi.category] ?? { color: "#475569", label: "P" };
       const element = document.createElement("button");
       element.type = "button";
       element.className = "map-marker";
       element.style.background = style.color;
       element.style.transform = poi.id === selectedPoiId ? "scale(1.18)" : "scale(1)";
-      element.style.outline = poi.partner?.isFeatured ? "3px solid #f59e0b" : "none";
-      element.title = poi.name;
+      element.style.outline =
+        poi.accommodationStatus === "overnight"
+          ? "4px solid #fbbf24"
+          : poi.accommodationStatus === "bookmarked"
+            ? "3px dashed #f8fafc"
+            : poi.partner?.isFeatured
+              ? "3px solid #f59e0b"
+              : "none";
+      element.style.boxShadow = poi.accommodationStatus === "overnight" ? "0 0 0 6px rgba(15, 118, 110, 0.28)" : "";
+      const distanceLabel =
+        typeof poi.distanceToRouteKm === "number" ? `, ${formatKm(poi.distanceToRouteKm)} zur Route` : "";
+      element.title = `${poi.name}${distanceLabel}`;
+      element.setAttribute("aria-label", `${poi.name}${distanceLabel}`);
       element.textContent = style.label;
       element.addEventListener("click", () => onSelectPoi?.(poi));
 

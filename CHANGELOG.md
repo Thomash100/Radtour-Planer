@@ -1,5 +1,15 @@
 # Changelog
 
+## Paket 13 - 2026-07-26
+
+- Unterkunft als persistente Etappenentität ergänzt
+- Filter für Typ, Routen-/Etappenendentfernung und belegte Fahrradmerkmale ergänzt
+- Provider für lokale Entwicklung, Entwicklung und Produktion abstrahiert
+- fest verdrahteten öffentlichen Overpass- und produktiven Testdatenfallback entfernt
+- Kartenmarker nach Unterkunftstyp und Planungsstatus differenziert
+- BRouter-Abstecher als echten Hin- und Rückweg separat geroutet
+- Unterkunft und Abstecher in Etappe, TourState und Reiseplan integriert
+
 ## v0.3.0 - 2026-06-03
 
 - Redis lazy initialisiert

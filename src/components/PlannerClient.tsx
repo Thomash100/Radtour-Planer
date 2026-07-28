@@ -30,7 +30,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
-import { categoryIcon, RouteMap } from "@/components/RouteMap";
+import { categoryIcon, RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,13 +39,18 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  accommodationDetourThresholdKm,
   accommodationDataQualityLabel,
+  accommodationFeatureLabel,
+  accommodationTypeFromTags,
+  accommodationTypeLabel,
+  accommodationTypes,
+  evidencedAccommodationFeatures,
   isAccommodationDetour,
   rankStageAccommodationCandidates,
   selectStageAccommodation,
   stageAccommodationSearchRadiusKm,
   type AccommodationStatus,
+  type AccommodationType,
   type StageAccommodation
 } from "@/lib/accommodations";
 import { replaceRouteAfterSuccessfulCalculation } from "@/lib/direct-route-replacement";
@@ -233,6 +238,11 @@ const categoryOptions = [
   { value: "SIGHT", label: "Sehenswürdig" }
 ];
 
+const accommodationTypeOptions = accommodationTypes.map((value) => ({
+  value,
+  label: accommodationTypeLabel(value)
+}));
+
 const profileLabels: Record<string, string> = {
   balanced: "ausgewogen",
   cycleways: "Fahrradwege bevorzugen",
@@ -369,9 +379,9 @@ function formatSavedTime(value?: string | null) {
 }
 
 function accommodationStatusLabel(status: AccommodationStatus) {
-  if (status === "selected") return "Übernachtung";
-  if (status === "planned") return "geplant";
-  return "Kandidat";
+  if (status === "overnight") return "Übernachtung";
+  if (status === "bookmarked") return "vorgemerkt";
+  return "vorgeschlagen";
 }
 
 function stageDifficultyBadgeClass(level: StageDifficultyLevel) {
@@ -454,6 +464,10 @@ export function PlannerClient({
   const [pendingRoutePointSelection, setPendingRoutePointSelection] = useState<PendingRoutePointSelection | null>(null);
   const [stageFeedback, setStageFeedback] = useState<Record<string, string>>({});
   const [stageAccommodations, setStageAccommodations] = useState<Record<string, StageAccommodation>>({});
+  const [selectedAccommodationTypes, setSelectedAccommodationTypes] = useState<AccommodationType[]>([...accommodationTypes]);
+  const [maxAccommodationDistanceToRouteKm, setMaxAccommodationDistanceToRouteKm] = useState("5");
+  const [maxAccommodationDistanceToStageEndKm, setMaxAccommodationDistanceToStageEndKm] = useState("8");
+  const [accommodationBicycleFeaturesOnly, setAccommodationBicycleFeaturesOnly] = useState(false);
   const [lastTourSavedAt, setLastTourSavedAt] = useState<string | null>(null);
   const [currentLibraryTourId, setCurrentLibraryTourId] = useState<string | null>(initialTourId ?? null);
   const [tourKind, setTourKind] = useState<"demo" | "user">(normalizedInitialMode === "demo" ? "demo" : "user");
@@ -475,6 +489,9 @@ export function PlannerClient({
   });
   const targetKmValue = plannerForm.watch("targetKm");
   const profileValue = plannerForm.watch("profile");
+  const accommodationMaxRouteKm = Number(maxAccommodationDistanceToRouteKm) > 0 ? Number(maxAccommodationDistanceToRouteKm) : 5;
+  const accommodationMaxStageEndKm =
+    Number(maxAccommodationDistanceToStageEndKm) > 0 ? Number(maxAccommodationDistanceToStageEndKm) : 8;
 
   const leadForm = useForm<LeadForm>({
     resolver: zodResolver(leadSchema),
@@ -625,12 +642,75 @@ export function PlannerClient({
             source: poi.source,
             tagsJson: poi.tagsJson,
             distanceToRouteKm: poi.distanceToRouteKm,
-            partnerId: poi.partnerId
-          }))
+            partnerId: poi.partnerId,
+            partnerCategory: poi.partner?.category
+          })),
+          12,
+          {
+            types: selectedAccommodationTypes,
+            maxDistanceToRouteKm: accommodationMaxRouteKm,
+            maxDistanceToStageEndKm: accommodationMaxStageEndKm,
+            bicycleFeaturesOnly: accommodationBicycleFeaturesOnly
+          }
         )
       ])
     );
-  }, [pois, route, stages]);
+  }, [
+    accommodationBicycleFeaturesOnly,
+    accommodationMaxRouteKm,
+    accommodationMaxStageEndKm,
+    pois,
+    route,
+    selectedAccommodationTypes,
+    stages
+  ]);
+  const mapPois = useMemo<MapPoi[]>(() => {
+    const selectedByPoiId = new globalThis.Map(
+      Object.values(stageAccommodations)
+        .filter((accommodation) => accommodation.poiId)
+        .map((accommodation) => [accommodation.poiId as string, accommodation])
+    );
+    const mapped: MapPoi[] = pois.map((poi) => {
+      const selected = selectedByPoiId.get(poi.id);
+      return {
+        ...poi,
+        accommodationType:
+          selected?.type ??
+          (poi.category === "ACCOMMODATION"
+            ? accommodationTypeFromTags(poi.tagsJson) ??
+              accommodationTypeFromTags({ accommodationType: poi.partner?.category }) ??
+              undefined
+            : undefined),
+        accommodationStatus: selected?.status ?? (poi.category === "ACCOMMODATION" ? "suggested" : undefined)
+      };
+    });
+    const existingIds = new Set(mapped.map((poi) => poi.id));
+    Object.values(stageAccommodations).forEach((accommodation) => {
+      if (accommodation.poiId && existingIds.has(accommodation.poiId)) return;
+      mapped.push({
+        id: accommodation.poiId ?? accommodation.id,
+        name: accommodation.name,
+        category: "ACCOMMODATION",
+        lat: accommodation.coordinate[1],
+        lon: accommodation.coordinate[0],
+        phone: accommodation.phone,
+        website: accommodation.link,
+        source: accommodation.source,
+        tagsJson: accommodation.features,
+        distanceToRouteKm: accommodation.distanceToRouteKm,
+        accommodationType: accommodation.type,
+        accommodationStatus: accommodation.status
+      });
+    });
+    return mapped;
+  }, [pois, stageAccommodations]);
+  const accommodationDetours = useMemo(
+    () =>
+      Object.values(stageAccommodations)
+        .map((accommodation) => accommodation.detour?.geometryGeoJson)
+        .filter((geometry): geometry is LineStringGeoJson => Boolean(geometry)),
+    [stageAccommodations]
+  );
 
   const buildStoredTourState = useCallback(
     ({
@@ -881,6 +961,9 @@ export function PlannerClient({
   }, [buildStoredTourState, persistStoredTourState]);
 
   useEffect(() => {
+    if (stages.length === 0) {
+      return;
+    }
     const stageIds = new Set(stages.map((stage) => stage.id));
     setStageAccommodations((current) => {
       const next = Object.fromEntries(Object.entries(current).filter(([stageId]) => stageIds.has(stageId)));
@@ -1098,6 +1181,9 @@ export function PlannerClient({
       const params = new URLSearchParams({
         routeId,
         corridorKm: String(corridorKm),
+        accommodationTypes: selectedAccommodationTypes.join(","),
+        maxAccommodationDistanceToRouteKm: String(accommodationMaxRouteKm),
+        accommodationBicycleFeaturesOnly: String(accommodationBicycleFeaturesOnly),
         partnerOnly: String(partnerOnly),
         ebikeFriendly: String(ebikeFriendly),
         bikeGarage: String(bikeGarage),
@@ -1122,16 +1208,19 @@ export function PlannerClient({
       return payload as { pois: Poi[]; sourceNotice?: string };
     },
     [
+      accommodationBicycleFeaturesOnly,
       bikeGarage,
       bikeParking,
       dogsAllowed,
       ebikeFriendly,
       luggageAccepted,
+      accommodationMaxRouteKm,
       minRating,
       partnerOnly,
       plannerForm,
       restaurantInHouse,
       savedRoute?.id,
+      selectedAccommodationTypes,
       selectedCategoryQuery
     ]
   );
@@ -1582,7 +1671,6 @@ export function PlannerClient({
       stageRequest?: PendingStageGeneration;
       finalStep?: PlannerStep;
       statusPrefix?: string;
-      seedFirstAccommodation?: boolean;
       tourKind?: "demo" | "user";
     } = {}
   ) {
@@ -1638,14 +1726,6 @@ export function PlannerClient({
       const stageRequest = options.stageRequest ?? { mode: "distance", targetKm: values.targetKm, breakpoints: [] };
       const generatedStages = await generateStages(saved.route.id, stageRequest, savedData);
       const poiPayload = await loadPois(saved.route.id, values.corridorKm);
-      if (options.seedFirstAccommodation && generatedStages[0]) {
-        const candidate = rankStageAccommodationCandidates(generatedStages[0], savedData.geometryGeoJson, poiPayload?.pois ?? [])[0];
-        if (candidate) {
-          setStageAccommodations({
-            [generatedStages[0].id]: selectStageAccommodation(candidate, "planned")
-          });
-        }
-      }
       const poiNotice = poiPayload?.sourceNotice ? ` ${poiPayload.sourceNotice}` : "";
       const routingNotice = calculatedRoute.routingDataNotice ? ` ${calculatedRoute.routingDataNotice}` : "";
       setStatus(
@@ -1748,7 +1828,6 @@ export function PlannerClient({
       stageRequest: { mode: "days", travelDays: demoTravelDays, targetKm: demoValues.targetKm, breakpoints: [] },
       finalStep: "stage-edit",
       statusPrefix: "MVP-Demo bereit",
-      seedFirstAccommodation: true,
       tourKind: "demo"
     });
   }
@@ -1900,27 +1979,114 @@ export function PlannerClient({
     );
   }
 
-  function updateStageAccommodation(stage: Stage, candidate: StageAccommodation, status: Exclude<AccommodationStatus, "candidate">) {
-    const nextAccommodation = selectStageAccommodation(candidate, status);
-    setSelectedStageId(stage.id);
-    setStageAccommodations((current) => ({
-      ...current,
-      [stage.id]: nextAccommodation
-    }));
-    setStatus(
-      status === "selected"
-        ? `${candidate.name} wurde als Übernachtung für Tag ${stage.dayNumber} ausgewählt. Die GPX-Route bleibt unverändert.`
-        : `${candidate.name} wurde als geplante Unterkunft für Tag ${stage.dayNumber} vorgemerkt.`
+  async function updateStageAccommodation(
+    stage: Stage,
+    candidate: StageAccommodation,
+    status: Exclude<AccommodationStatus, "suggested">
+  ) {
+    if (!stage.id || stage.id.startsWith("local-")) {
+      setStatus("Bitte die Etappen zuerst speichern, bevor eine Unterkunft zugeordnet wird.");
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      let nextAccommodation = selectStageAccommodation(candidate, status);
+      if (isAccommodationDetour(candidate)) {
+        setStatus(`BRouter berechnet den Hin- und Rückweg zu ${candidate.name}. Die Hauptroute bleibt unverändert.`);
+        const stageEnd = stage.geometryGeoJson.coordinates.at(-1);
+        if (!stageEnd) {
+          throw new Error("Das Etappenende ist nicht verfügbar.");
+        }
+        const routingResponse = await fetch("/api/accommodations/detour", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            stageEnd,
+            accommodation: candidate.coordinate,
+            profile: profileValue
+          })
+        });
+        const routingPayload = await routingResponse.json();
+        if (!routingResponse.ok) {
+          throw new Error(routingPayload.error ?? "Der BRouter-Abstecher konnte nicht berechnet werden.");
+        }
+        nextAccommodation = {
+          ...nextAccommodation,
+          routingStatus: "routed",
+          routingMessage: "Hin- und Rückweg mit BRouter berechnet.",
+          detour: routingPayload.detour
+        };
+      } else {
+        nextAccommodation = {
+          ...nextAccommodation,
+          routingStatus: "not_required",
+          routingMessage: "Unterkunft liegt direkt im Routenkorridor.",
+          detour: null
+        };
+      }
+
+      const saveResponse = await fetch(`/api/stages/${stage.id}/accommodation`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextAccommodation)
+      });
+      const savePayload = await saveResponse.json();
+      if (!saveResponse.ok) {
+        throw new Error(savePayload.error ?? "Die Unterkunft konnte nicht in der Etappe gespeichert werden.");
+      }
+
+      setSelectedStageId(stage.id);
+      setStageAccommodations((current) => ({
+        ...current,
+        [stage.id]: nextAccommodation
+      }));
+      const detourNotice = nextAccommodation.detour
+        ? ` BRouter-Abstecher hin und zurück: ${formatKm(nextAccommodation.detour.distanceKm)}.`
+        : "";
+      setStatus(
+        status === "overnight"
+          ? `${candidate.name} wurde als Übernachtung für Tag ${stage.dayNumber} gespeichert.${detourNotice} Die Hauptroute bleibt unverändert.`
+          : `${candidate.name} wurde für Tag ${stage.dayNumber} vorgemerkt.${detourNotice}`
+      );
+    } catch (error) {
+      setStatus(
+        `${error instanceof Error ? error.message : "Die Unterkunft konnte nicht gespeichert werden."} Die bisherige Unterkunftsauswahl bleibt unverändert.`
+      );
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  function toggleAccommodationType(type: AccommodationType) {
+    setSelectedAccommodationTypes((current) =>
+      current.includes(type) ? current.filter((item) => item !== type) : [...current, type]
     );
   }
 
-  function removeStageAccommodation(stage: Stage) {
-    setStageAccommodations((current) => {
-      const next = { ...current };
-      delete next[stage.id];
-      return next;
-    });
-    setStatus(`Unterkunft für Tag ${stage.dayNumber} entfernt.`);
+  async function removeStageAccommodation(stage: Stage) {
+    if (!stage.id || stage.id.startsWith("local-")) {
+      setStatus("Diese lokale Etappe hat noch keine gespeicherte Unterkunft.");
+      return;
+    }
+    setIsBusy(true);
+    try {
+      const response = await fetch(`/api/stages/${stage.id}/accommodation`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Die Unterkunft konnte nicht entfernt werden.");
+      }
+      setStageAccommodations((current) => {
+        const next = { ...current };
+        delete next[stage.id];
+        return next;
+      });
+      setStatus(`Unterkunft für Tag ${stage.dayNumber} entfernt.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Die Unterkunft konnte nicht entfernt werden.");
+    } finally {
+      setIsBusy(false);
+    }
   }
 
   async function saveStage(stage: Stage) {
@@ -2536,7 +2702,8 @@ export function PlannerClient({
               </div>
             ) : null}
             <RouteMap
-              pois={pois}
+              accommodationDetours={accommodationDetours}
+              pois={mapPois}
               route={route.geometryGeoJson}
               selectedPoiId={selectedPoi?.id}
               selectedStageId={selectedStageId}
@@ -2834,7 +3001,8 @@ export function PlannerClient({
             </div>
             {visualizationMode === "map" ? (
               <RouteMap
-                pois={pois}
+                accommodationDetours={accommodationDetours}
+                pois={mapPois}
                 route={route?.geometryGeoJson}
                 routePointSelection={{
                   enabled: isPickingStagePoint,
@@ -3247,6 +3415,67 @@ export function PlannerClient({
                 <CardDescription className="leading-relaxed">{status}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
+                <div className="grid gap-3 rounded-lg border bg-slate-50 p-3">
+                  <div>
+                    <h3 className="text-sm font-semibold">Unterkunftsfilter</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Nur belegte Unterkunftstypen und Fahrradmerkmale werden angezeigt.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {accommodationTypeOptions.map((type) => (
+                      <Button
+                        key={type.value}
+                        size="sm"
+                        type="button"
+                        variant={selectedAccommodationTypes.includes(type.value) ? "secondary" : "outline"}
+                        onClick={() => toggleAccommodationType(type.value)}
+                      >
+                        <Bed className="h-4 w-4" />
+                        {type.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-1">
+                      <Label htmlFor="accommodation-max-route">Max. Entfernung zur Route (km)</Label>
+                      <Input
+                        id="accommodation-max-route"
+                        min="0.1"
+                        max="50"
+                        step="0.1"
+                        type="number"
+                        value={maxAccommodationDistanceToRouteKm}
+                        onChange={(event) => setMaxAccommodationDistanceToRouteKm(event.target.value)}
+                      />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor="accommodation-max-stage-end">Max. Entfernung zum Etappenende (km)</Label>
+                      <Input
+                        id="accommodation-max-stage-end"
+                        min="0.1"
+                        max="50"
+                        step="0.1"
+                        type="number"
+                        value={maxAccommodationDistanceToStageEndKm}
+                        onChange={(event) => setMaxAccommodationDistanceToStageEndKm(event.target.value)}
+                      />
+                    </div>
+                    <Button
+                      className="self-end"
+                      type="button"
+                      variant={accommodationBicycleFeaturesOnly ? "secondary" : "outline"}
+                      onClick={() => setAccommodationBicycleFeaturesOnly((current) => !current)}
+                    >
+                      <Bike className="h-4 w-4" />
+                      Nur Fahrradmerkmale
+                    </Button>
+                  </div>
+                  <Button disabled={isBusy || selectedAccommodationTypes.length === 0} type="button" variant="outline" onClick={() => loadPois()}>
+                    <Search className="h-4 w-4" />
+                    Unterkünfte mit Filtern laden
+                  </Button>
+                </div>
                 {stages.map((stage) => {
                   const stageKmBounds = stageKilometers(stage);
                   const isSelectedStage = selectedStageId === stage.id;
@@ -3415,7 +3644,8 @@ export function PlannerClient({
                                 Kandidaten liegen am Etappenende oder entlang der Etappe. Die GPX-Route wird dadurch nicht verändert.
                               </p>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                MVP-Suchradius: {formatKm(accommodationSearchRadiusKm)} um das Etappenende. Datenqualität wird je Kandidat ausgewiesen.
+                                Filter bis {formatKm(accommodationMaxStageEndKm || accommodationSearchRadiusKm)} zum Etappenende.
+                                Datenqualität und Quelle werden je Kandidat ausgewiesen.
                               </p>
                             </div>
                             <Button className="w-full sm:w-auto" size="sm" type="button" variant="outline" onClick={() => loadPois()}>
@@ -3428,11 +3658,11 @@ export function PlannerClient({
                                 <div className="min-w-0">
                                   <div className="flex flex-wrap items-center gap-2">
                                     <strong className="min-w-0 break-words">{selectedAccommodation.name}</strong>
-                                    <Badge className="shrink-0" variant={selectedAccommodation.status === "selected" ? "secondary" : "outline"}>
+                                    <Badge className="shrink-0" variant={selectedAccommodation.status === "overnight" ? "secondary" : "outline"}>
                                       {accommodationStatusLabel(selectedAccommodation.status)}
                                     </Badge>
                                     <Badge className="shrink-0" variant="outline">
-                                      {accommodationDataQualityLabel(selectedAccommodation.dataQuality ?? "local-test")}
+                                      {accommodationDataQualityLabel(selectedAccommodation.dataQuality)}
                                     </Badge>
                                     {isAccommodationDetour(selectedAccommodation) && (
                                       <Badge className="shrink-0" variant="outline">
@@ -3441,16 +3671,40 @@ export function PlannerClient({
                                     )}
                                   </div>
                                   <div className="mt-1 text-muted-foreground">
-                                    {formatKm(selectedAccommodation.distanceToStageEndKm)} zum Etappenende · {formatKm(selectedAccommodation.distanceToRouteKm)} zur Route
+                                    {accommodationTypeLabel(selectedAccommodation.type)} · {formatKm(selectedAccommodation.distanceToStageEndKm)} zum
+                                    Etappenende · {formatKm(selectedAccommodation.distanceToRouteKm)} zur Route
                                   </div>
+                                  {selectedAccommodation.detour && (
+                                    <div className="mt-1 text-muted-foreground">
+                                      BRouter-Abstecher: {formatKm(selectedAccommodation.detour.outboundDistanceKm)} hin +{" "}
+                                      {formatKm(selectedAccommodation.detour.returnDistanceKm)} zurück ={" "}
+                                      {formatKm(selectedAccommodation.detour.distanceKm)}
+                                    </div>
+                                  )}
+                                  {evidencedAccommodationFeatures(selectedAccommodation.features).length > 0 && (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {evidencedAccommodationFeatures(selectedAccommodation.features).map((feature) => (
+                                        <Badge key={feature} variant="outline">
+                                          {accommodationFeatureLabel(feature)}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                                <Button className="w-full shrink-0 lg:w-auto" size="sm" type="button" variant="outline" onClick={() => removeStageAccommodation(stage)}>
+                                <Button
+                                  className="w-full shrink-0 lg:w-auto"
+                                  disabled={isBusy}
+                                  size="sm"
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => removeStageAccommodation(stage)}
+                                >
                                   Entfernen
                                 </Button>
                               </div>
                               {isAccommodationDetour(selectedAccommodation) && (
                                 <p className="mt-2 text-xs text-amber-800">
-                                  Diese Unterkunft liegt mehr als {formatKm(accommodationDetourThresholdKm)} von der GPX-Route entfernt und ist als Abstecher geplant.
+                                  Der Abstecher ist separat geroutet. Die GPX-Hauptroute wurde nicht verändert.
                                 </p>
                               )}
                               {selectedAccommodation.link && (
@@ -3478,7 +3732,7 @@ export function PlannerClient({
                                     {accommodationStatusLabel(candidate.status)}
                                   </Badge>
                                   <Badge className="shrink-0" variant="outline">
-                                    {accommodationDataQualityLabel(candidate.dataQuality ?? "local-test")}
+                                    {accommodationDataQualityLabel(candidate.dataQuality)}
                                   </Badge>
                                   {isAccommodationDetour(candidate) && (
                                     <Badge className="shrink-0" variant="outline">
@@ -3487,24 +3741,46 @@ export function PlannerClient({
                                   )}
                                 </div>
                                 <div className="break-words text-muted-foreground">
-                                  {candidate.type} · {candidate.place}
+                                  {accommodationTypeLabel(candidate.type)} · {candidate.place}
                                 </div>
                                 <div className="grid gap-1 text-xs text-muted-foreground">
                                   <span>{formatKm(candidate.distanceToStageEndKm)} zum Etappenende</span>
                                   <span>{formatKm(candidate.distanceToRouteKm)} zur Route</span>
                                   <span>Suchradius: {formatKm(candidate.searchRadiusKm ?? accommodationSearchRadiusKm)}</span>
-                                  <span className="break-words">Quelle: {candidate.source ?? "MVP-Daten"}</span>
+                                  <span className="break-words">Quelle: {candidate.source}</span>
                                 </div>
+                                {evidencedAccommodationFeatures(candidate.features).length > 0 && (
+                                  <div className="flex flex-wrap gap-1">
+                                    {evidencedAccommodationFeatures(candidate.features).map((feature) => (
+                                      <Badge key={feature} variant="outline">
+                                        {accommodationFeatureLabel(feature)}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                )}
                                 {isAccommodationDetour(candidate) && (
                                   <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-                                    Abseits der GPX-Route. Nur als Abstecher übernehmen; keine automatische Routenänderung.
+                                    Bei Auswahl wird ein echter BRouter-Hin- und Rückweg berechnet. Bei Fehler bleibt die bisherige Auswahl erhalten.
                                   </p>
                                 )}
                                 <div className="grid gap-2 sm:grid-cols-2">
-                                  <Button className="w-full whitespace-normal text-center" size="sm" type="button" onClick={() => updateStageAccommodation(stage, candidate, "selected")}>
+                                  <Button
+                                    className="w-full whitespace-normal text-center"
+                                    disabled={isBusy}
+                                    size="sm"
+                                    type="button"
+                                    onClick={() => updateStageAccommodation(stage, candidate, "overnight")}
+                                  >
                                     Als Übernachtung wählen
                                   </Button>
-                                  <Button className="w-full whitespace-normal text-center" size="sm" type="button" variant="outline" onClick={() => updateStageAccommodation(stage, candidate, "planned")}>
+                                  <Button
+                                    className="w-full whitespace-normal text-center"
+                                    disabled={isBusy}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => updateStageAccommodation(stage, candidate, "bookmarked")}
+                                  >
                                     Vormerken
                                   </Button>
                                 </div>

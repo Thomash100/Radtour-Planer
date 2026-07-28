@@ -1,11 +1,18 @@
 import { PoiCategory } from "@prisma/client";
 import { NextResponse } from "next/server";
 
+import { createAccommodationProvider } from "@/lib/accommodation-providers";
+import {
+  accommodationFeaturesFromTags,
+  accommodationTypeFromTags,
+  accommodationTypes,
+  evidencedAccommodationFeatures,
+  type AccommodationType
+} from "@/lib/accommodations";
 import { apiError } from "@/lib/api";
 import type { LineStringGeoJson } from "@/lib/geo";
-import { fetchOsmAccommodationPois } from "@/lib/osm-accommodation-pois";
 import { prisma } from "@/lib/prisma";
-import { applyPoiFilters, createRouteTestPois, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
+import { applyPoiFilters, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
 
 function parseCategories(value: string | null) {
   if (!value) {
@@ -28,6 +35,15 @@ function wantsCategory(categories: PoiCategory[] | undefined, category: PoiCateg
   return !categories || categories.includes(category);
 }
 
+function parseAccommodationTypes(value: string | null) {
+  if (!value) return [...accommodationTypes];
+  const valid = new Set<string>(accommodationTypes);
+  return value
+    .split(",")
+    .map((type) => type.trim().toLowerCase())
+    .filter((type): type is AccommodationType => valid.has(type));
+}
+
 function dedupePois(pois: RoutePoi[]) {
   const seen = new Set<string>();
   return pois.filter((poi) => {
@@ -42,6 +58,27 @@ function dedupePois(pois: RoutePoi[]) {
   });
 }
 
+function applyAccommodationFilters(
+  pois: RoutePoi[],
+  options: { types: AccommodationType[]; corridorKm: number; maxDistanceToRouteKm: number; bicycleFeaturesOnly: boolean }
+) {
+  const types = new Set(options.types);
+  return pois.filter((poi) => {
+    if (poi.category !== PoiCategory.ACCOMMODATION) {
+      return poi.distanceToRouteKm <= options.corridorKm;
+    }
+    const type =
+      accommodationTypeFromTags(poi.tagsJson) ??
+      accommodationTypeFromTags({ accommodationType: poi.partner?.category });
+    if (!type || !types.has(type) || poi.distanceToRouteKm > options.maxDistanceToRouteKm) {
+      return false;
+    }
+    return options.bicycleFeaturesOnly
+      ? evidencedAccommodationFeatures(accommodationFeaturesFromTags(poi.tagsJson)).length > 0
+      : true;
+  });
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -50,8 +87,15 @@ export async function GET(request: Request) {
     const minRating = boundedNumber(url.searchParams.get("minRating"), 0, 0, 5);
     const categories = parseCategories(url.searchParams.get("categories"));
     const partnerOnly = url.searchParams.get("partnerOnly") === "true";
-    const includeTestPois = url.searchParams.get("includeTestPois") !== "false";
-    const includeOsmAccommodations = url.searchParams.get("includeOsmAccommodations") !== "false";
+    const includeAccommodationProvider = url.searchParams.get("includeAccommodationProvider") !== "false";
+    const selectedAccommodationTypes = parseAccommodationTypes(url.searchParams.get("accommodationTypes"));
+    const maxAccommodationDistanceToRouteKm = boundedNumber(
+      url.searchParams.get("maxAccommodationDistanceToRouteKm"),
+      corridorKm,
+      0.1,
+      50
+    );
+    const accommodationBicycleFeaturesOnly = url.searchParams.get("accommodationBicycleFeaturesOnly") === "true";
     const ebikeFriendly = url.searchParams.get("ebikeFriendly") === "true";
     const bikeGarage = url.searchParams.get("bikeGarage") === "true";
     const luggageAccepted = url.searchParams.get("luggageAccepted") === "true";
@@ -74,7 +118,7 @@ export async function GET(request: Request) {
     });
 
     const filters: PoiFilterOptions = {
-      corridorKm,
+      corridorKm: Math.max(corridorKm, maxAccommodationDistanceToRouteKm),
       minRating,
       categories,
       partnerOnly,
@@ -89,25 +133,37 @@ export async function GET(request: Request) {
     const sourceNotices: string[] = [];
     let routePois = withDistanceToRoute(pois, geometry) as RoutePoi[];
 
-    if (includeOsmAccommodations && !partnerOnly && wantsCategory(categories, PoiCategory.ACCOMMODATION)) {
-      const osmResult = await fetchOsmAccommodationPois(geometry, { corridorKm, timeoutMs: 3500, maxSamplePoints: 14 });
-      if (osmResult.pois.length > 0) {
-        routePois = dedupePois([...routePois, ...osmResult.pois]);
-        sourceNotices.push(`${osmResult.pois.length} echte Unterkunftsdaten aus OpenStreetMap ergänzt.`);
+    if (includeAccommodationProvider && !partnerOnly && wantsCategory(categories, PoiCategory.ACCOMMODATION)) {
+      const provider = createAccommodationProvider();
+      const providerResult = await provider.search({
+        routeId,
+        geometry,
+        corridorKm: maxAccommodationDistanceToRouteKm
+      });
+      if (providerResult.pois.length > 0) {
+        routePois = dedupePois([...routePois, ...providerResult.pois]);
+        sourceNotices.push(`${providerResult.pois.length} Unterkunftsdaten über ${providerResult.provider} ergänzt.`);
       }
-      if (osmResult.warning) {
-        sourceNotices.push(osmResult.warning);
+      if (providerResult.attribution) {
+        sourceNotices.push(providerResult.attribution);
+      }
+      if (providerResult.warning) {
+        console.warn(`[accommodation-provider:${providerResult.provider}] ${providerResult.warning}`);
+        sourceNotices.push(providerResult.warning);
       }
     }
 
-    let filtered = sortRoutePois(applyPoiFilters(routePois, filters));
-
-    if (filtered.length === 0 && includeTestPois && !partnerOnly) {
-      filtered = sortRoutePois(applyPoiFilters(createRouteTestPois(routeId, geometry, categories), filters));
-      if (filtered.length > 0) {
-        sourceNotices.push("Keine lokalen/OSM-POI im Korridor gefunden. Es werden markierte Test-POI entlang der Route angezeigt.");
-      }
-    }
+    const filtered = sortRoutePois(
+      applyPoiFilters(
+        applyAccommodationFilters(routePois, {
+          types: selectedAccommodationTypes,
+          corridorKm,
+          maxDistanceToRouteKm: maxAccommodationDistanceToRouteKm,
+          bicycleFeaturesOnly: accommodationBicycleFeaturesOnly
+        }),
+        filters
+      )
+    );
 
     return NextResponse.json({ routeId, corridorKm, minRating, pois: filtered, sourceNotice: sourceNotices.join(" ") });
   } catch (error) {

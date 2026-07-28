@@ -82,6 +82,50 @@ export const stageUpdateSchema = z.object({
     .optional()
 });
 
+export const stageAccommodationSchema = z.object({
+  poiId: z.string().min(1).optional().nullable(),
+  name: z.string().min(1).max(240),
+  type: z.enum(["hotel", "pension", "hostel", "camping", "apartment"]),
+  place: z.string().min(1).max(240),
+  coordinate: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+  distanceToRouteKm: z.coerce.number().nonnegative().max(100),
+  distanceToStageEndKm: z.coerce.number().nonnegative().max(100),
+  source: z.string().min(1).max(160),
+  link: z.string().url().optional().nullable(),
+  phone: z.string().max(120).optional().nullable(),
+  email: z.string().max(200).optional().nullable(),
+  dataQuality: z.enum(["partner", "osm", "poi", "manual", "development"]),
+  status: z.enum(["bookmarked", "overnight"]),
+  features: z
+    .object({
+      bikeParking: z.literal(true).optional(),
+      lockableBikeRoom: z.literal(true).optional(),
+      ebikeCharging: z.literal(true).optional(),
+      luggageStorage: z.literal(true).optional()
+    })
+    .strict(),
+  routingStatus: z.enum(["not_required", "routed"]),
+  routingMessage: z.string().max(500).optional().nullable(),
+  detour: z
+    .object({
+      distanceKm: z.coerce.number().nonnegative().max(200),
+      outboundDistanceKm: z.coerce.number().nonnegative().max(100),
+      returnDistanceKm: z.coerce.number().nonnegative().max(100),
+      geometryGeoJson: z.object({
+        type: z.literal("LineString"),
+        coordinates: z.array(z.tuple([z.number(), z.number()])).min(2)
+      })
+    })
+    .optional()
+    .nullable()
+});
+
+export const accommodationDetourSchema = z.object({
+  stageEnd: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+  accommodation: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+  profile: z.enum(["balanced", "cycleways", "low_elevation", "touristic", "sportive"]).default("balanced")
+});
+
 export const partnerRegisterSchema = z.object({
   companyName: z.string().min(2),
   category: z.nativeEnum(PartnerCategory),

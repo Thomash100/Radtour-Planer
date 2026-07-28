@@ -59,6 +59,34 @@ enum PoiCategory {
   LUGGAGE_TRANSFER
 }
 
+enum AccommodationType {
+  HOTEL
+  PENSION
+  HOSTEL
+  CAMPING
+  APARTMENT
+}
+
+enum AccommodationStatus {
+  SUGGESTED
+  BOOKMARKED
+  OVERNIGHT
+}
+
+enum AccommodationDataQuality {
+  PARTNER
+  OSM
+  POI
+  MANUAL
+  DEVELOPMENT
+}
+
+enum AccommodationRoutingStatus {
+  NOT_REQUIRED
+  ROUTED
+  FAILED
+}
+
 enum BookingLeadType {
   ACCOMMODATION
   LUGGAGE_TRANSFER
@@ -131,39 +159,74 @@ model RouteWaypoint {
 }
 
 model RouteStage {
-  id              String        @id @default(cuid())
-  routeId          String
-  dayNumber        Int
-  startName        String
-  endName          String
-  distanceKm       Float
-  elevationUp      Int
-  elevationDown    Int
-  geometryGeoJson  Json
-  route            Route         @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  bookingLeads     BookingLead[]
+  id              String              @id @default(cuid())
+  routeId         String
+  dayNumber       Int
+  startName       String
+  endName         String
+  distanceKm      Float
+  elevationUp     Int
+  elevationDown   Int
+  geometryGeoJson Json
+  route           Route               @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  bookingLeads    BookingLead[]
+  accommodation   StageAccommodation?
 
   @@index([routeId, dayNumber])
 }
 
 model Poi {
-  id              String           @id @default(cuid())
-  name            String
-  category        PoiCategory
-  lat             Float
-  lon             Float
-  address         String?
-  phone           String?
-  website         String?
-  source          String
-  osmId           String?          @unique
-  partnerId       String?
-  tagsJson        Json
-  partner         Partner?         @relation(fields: [partnerId], references: [id], onDelete: SetNull)
-  affiliateClicks AffiliateClick[]
+  id                  String               @id @default(cuid())
+  name                String
+  category            PoiCategory
+  lat                 Float
+  lon                 Float
+  address             String?
+  phone               String?
+  website             String?
+  source              String
+  osmId               String?              @unique
+  partnerId           String?
+  tagsJson            Json
+  partner             Partner?             @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  affiliateClicks     AffiliateClick[]
+  stageAccommodations StageAccommodation[]
 
   @@index([category])
   @@index([partnerId])
+}
+
+model StageAccommodation {
+  id                    String                     @id @default(cuid())
+  stageId               String                     @unique
+  poiId                 String?
+  name                  String
+  type                  AccommodationType
+  place                 String
+  lat                   Float
+  lon                   Float
+  distanceToRouteKm     Float
+  distanceToStageEndKm  Float
+  source                String
+  sourceLink            String?
+  phone                 String?
+  email                 String?
+  dataQuality           AccommodationDataQuality
+  status                AccommodationStatus
+  featuresJson          Json
+  routingStatus         AccommodationRoutingStatus @default(NOT_REQUIRED)
+  routingMessage        String?
+  detourDistanceKm      Float?
+  detourOutboundKm      Float?
+  detourReturnKm        Float?
+  detourGeometryGeoJson Json?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  stage                 RouteStage                 @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  poi                   Poi?                       @relation(fields: [poiId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([type])
 }
 
 model Partner {
@@ -179,7 +242,7 @@ model Partner {
   email            String
   website          String?
   status           PartnerStatus    @default(DRAFT)
-  subscriptionPlan SubscriptionPlan  @default(FREE)
+  subscriptionPlan SubscriptionPlan @default(FREE)
   isFeatured       Boolean          @default(false)
   user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   pois             Poi[]
@@ -189,24 +252,24 @@ model Partner {
 }
 
 model BookingLead {
-  id            String          @id @default(cuid())
-  userId        String
-  partnerId     String
-  routeId       String?
-  stageId       String?
-  type          BookingLeadType
-  startDate     DateTime
-  endDate       DateTime?
-  persons       Int
-  bikes         Int
-  luggageItems  Int
-  message       String?
-  status        LeadStatus      @default(NEW)
-  createdAt     DateTime        @default(now())
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partner       Partner         @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-  route         Route?          @relation(fields: [routeId], references: [id], onDelete: SetNull)
-  stage         RouteStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  id           String          @id @default(cuid())
+  userId       String
+  partnerId    String
+  routeId      String?
+  stageId      String?
+  type         BookingLeadType
+  startDate    DateTime
+  endDate      DateTime?
+  persons      Int
+  bikes        Int
+  luggageItems Int
+  message      String?
+  status       LeadStatus      @default(NEW)
+  createdAt    DateTime        @default(now())
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partner      Partner         @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  route        Route?          @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  stage        RouteStage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([partnerId])
@@ -231,7 +294,7 @@ model AffiliateClick {
 }
 
 model AdPlacement {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   partnerId   String
   title       String
   description String
@@ -240,8 +303,8 @@ model AdPlacement {
   startDate   DateTime
   endDate     DateTime
   budget      Float
-  status      AdStatus  @default(DRAFT)
-  partner     Partner   @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  status      AdStatus @default(DRAFT)
+  partner     Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
   @@index([partnerId])
   @@index([status])

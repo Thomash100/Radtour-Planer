@@ -1,7 +1,12 @@
 import { distancePointToLineKm, haversineKm, type LineStringGeoJson, type Position } from "@/lib/geo";
 
-export type AccommodationStatus = "planned" | "selected" | "candidate";
-export type AccommodationDataQuality = "partner" | "osm" | "poi" | "manual" | "local-test";
+export const accommodationTypes = ["hotel", "pension", "hostel", "camping", "apartment"] as const;
+export type AccommodationType = (typeof accommodationTypes)[number];
+export type AccommodationStatus = "suggested" | "bookmarked" | "overnight";
+export type AccommodationDataQuality = "partner" | "osm" | "poi" | "manual" | "development";
+export type AccommodationRoutingStatus = "not_required" | "routed" | "failed";
+export type AccommodationFeatureKey = "bikeParking" | "lockableBikeRoom" | "ebikeCharging" | "luggageStorage";
+export type AccommodationFeatures = Partial<Record<AccommodationFeatureKey, true>>;
 
 export type AccommodationPoiInput = {
   id: string;
@@ -17,6 +22,7 @@ export type AccommodationPoiInput = {
   tagsJson?: Record<string, unknown>;
   distanceToRouteKm?: number;
   partnerId?: string | null;
+  partnerCategory?: string | null;
 };
 
 export type AccommodationStageInput = {
@@ -26,26 +32,71 @@ export type AccommodationStageInput = {
   geometryGeoJson: LineStringGeoJson;
 };
 
+export type AccommodationDetour = {
+  distanceKm: number;
+  outboundDistanceKm: number;
+  returnDistanceKm: number;
+  geometryGeoJson: LineStringGeoJson;
+};
+
 export type StageAccommodation = {
   id: string;
   stageId: string;
   poiId?: string;
   name: string;
-  type: string;
+  type: AccommodationType;
   place: string;
   coordinate: Position;
   distanceToStageEndKm: number;
   distanceToRouteKm: number;
-  source?: string | null;
+  source: string;
   link?: string | null;
   phone?: string | null;
   email?: string | null;
   status: AccommodationStatus;
-  dataQuality?: AccommodationDataQuality;
+  dataQuality: AccommodationDataQuality;
+  features: AccommodationFeatures;
   searchRadiusKm?: number;
+  routingStatus: AccommodationRoutingStatus;
+  routingMessage?: string | null;
+  detour?: AccommodationDetour | null;
 };
 
-export const accommodationDetourThresholdKm = 1.5;
+export type AccommodationCandidateFilters = {
+  types?: AccommodationType[];
+  maxDistanceToRouteKm?: number;
+  maxDistanceToStageEndKm?: number;
+  bicycleFeaturesOnly?: boolean;
+};
+
+export const accommodationDetourThresholdKm = 0.15;
+
+const typeLabels: Record<AccommodationType, string> = {
+  hotel: "Hotel",
+  pension: "Pension",
+  hostel: "Hostel",
+  camping: "Campingplatz",
+  apartment: "Ferienwohnung"
+};
+
+const featureLabels: Record<AccommodationFeatureKey, string> = {
+  bikeParking: "Fahrradabstellplatz",
+  lockableBikeRoom: "Abschließbarer Fahrradraum",
+  ebikeCharging: "E-Bike-Lademöglichkeit",
+  luggageStorage: "Gepäckaufbewahrung"
+};
+
+export function accommodationTypeLabel(value: AccommodationType) {
+  return typeLabels[value];
+}
+
+export function accommodationFeatureLabel(value: AccommodationFeatureKey) {
+  return featureLabels[value];
+}
+
+export function evidencedAccommodationFeatures(features: AccommodationFeatures) {
+  return (Object.keys(featureLabels) as AccommodationFeatureKey[]).filter((feature) => features[feature] === true);
+}
 
 export function stageAccommodationSearchRadiusKm(stage: AccommodationStageInput & { distanceKm?: number }) {
   const distanceKm = Number(stage.distanceKm ?? 0);
@@ -58,14 +109,14 @@ export function accommodationDataQualityLabel(value: AccommodationDataQuality) {
   if (value === "partner") return "Partnerdaten";
   if (value === "osm") return "OSM-Daten";
   if (value === "manual") return "manuell geprüft";
-  if (value === "poi") return "POI-Daten";
-  return "Lokale MVP-Testdaten";
+  if (value === "development") return "Entwicklungsdaten";
+  return "POI-Daten";
 }
 
 function dataQualityForPoi(poi: AccommodationPoiInput): AccommodationDataQuality {
   if (poi.partnerId) return "partner";
-  if (poi.source === "generated-test" || Boolean(poi.tagsJson?.testData)) return "local-test";
   if (poi.source === "manual" || poi.source === "manual-verified") return "manual";
+  if (poi.source === "local-test" || Boolean(poi.tagsJson?.testData)) return "development";
   if (poi.source === "osm-overpass" || typeof poi.osmId === "string" || poi.tagsJson?.dataSource === "openstreetmap") return "osm";
   return "poi";
 }
@@ -91,29 +142,75 @@ function stringTag(tags: unknown, key: string) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-export function accommodationTypeFromTags(tags: unknown, name = "") {
+function normalizedTagValue(tags: unknown, key: string) {
+  if (typeof tags !== "object" || tags === null) {
+    return null;
+  }
+  const value = (tags as Record<string, unknown>)[key];
+  if (value === true) return "yes";
+  return typeof value === "string" ? value.trim().toLowerCase() : null;
+}
+
+function affirmativeTag(tags: unknown, keys: string[]) {
+  return keys.some((key) => {
+    const value = normalizedTagValue(tags, key);
+    return value !== null && ["yes", "true", "1", "designated", "customers", "private", "covered", "indoor"].includes(value);
+  });
+}
+
+function evidencedTag(tags: unknown, keys: string[]) {
+  return keys.some((key) => {
+    const value = normalizedTagValue(tags, key);
+    return value !== null && !["", "no", "false", "0", "none", "unknown"].includes(value);
+  });
+}
+
+export function accommodationFeaturesFromTags(tags: unknown): AccommodationFeatures {
+  const features: AccommodationFeatures = {};
+  if (evidencedTag(tags, ["bikeParking", "bicycle_parking", "bicycle:parking", "service:bicycle:parking"])) {
+    features.bikeParking = true;
+  }
+  if (
+    affirmativeTag(tags, [
+      "bikeGarage",
+      "lockableBikeRoom",
+      "bicycle_parking:lockable",
+      "bicycle_parking:secure",
+      "service:bicycle:storage"
+    ])
+  ) {
+    features.lockableBikeRoom = true;
+  }
+  if (affirmativeTag(tags, ["ebikeCharging", "ebikeFriendly", "charging_station", "service:bicycle:charging"])) {
+    features.ebikeCharging = true;
+  }
+  if (affirmativeTag(tags, ["luggageStorage", "luggageAccepted", "luggage_storage", "service:luggage:storage"])) {
+    features.luggageStorage = true;
+  }
+  return features;
+}
+
+export function accommodationTypeFromTags(tags: unknown): AccommodationType | null {
   const record = typeof tags === "object" && tags !== null ? (tags as Record<string, unknown>) : {};
   const explicitType = record.accommodationType ?? record.type;
-  if (typeof explicitType === "string" && explicitType.trim()) {
-    return explicitType.trim();
+  if (typeof explicitType === "string") {
+    const normalized = explicitType.trim().toLowerCase();
+    if (normalized === "hotel") return "hotel";
+    if (["pension", "guest_house", "guest house", "bed_and_breakfast", "bed & breakfast", "pension/gästehaus"].includes(normalized)) {
+      return "pension";
+    }
+    if (normalized === "hostel" || normalized === "jugendherberge") return "hostel";
+    if (["camping", "camp_site", "campingplatz", "caravan_site"].includes(normalized)) return "camping";
+    if (["apartment", "ferienwohnung", "chalet"].includes(normalized)) return "apartment";
   }
 
-  const tourism = typeof record.tourism === "string" ? record.tourism : undefined;
-  if (tourism === "hotel") return "Hotel";
-  if (tourism === "guest_house" || tourism === "bed_and_breakfast") return "Pension/Gästehaus";
-  if (tourism === "hostel") return "Hostel";
-  if (tourism === "motel") return "Motel";
-  if (tourism === "camp_site" || tourism === "caravan_site") return "Camping";
-  if (tourism === "apartment" || tourism === "chalet") return "Ferienwohnung";
-  if (tourism === "alpine_hut" || tourism === "wilderness_hut") return "Hütte";
-
-  const normalizedName = name.toLowerCase();
-  if (normalizedName.includes("camping")) return "Camping";
-  if (normalizedName.includes("ferien")) return "Ferienwohnung";
-  if (normalizedName.includes("hostel")) return "Hostel";
-  if (normalizedName.includes("pension")) return "Pension";
-  if (normalizedName.includes("gästehaus") || normalizedName.includes("gaestehaus")) return "Gästehaus";
-  return "Hotel";
+  const tourism = typeof record.tourism === "string" ? record.tourism.toLowerCase() : undefined;
+  if (tourism === "hotel") return "hotel";
+  if (tourism === "guest_house" || tourism === "bed_and_breakfast") return "pension";
+  if (tourism === "hostel") return "hostel";
+  if (tourism === "camp_site" || tourism === "caravan_site") return "camping";
+  if (tourism === "apartment" || tourism === "chalet") return "apartment";
+  return null;
 }
 
 export function accommodationPlaceFromAddress(address: string | null | undefined, fallback: string) {
@@ -128,7 +225,10 @@ export function accommodationPlaceFromAddress(address: string | null | undefined
   return parts.at(-1) ?? fallback;
 }
 
-export function isAccommodationDetour(accommodation: Pick<StageAccommodation, "distanceToRouteKm">, thresholdKm = accommodationDetourThresholdKm) {
+export function isAccommodationDetour(
+  accommodation: Pick<StageAccommodation, "distanceToRouteKm">,
+  thresholdKm = accommodationDetourThresholdKm
+) {
   return accommodation.distanceToRouteKm > thresholdKm;
 }
 
@@ -137,10 +237,17 @@ export function toStageAccommodationCandidate(
   routeGeometry: LineStringGeoJson,
   poi: AccommodationPoiInput,
   searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
-): StageAccommodation {
+): StageAccommodation | null {
+  const type =
+    accommodationTypeFromTags(poi.tagsJson) ??
+    accommodationTypeFromTags({ accommodationType: poi.partnerCategory });
+  if (!type) {
+    return null;
+  }
+
   const coordinate: Position = [poi.lon, poi.lat];
   const stageEnd = stageEndCoordinate(stage);
-  const sourceLabel = poi.source === "osm-overpass" ? "OpenStreetMap" : poi.source ?? "POI";
+  const sourceLabel = poi.partnerId ? "Partnerdaten" : poi.source === "osm-overpass" ? "OpenStreetMap" : poi.source ?? "POI";
   const osmLink = poi.osmId ? `https://www.openstreetmap.org/${poi.osmId}` : null;
 
   return {
@@ -148,49 +255,22 @@ export function toStageAccommodationCandidate(
     stageId: stageKey(stage),
     poiId: poi.id,
     name: poi.name,
-    type: accommodationTypeFromTags(poi.tagsJson, poi.name),
+    type,
     place: accommodationPlaceFromAddress(poi.address, stage.endName ?? `Etappe ${stage.dayNumber}`),
     coordinate,
     distanceToStageEndKm: roundedKm(haversineKm(coordinate, stageEnd)),
-    distanceToRouteKm: roundedKm(distancePointToLineKm(coordinate, routeGeometry.coordinates)),
+    distanceToRouteKm: roundedKm(poi.distanceToRouteKm ?? distancePointToLineKm(coordinate, routeGeometry.coordinates)),
     source: sourceLabel,
     link: poi.website ?? osmLink,
     phone: poi.phone ?? stringTag(poi.tagsJson, "phone") ?? stringTag(poi.tagsJson, "contact:phone"),
     email: stringTag(poi.tagsJson, "email") ?? stringTag(poi.tagsJson, "contact:email"),
-    status: "candidate",
+    status: "suggested",
     dataQuality: dataQualityForPoi(poi),
-    searchRadiusKm
-  };
-}
-
-export function createMockStageAccommodation(
-  stage: AccommodationStageInput,
-  routeGeometry: LineStringGeoJson,
-  index = 0,
-  searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
-): StageAccommodation {
-  const stageEnd = stageEndCoordinate(stage);
-  const direction = index % 2 === 0 ? 1 : -1;
-  const offset = 0.0045 + (stage.dayNumber % 3) * 0.0014;
-  const coordinate: Position = [stageEnd[0] + direction * offset, stageEnd[1] - direction * offset * 0.65];
-  const types = ["Pension", "Hotel", "Camping", "Ferienwohnung"];
-  const type = types[(stage.dayNumber + index) % types.length];
-  const place = stage.endName?.trim() || `Etappe ${stage.dayNumber}`;
-
-  return {
-    id: `mock-accommodation-${stageKey(stage)}-${index + 1}`,
-    stageId: stageKey(stage),
-    name: `${type} ${place}`,
-    type,
-    place,
-    coordinate,
-    distanceToStageEndKm: roundedKm(haversineKm(coordinate, stageEnd)),
-    distanceToRouteKm: roundedKm(distancePointToLineKm(coordinate, routeGeometry.coordinates)),
-    source: "Lokale MVP-Testdaten",
-    link: null,
-    status: "candidate",
-    dataQuality: "local-test",
-    searchRadiusKm
+    features: accommodationFeaturesFromTags(poi.tagsJson),
+    searchRadiusKm,
+    routingStatus: "not_required",
+    routingMessage: null,
+    detour: null
   };
 }
 
@@ -198,22 +278,30 @@ export function rankStageAccommodationCandidates(
   stage: AccommodationStageInput,
   routeGeometry: LineStringGeoJson,
   pois: AccommodationPoiInput[],
-  limit = 3,
-  searchRadiusKm = stageAccommodationSearchRadiusKm(stage)
+  limit = 12,
+  filters: AccommodationCandidateFilters = {}
 ) {
-  const candidates = pois
+  const searchRadiusKm = stageAccommodationSearchRadiusKm(stage);
+  const maxDistanceToStageEndKm = filters.maxDistanceToStageEndKm ?? searchRadiusKm;
+  const maxDistanceToRouteKm = filters.maxDistanceToRouteKm ?? accommodationDetourThresholdKm;
+  const selectedTypes = new Set(filters.types ?? accommodationTypes);
+
+  return pois
     .filter((poi) => poi.category === "ACCOMMODATION")
     .map((poi) => toStageAccommodationCandidate(stage, routeGeometry, poi, searchRadiusKm))
-    .filter((candidate) => candidate.distanceToStageEndKm <= searchRadiusKm || candidate.distanceToRouteKm <= accommodationDetourThresholdKm)
-    .sort((a, b) => a.distanceToStageEndKm + a.distanceToRouteKm * 0.5 - (b.distanceToStageEndKm + b.distanceToRouteKm * 0.5));
-
-  const needsLocalFallback = candidates.length === 0 || candidates[0].distanceToStageEndKm > 20;
-  const withFallback = needsLocalFallback ? [createMockStageAccommodation(stage, routeGeometry, 0, searchRadiusKm), ...candidates] : candidates;
-
-  return withFallback.slice(0, limit);
+    .filter((candidate): candidate is StageAccommodation => candidate !== null)
+    .filter((candidate) => selectedTypes.has(candidate.type))
+    .filter((candidate) => candidate.distanceToStageEndKm <= maxDistanceToStageEndKm)
+    .filter((candidate) => candidate.distanceToRouteKm <= maxDistanceToRouteKm)
+    .filter((candidate) => (filters.bicycleFeaturesOnly ? evidencedAccommodationFeatures(candidate.features).length > 0 : true))
+    .sort((a, b) => a.distanceToStageEndKm + a.distanceToRouteKm * 0.5 - (b.distanceToStageEndKm + b.distanceToRouteKm * 0.5))
+    .slice(0, limit);
 }
 
-export function selectStageAccommodation(candidate: StageAccommodation, status: Exclude<AccommodationStatus, "candidate"> = "selected") {
+export function selectStageAccommodation(
+  candidate: StageAccommodation,
+  status: Exclude<AccommodationStatus, "suggested"> = "overnight"
+) {
   return {
     ...candidate,
     status

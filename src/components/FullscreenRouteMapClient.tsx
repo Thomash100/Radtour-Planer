@@ -2,11 +2,13 @@
 
 import { ArrowLeft, MapPinned, Route } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { RouteMap } from "@/components/RouteMap";
+import { RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { accommodationTypeFromTags } from "@/lib/accommodations";
+import type { LineStringGeoJson } from "@/lib/geo";
 import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type StoredTourState } from "@/lib/tour-state";
 import { formatKm } from "@/lib/utils";
 
@@ -16,6 +18,49 @@ export function FullscreenRouteMapClient() {
   useEffect(() => {
     setTourState(parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY)));
   }, []);
+
+  const mapPois = useMemo<MapPoi[]>(() => {
+    if (!tourState) return [];
+    const accommodations = Object.values(tourState.stageAccommodations ?? {});
+    const selectedByPoiId = new globalThis.Map(
+      accommodations.filter((accommodation) => accommodation.poiId).map((accommodation) => [accommodation.poiId as string, accommodation])
+    );
+    const pois: MapPoi[] = tourState.pois.map((poi) => {
+      const accommodation = selectedByPoiId.get(poi.id);
+      return {
+        ...poi,
+        accommodationType:
+          accommodation?.type ?? (poi.category === "ACCOMMODATION" ? accommodationTypeFromTags(poi.tagsJson) ?? undefined : undefined),
+        accommodationStatus: accommodation?.status ?? (poi.category === "ACCOMMODATION" ? "suggested" : undefined)
+      };
+    });
+    const existingIds = new Set(pois.map((poi) => poi.id));
+    accommodations.forEach((accommodation) => {
+      if (accommodation.poiId && existingIds.has(accommodation.poiId)) return;
+      pois.push({
+        id: accommodation.poiId ?? accommodation.id,
+        name: accommodation.name,
+        category: "ACCOMMODATION",
+        lat: accommodation.coordinate[1],
+        lon: accommodation.coordinate[0],
+        phone: accommodation.phone,
+        website: accommodation.link,
+        source: accommodation.source,
+        tagsJson: accommodation.features,
+        distanceToRouteKm: accommodation.distanceToRouteKm,
+        accommodationType: accommodation.type,
+        accommodationStatus: accommodation.status
+      });
+    });
+    return pois;
+  }, [tourState]);
+  const accommodationDetours = useMemo(
+    () =>
+      Object.values(tourState?.stageAccommodations ?? {})
+        .map((accommodation) => accommodation.detour?.geometryGeoJson)
+        .filter((geometry): geometry is LineStringGeoJson => Boolean(geometry)),
+    [tourState]
+  );
 
   if (!tourState?.route) {
     return (
@@ -64,7 +109,8 @@ export function FullscreenRouteMapClient() {
         </div>
       </div>
       <RouteMap
-        pois={tourState.pois}
+        accommodationDetours={accommodationDetours}
+        pois={mapPois}
         route={tourState.route.geometryGeoJson}
         selectedPoiId={tourState.selectedPoiId}
         stages={tourState.stages.map((stage) => ({

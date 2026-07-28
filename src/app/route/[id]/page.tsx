@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { RouteMap } from "@/components/RouteMap";
+import { RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { LineStringGeoJson } from "@/lib/geo";
@@ -13,7 +13,7 @@ export default async function RouteDetailPage({ params }: { params: { id: string
   const route = await prisma.route.findUnique({
     where: { id: params.id },
     include: {
-      stages: { orderBy: { dayNumber: "asc" } },
+      stages: { include: { accommodation: true }, orderBy: { dayNumber: "asc" } },
       waypoints: { orderBy: { order: "asc" } }
     }
   });
@@ -21,6 +21,27 @@ export default async function RouteDetailPage({ params }: { params: { id: string
   if (!route) {
     notFound();
   }
+  const accommodationPois: MapPoi[] = route.stages.flatMap((stage) => {
+    const accommodation = stage.accommodation;
+    if (!accommodation) return [];
+    return [
+      {
+        id: accommodation.poiId ?? accommodation.id,
+        name: accommodation.name,
+        category: "ACCOMMODATION",
+        lat: accommodation.lat,
+        lon: accommodation.lon,
+        phone: accommodation.phone,
+        website: accommodation.sourceLink,
+        source: accommodation.source,
+        tagsJson: accommodation.featuresJson as Record<string, unknown>,
+        distanceToRouteKm: accommodation.distanceToRouteKm,
+        accommodationType: accommodation.type.toLowerCase() as MapPoi["accommodationType"],
+        accommodationStatus:
+          accommodation.status === "OVERNIGHT" ? "overnight" : accommodation.status === "BOOKMARKED" ? "bookmarked" : "suggested"
+      }
+    ];
+  });
 
   return (
     <main className="mx-auto grid max-w-7xl gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_360px]">
@@ -31,6 +52,13 @@ export default async function RouteDetailPage({ params }: { params: { id: string
           <p className="mt-2 text-muted-foreground">{route.description ?? "Arbeitsroute aus dem Planer."}</p>
         </div>
         <RouteMap
+          accommodationDetours={route.stages.flatMap((stage) => {
+            const geometry = stage.accommodation?.detourGeometryGeoJson;
+            return geometry && typeof geometry === "object" && (geometry as { type?: unknown }).type === "LineString"
+              ? [geometry as unknown as LineStringGeoJson]
+              : [];
+          })}
+          pois={accommodationPois}
           route={route.geometryGeoJson as unknown as LineStringGeoJson}
           stages={route.stages.map((stage) => ({
             ...stage,

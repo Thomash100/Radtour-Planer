@@ -1,13 +1,21 @@
-import { CalendarDays, Download, MapPinned, Phone } from "lucide-react";
+import { Bed, CalendarDays, Download, MapPinned, Phone } from "lucide-react";
 import { notFound } from "next/navigation";
 
-import { RouteMap } from "@/components/RouteMap";
+import { RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  accommodationFeatureLabel,
+  accommodationTypeLabel,
+  evidencedAccommodationFeatures,
+  type AccommodationFeatures,
+  type AccommodationStatus,
+  type AccommodationType
+} from "@/lib/accommodations";
 import { distancePointToLineKm, type LineStringGeoJson } from "@/lib/geo";
 import { prisma } from "@/lib/prisma";
-import { applyPoiFilters, createRouteTestPois, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
+import { applyPoiFilters, sortRoutePois, withDistanceToRoute, type PoiFilterOptions, type RoutePoi } from "@/lib/route-pois";
 import { formatKm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +42,16 @@ function poiLabel(category: string) {
   return categoryLabels[category] ?? category;
 }
 
+function storedAccommodationType(value: string): AccommodationType {
+  return value.toLowerCase() as AccommodationType;
+}
+
+function storedAccommodationStatus(value: string): AccommodationStatus {
+  if (value === "OVERNIGHT") return "overnight";
+  if (value === "BOOKMARKED") return "bookmarked";
+  return "suggested";
+}
+
 function closestStageDay(poi: RoutePoi, stages: Array<{ dayNumber: number; geometryGeoJson: unknown }>) {
   let closestDay = stages[0]?.dayNumber ?? 1;
   let closestDistance = Number.POSITIVE_INFINITY;
@@ -54,7 +72,7 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
   const route = await prisma.route.findUnique({
     where: { id: params.id },
     include: {
-      stages: { orderBy: { dayNumber: "asc" } },
+      stages: { include: { accommodation: true }, orderBy: { dayNumber: "asc" } },
       waypoints: { orderBy: { order: "asc" } },
       bookingLeads: {
         include: { partner: true },
@@ -80,12 +98,30 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
     bikeParking: false
   };
   const dbPois = await prisma.poi.findMany({ include: { partner: true } });
-  let routePois = sortRoutePois(applyPoiFilters(withDistanceToRoute(dbPois, geometry) as RoutePoi[], filters)).slice(0, 24);
-  const usesTestPois = routePois.length === 0;
-
-  if (usesTestPois) {
-    routePois = sortRoutePois(applyPoiFilters(createRouteTestPois(route.id, geometry), filters)).slice(0, 24);
-  }
+  const routePois = sortRoutePois(applyPoiFilters(withDistanceToRoute(dbPois, geometry) as RoutePoi[], filters)).slice(0, 24);
+  const accommodationMarkers: MapPoi[] = route.stages.flatMap((stage) => {
+    const accommodation = stage.accommodation;
+    if (!accommodation) return [];
+    return [
+      {
+        id: accommodation.poiId ?? `stage-accommodation-${accommodation.id}`,
+        name: accommodation.name,
+        category: "ACCOMMODATION",
+        lat: accommodation.lat,
+        lon: accommodation.lon,
+        phone: accommodation.phone,
+        website: accommodation.sourceLink,
+        source: accommodation.source,
+        tagsJson: accommodation.featuresJson as Record<string, unknown>,
+        distanceToRouteKm: accommodation.distanceToRouteKm,
+        accommodationType: storedAccommodationType(accommodation.type),
+        accommodationStatus: storedAccommodationStatus(accommodation.status)
+      }
+    ];
+  });
+  const accommodationMarkerIds = new Set(accommodationMarkers.map((poi) => poi.id));
+  const mapPois = [...routePois.filter((poi) => !accommodationMarkerIds.has(poi.id)), ...accommodationMarkers];
+  const usesOsmAccommodationData = route.stages.some((stage) => stage.accommodation?.dataQuality === "OSM");
 
   const poisByStage = route.stages.reduce<Record<number, RoutePoi[]>>((groups, stage) => {
     groups[stage.dayNumber] = [];
@@ -120,7 +156,13 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
 
       <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <RouteMap
-          pois={routePois}
+          accommodationDetours={route.stages.flatMap((stage) => {
+            const geometry = stage.accommodation?.detourGeometryGeoJson;
+            return geometry && typeof geometry === "object" && (geometry as { type?: unknown }).type === "LineString"
+              ? [geometry as unknown as LineStringGeoJson]
+              : [];
+          })}
+          pois={mapPois}
           route={geometry}
           stages={route.stages.map((stage) => ({
             ...stage,
@@ -148,21 +190,24 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
             <Metric label="Bergauf" value={`${route.elevationUp} m`} />
             <Metric label="Bergab" value={`${route.elevationDown} m`} />
             <Metric label="Etappen" value={String(route.stages.length)} />
-            <Metric label="POI im Plan" value={String(routePois.length)} />
+            <Metric label="POI im Plan" value={String(mapPois.length)} />
           </CardContent>
         </Card>
       </section>
 
-      {usesTestPois && routePois.length > 0 && (
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
-          Für diese Route wurden keine lokalen POI im Standardkorridor gefunden. Der Reiseplan zeigt markierte Test-POI, damit GPX-Import,
-          Etappenansicht und POI-Fluss trotzdem prüfbar sind.
-        </div>
+      {usesOsmAccommodationData && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Unterkunftsdaten: © OpenStreetMap-Mitwirkende (ODbL). Merkmale werden nur angezeigt, wenn sie in der Quelle belegt sind.
+        </p>
       )}
 
       <section className="mt-6 space-y-4">
         {route.stages.map((stage) => {
           const stagePois = poisByStage[stage.dayNumber] ?? [];
+          const accommodation = stage.accommodation;
+          const features = accommodation
+            ? evidencedAccommodationFeatures(accommodation.featuresJson as AccommodationFeatures)
+            : [];
           return (
             <Card key={stage.id}>
               <CardHeader>
@@ -174,7 +219,7 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
                   {formatKm(stage.distanceKm)} / {stage.elevationUp} m bergauf / {stage.elevationDown} m bergab
                 </CardDescription>
               </CardHeader>
-              <CardContent className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+              <CardContent className="grid gap-3 lg:grid-cols-3">
                 <div className="rounded-md border bg-white p-4">
                   <h2 className="text-sm font-semibold">Etappen-Check</h2>
                   <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
@@ -183,6 +228,45 @@ export default async function TravelPlanPage({ params }: { params: { id: string 
                     <li>Fahrzeit geschätzt: {(stage.distanceKm / 17).toFixed(1)} h</li>
                     <li>GPX-Abschnitt: {(stage.geometryGeoJson as unknown as LineStringGeoJson).coordinates.length} Punkte</li>
                   </ul>
+                </div>
+                <div className="rounded-md border bg-white p-4">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold">
+                    <Bed className="h-4 w-4 text-primary" />
+                    Übernachtung
+                  </h2>
+                  {accommodation ? (
+                    <div className="mt-3 space-y-2 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong>{accommodation.name}</strong>
+                        <Badge variant={accommodation.status === "OVERNIGHT" ? "secondary" : "outline"}>
+                          {accommodation.status === "OVERNIGHT" ? "Übernachtung" : "Vorgemerkt"}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground">
+                        Typ: {accommodationTypeLabel(storedAccommodationType(accommodation.type))}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Entfernung: {formatKm(accommodation.distanceToRouteKm)} zur Route
+                      </p>
+                      {accommodation.detourDistanceKm !== null && (
+                        <p className="text-muted-foreground">
+                          BRouter-Abstecher hin und zurück: {formatKm(accommodation.detourDistanceKm)}
+                        </p>
+                      )}
+                      <p className="text-muted-foreground">Quelle: {accommodation.source}</p>
+                      {features.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {features.map((feature) => (
+                            <Badge key={feature} variant="outline">
+                              {accommodationFeatureLabel(feature)}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground">Noch keine Unterkunft vorgemerkt oder ausgewählt.</p>
+                  )}
                 </div>
                 <div className="rounded-md border bg-white p-4">
                   <h2 className="text-sm font-semibold">POI für diese Etappe</h2>
