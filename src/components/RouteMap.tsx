@@ -26,7 +26,13 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type Marker } from 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 import { closestPointOnRoute, haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
-import { MAP_AUTO_FIT_MAX_ZOOM, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from "@/lib/map-zoom";
+import {
+  CYCLOSM_SOURCE_MAX_ZOOM,
+  MAP_AUTO_FIT_MAX_ZOOM,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  OSM_SOURCE_MAX_ZOOM
+} from "@/lib/map-zoom";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 export type MapPoi = {
@@ -996,6 +1002,7 @@ export function RouteMap({
             type: "raster",
             tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
             tileSize: 256,
+            maxzoom: OSM_SOURCE_MAX_ZOOM,
             attribution: "&copy; OpenStreetMap contributors"
           },
           cyclosm: {
@@ -1006,6 +1013,7 @@ export function RouteMap({
               "https://c.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png"
             ],
             tileSize: 256,
+            maxzoom: CYCLOSM_SOURCE_MAX_ZOOM,
             attribution: "&copy; OpenStreetMap contributors, CyclOSM"
           }
         },

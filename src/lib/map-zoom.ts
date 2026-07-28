@@ -4,6 +4,8 @@
  */
 export const MAP_MIN_ZOOM = 0;
 export const MAP_MAX_ZOOM = 22;
+export const OSM_SOURCE_MAX_ZOOM = 19;
+export const CYCLOSM_SOURCE_MAX_ZOOM = 20;
 
 /**
  * Automatic route fitting stays deliberately less detailed. This only affects
