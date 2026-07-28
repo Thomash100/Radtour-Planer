@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-26
+Stand: 2026-07-28
 
 ## Produktstand
 
@@ -22,6 +22,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunftskandidaten nach Typ, Routen-/Etappenendentfernung und belegten Fahrradmerkmalen filtern.
 - Unterkunft je Etappe vormerken oder als Übernachtung persistent auswählen.
 - Unterkunft abseits der Hauptroute als echten BRouter-Hin- und Rückweg separat routen und darstellen.
+- Karte über Schaltflächen, Touch, Mausrad und Tastatur ohne routenabhängige Zoomgrenzen bedienen.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte und Unterkunftszuordnungen.
@@ -52,27 +53,17 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 11: Reale Fahrradwege in der Direktplanung abgeschlossen und über PR #59 in `private` gemergt.
 - Paket 12: Schwierigkeitsbasierte Etappenplanung abgeschlossen und über PR #60 in `private` gemergt.
 - Konsolidierung Paket 11/12: Nach-Merge-Punkte in Arbeit auf Branch `codex/consolidate-routing-stage-planning`; manueller RPi-Stopppunkt vor Merge.
-- Paket 13: Unterkunftsplanung auf Branch `codex/accommodation-planning-consolidation` implementiert und lokal geprüft; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
-- Reiseauftrag: PR #61 bleibt bis nach Abschluss und ausdrücklicher Merge-Freigabe für Paket 13 zurückgestellt.
+- Paket 13: Unterkunftsplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #63 in `private` gemergt.
+- Paket 14: Kartenzoom auf Branch `codex/map-zoom-improvements` in Arbeit; eigener Draft-PR und erneute Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Reiseauftrag: PR #61 wird erst nach Abschluss des eigenständigen Zoom-Pakets fortgeführt.
 
-Ausgangsbasis für Paket 13:
+Ausgangsbasis für Paket 14:
 
-- `private`: `7239b41b674150a0679b2b1bfffe8d13b3edbadc` (Merge von PR #62)
-- lokale `private`-Basis aktualisiert
-- Raspberry-Pi-Aktualisierung benötigt weiterhin gültige SSH-Anmeldedaten
-- Prisma: `StageAccommodation` ergänzt; Deployment verwendet weiterhin `prisma db push`
-- Plesk: unverändert
-- keine fest verdrahtete produktive Unterkunfts-API
-
-Lokaler Paket-13-Prüfstand:
-
-- 39 Tests erfolgreich
-- Typecheck und Lint erfolgreich
-- Produktionsbuild erfolgreich; lokale Build-Umgebung hat keine erreichbare PostgreSQL-Instanz, die dynamischen Seiten wurden dennoch korrekt gebaut
-- Browser-Smoke mit importierter Tour erfolgreich: typisierte Marker, Status, Save/Load, belegte Fahrradmerkmale und BRouter-Abstecher sichtbar
-- responsive Prüfung bei mobiler Breite ohne horizontalen Überlauf und ohne Browserfehler
-- Docker lokal nicht verfügbar
-- Raspberry-Pi-Aktualisierung und -Abnahme wegen fehlender SSH-Authentifizierung noch offen
+- `private`: `8a37c4c42066ae0cc8a9c6707707efdb798c4296` (Merge von PR #63)
+- Unterkunftsplanung fachlich und auf dem Raspberry Pi abgenommen
+- keine Änderung an Kartenstil, Markern, Routing, Unterkunftslogik oder TourState
+- MapLibre-Standardbereich `0..22` ersetzt die bisherigen routenabhängigen Kamera- und Zoomgrenzen
+- automatisches `Route anzeigen` bleibt als reine Ausschnittsfunktion bestehen
 
 ## Paket 4: Release-Readiness
 

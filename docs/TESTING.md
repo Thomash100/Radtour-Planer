@@ -171,6 +171,18 @@ Unterkunftsplanung gebündelt prüfen:
 - Reiseplan zeigt Tag, Unterkunft, Typ, Status, Entfernung, Quelle, belegte Merkmale und gegebenenfalls BRouter-Abstecher.
 - mobile Ansicht erzeugt keinen horizontalen Overflow; Browserkonsole bleibt fehlerfrei.
 
+## Paket 14
+
+Kartenzoom auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
+
+- Eine gespeicherte oder importierte Tour mit sichtbarer Route öffnen.
+- Über `+` bis Zoomstufe 22 hineinzoomen; die Schaltfläche darf vorher nicht künstlich deaktiviert werden.
+- Über `−` bis Zoomstufe 0 herauszoomen; die vollständige Übersicht muss erreichbar sein.
+- `Route anzeigen` zentriert weiterhin die gesamte Route, ohne den anschließenden manuellen Zoom einzuschränken.
+- Touch-Zoom, Mausrad und Tastaturbedienung funktionieren weiterhin.
+- Nach Save/Load bleiben Route, Etappen und Unterkunftszuordnungen unverändert.
+- Bei Desktop-, Tablet- und Smartphone-Breite bleiben die Zoom-Schaltflächen erreichbar; Browserkonsole und Layout bleiben fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

@@ -26,6 +26,7 @@ import maplibregl, { type GeoJSONSource, type MapMouseEvent, type Marker } from 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 
 import { closestPointOnRoute, haversineKm, pointAtDistance, type LineStringGeoJson, type Position } from "@/lib/geo";
+import { MAP_AUTO_FIT_MAX_ZOOM, MAP_MAX_ZOOM, MAP_MIN_ZOOM } from "@/lib/map-zoom";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 export type MapPoi = {
@@ -112,13 +113,6 @@ const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
 const maxFitWidthDeg = 120;
 const maxFitHeightDeg = 70;
-const defaultMinZoom = 2;
-const routeMaxZoom = 16;
-const autoFitMaxZoom = 12;
-const routeBoundsPaddingRatio = 0.18;
-const routeBoundsPaddingKm = 25;
-const minRouteBoundsPaddingDeg = 0.03;
-
 const categoryStyles: Record<string, { color: string; label: string }> = {
   ACCOMMODATION: { color: "#0f766e", label: "B" },
   LUGGAGE_TRANSFER: { color: "#2563eb", label: "G" },
@@ -258,35 +252,6 @@ function fitPadding(stagesLength: number, container?: HTMLElement | null) {
   }
 
   return { top: 112, right: 72, bottom: stagesLength > 0 ? 132 : 72, left: 72 };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function paddedRouteBounds(coordinates: Position[]) {
-  const bounds = boundsInfo(coordinates);
-  if (!bounds) {
-    return null;
-  }
-
-  const centerLat = bounds.center.lat;
-  const latPaddingFromKm = routeBoundsPaddingKm / 111;
-  const lonKmFactor = Math.max(Math.cos((centerLat * Math.PI) / 180), 0.2) * 111;
-  const lonPaddingFromKm = routeBoundsPaddingKm / lonKmFactor;
-  const lonPadding = Math.max(bounds.width * routeBoundsPaddingRatio, lonPaddingFromKm, minRouteBoundsPaddingDeg);
-  const latPadding = Math.max(bounds.height * routeBoundsPaddingRatio, latPaddingFromKm, minRouteBoundsPaddingDeg);
-
-  const west = clamp(bounds.west - lonPadding, -180, 180);
-  const east = clamp(bounds.east + lonPadding, -180, 180);
-  const south = clamp(bounds.south - latPadding, -90, 90);
-  const north = clamp(bounds.north + latPadding, -90, 90);
-
-  if (west >= east || south >= north) {
-    return null;
-  }
-
-  return new maplibregl.LngLatBounds([west, south], [east, north]);
 }
 
 function containerDebug(container?: HTMLElement | null) {
@@ -845,49 +810,12 @@ function runWhenMapReady(map: maplibregl.Map, callback: () => void) {
 
 function resetRouteCameraLimits(map: maplibregl.Map) {
   map.setMaxBounds(null);
-  map.setMinZoom(defaultMinZoom);
-  map.setMaxZoom(routeMaxZoom);
+  map.setMinZoom(MAP_MIN_ZOOM);
+  map.setMaxZoom(MAP_MAX_ZOOM);
   return {
     maxBounds: null,
-    minZoom: defaultMinZoom,
-    maxZoom: routeMaxZoom
-  };
-}
-
-function applyRouteCameraLimits(
-  map: maplibregl.Map,
-  routeValidation: ReturnType<typeof validateRoute>,
-  stagesLength: number,
-  container?: HTMLElement | null
-) {
-  if (!routeValidation.line || routeValidation.fitCoordinates.length < 2 || routeValidation.blockFit) {
-    return resetRouteCameraLimits(map);
-  }
-
-  const panBounds = paddedRouteBounds(routeValidation.fitCoordinates);
-  if (!panBounds) {
-    return resetRouteCameraLimits(map);
-  }
-
-  map.setMaxBounds(panBounds);
-  map.setMaxZoom(routeMaxZoom);
-
-  const fitCamera = map.cameraForBounds(createBounds(routeValidation.fitCoordinates), {
-    padding: fitPadding(stagesLength, container),
-    maxZoom: autoFitMaxZoom
-  });
-  const routeFitZoom = fitCamera?.zoom;
-  const minZoom =
-    typeof routeFitZoom === "number" && Number.isFinite(routeFitZoom)
-      ? clamp(routeFitZoom - 0.35, defaultMinZoom, autoFitMaxZoom)
-      : defaultMinZoom;
-
-  map.setMinZoom(minZoom);
-  return {
-    maxBounds: panBounds.toArray(),
-    minZoom,
-    maxZoom: routeMaxZoom,
-    routeFitZoom
+    minZoom: MAP_MIN_ZOOM,
+    maxZoom: MAP_MAX_ZOOM
   };
 }
 
@@ -1009,7 +937,7 @@ export function RouteMap({
           map.resize();
           map.fitBounds(createBounds(routeValidation.fitCoordinates), {
             padding: fitPadding(stages.length, containerRef.current),
-            maxZoom: autoFitMaxZoom,
+            maxZoom: MAP_AUTO_FIT_MAX_ZOOM,
             duration: 600
           });
           fittedRouteSignatureRef.current = routeValidation.signature;
@@ -1099,8 +1027,8 @@ export function RouteMap({
       },
       center: [11.9, 48.0],
       zoom: 8,
-      minZoom: defaultMinZoom,
-      maxZoom: routeMaxZoom
+      minZoom: MAP_MIN_ZOOM,
+      maxZoom: MAP_MAX_ZOOM
     });
 
     mapRef.current = map;
@@ -1205,7 +1133,7 @@ export function RouteMap({
         return;
       }
 
-      const cameraLimits = applyRouteCameraLimits(map, routeValidation, stages.length, containerRef.current);
+      const cameraLimits = resetRouteCameraLimits(map);
       if (process.env.NODE_ENV !== "production") {
         console.debug("RouteMap camera limits", {
           container: containerDebug(containerRef.current),
