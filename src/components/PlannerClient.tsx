@@ -89,6 +89,12 @@ import {
   type PlannerWorkflowView
 } from "@/lib/planner-workflow";
 import {
+  DEFAULT_RIDER_BIKE_PROFILE,
+  RIDER_BIKE_PROFILE_STORAGE_KEY,
+  parseStoredRiderBikeProfile,
+  type RiderBikeProfile
+} from "@/lib/rider-bike-profile";
+import {
   TOUR_LIBRARY_STORAGE_KEY,
   createTourLibraryEntry,
   parseTourLibrary,
@@ -469,6 +475,7 @@ export function PlannerClient({
   const [lastTourSavedAt, setLastTourSavedAt] = useState<string | null>(null);
   const [currentLibraryTourId, setCurrentLibraryTourId] = useState<string | null>(initialTourId ?? null);
   const [tourKind, setTourKind] = useState<"demo" | "user">(normalizedInitialMode === "demo" ? "demo" : "user");
+  const [riderBikeProfile, setRiderBikeProfile] = useState<RiderBikeProfile>(DEFAULT_RIDER_BIKE_PROFILE);
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -742,6 +749,7 @@ export function PlannerClient({
         targetKm: Number.isFinite(targetKm) ? targetKm : undefined,
         travelDays: Number.isFinite(safeTravelDays) ? safeTravelDays : undefined,
         difficultyTarget,
+        riderBikeProfile,
         stageBreakpoints: stageBreakpoints.map((breakpoint) => ({
           id: breakpoint.id,
           name: breakpoint.name,
@@ -759,6 +767,7 @@ export function PlannerClient({
       difficultyTarget,
       lastTourSavedAt,
       pois,
+      riderBikeProfile,
       route,
       selectedPoi?.id,
       selectedStageId,
@@ -900,6 +909,10 @@ export function PlannerClient({
           }))
         );
       }
+      if (stored.riderBikeProfile) {
+        setRiderBikeProfile(stored.riderBikeProfile);
+        window.localStorage.setItem(RIDER_BIKE_PROFILE_STORAGE_KEY, JSON.stringify(stored.riderBikeProfile));
+      }
       setStageAccommodations(stored.stageAccommodations ?? {});
       setLastTourSavedAt(stored.lastSavedAt ?? null);
       setPlannerStep(
@@ -914,6 +927,13 @@ export function PlannerClient({
     },
     [plannerForm, workflowView]
   );
+
+  useEffect(() => {
+    const storedProfile = parseStoredRiderBikeProfile(window.localStorage.getItem(RIDER_BIKE_PROFILE_STORAGE_KEY));
+    if (storedProfile) {
+      setRiderBikeProfile(storedProfile);
+    }
+  }, []);
 
   useEffect(() => {
     const urlMode = normalizeTourMode(initialMode);

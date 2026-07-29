@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
       ? {
           userAgent: "*",
           allow: ["/", "/planer/route", "/planer/etappen", "/touren", "/impressum", "/datenschutz", "/agb", "/mvp-hinweis"],
-          disallow: ["/admin", "/api", "/dashboard", "/partner/dashboard"]
+          disallow: ["/admin", "/api", "/dashboard", "/einstellungen", "/partner/dashboard"]
         }
       : {
           userAgent: "*",

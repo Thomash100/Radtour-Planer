@@ -86,3 +86,17 @@ Codex stoppt nicht mitten in einer lokalen Aenderung. Gestoppt wird nur bei:
 - dokumentiertem PR,
 - bestandenen oder begruendet nicht ausfuehrbaren Tests,
 - oder einem eindeutig benannten manuellen Pruefschritt.
+
+## Abnahme und Abschluss ab Paket 16
+
+Jeder neue Entwicklungsauftrag enthält von Beginn an diesen verbindlichen Abschlussprozess:
+
+1. Entwicklung
+2. automatische Prüfungen
+3. Draft-PR
+4. Raspberry-Pi-Abnahme
+5. fachliche Abnahme durch den Auftraggeber
+6. ausdrückliche Merge-Freigabe durch den Auftraggeber
+7. erst danach Ready for Review, Merge nach `private`, Aktualisierung von `private` und Beginn des nächsten Pakets
+
+Die Merge-Freigabe muss ausdrücklich als `PR #<nummer> ist zum Merge freigegeben.` erteilt werden. Ohne diese Formulierung bleibt der PR offen und wird nicht gemergt. Tags und Releases benötigen eine separate Freigabe.

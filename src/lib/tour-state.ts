@@ -6,6 +6,7 @@ import {
 } from "@/lib/accommodations";
 import type { LineStringGeoJson } from "@/lib/geo";
 import type { CycleRouteCoverage } from "@/lib/mock-routing";
+import { parseRiderBikeProfileValue, type RiderBikeProfile } from "@/lib/rider-bike-profile";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
@@ -92,6 +93,7 @@ export type StoredTourState = {
   targetKm?: number;
   travelDays?: number;
   difficultyTarget?: StageDifficultyLevel;
+  riderBikeProfile?: RiderBikeProfile;
   stageBreakpoints?: StoredStageBreakpoint[];
   stageAccommodations?: Record<string, StageAccommodation>;
   status?: string;
@@ -171,8 +173,10 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
         .map(([stageId, accommodation]) => [stageId, normalizeStageAccommodation(accommodation)] as const)
         .filter((entry): entry is readonly [string, StageAccommodation] => entry[1] !== null)
     );
+    const riderBikeProfile = parseRiderBikeProfileValue(parsed.riderBikeProfile);
     return {
       ...parsed,
+      ...(riderBikeProfile ? { riderBikeProfile } : { riderBikeProfile: undefined }),
       stageAccommodations
     };
   } catch {

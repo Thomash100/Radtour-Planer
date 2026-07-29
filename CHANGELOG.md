@@ -1,5 +1,16 @@
 # Changelog
 
+## Paket 16 - 2026-07-29
+
+- zentrale Fahrer-, Fahrrad- und E-Bike-Profiltypen mit gemeinsamer Validierung ergänzt
+- neue Einstellungsseite `/einstellungen/fahrprofil` mit Navigation ergänzt
+- Fahrername, Körpergewicht, Fitness, Erfahrung, Tagesbelastung und Fahrzeitgrenzen speicherbar gemacht
+- Fahrradtyp, Fahrradgewicht und Gepäckgewicht speicherbar gemacht
+- E-Bike-Grunddaten ohne Energie- oder Reichweitenberechnung ergänzt
+- Profil lokal gespeichert und als validierten Snapshot in den TourState integriert
+- getrennten JSON-Export und -Import für das Profil ergänzt; Tour-JSON übernimmt den Profilsnapshot
+- verbindlichen Freigabeprozess für alle Pakete ab Paket 16 im Repository dokumentiert
+
 ## Paket 15 - 2026-07-29
 
 - Routenplanung unter `/planer/route` und Etappenplanung unter `/planer/etappen` als eigene Bedienbereiche getrennt

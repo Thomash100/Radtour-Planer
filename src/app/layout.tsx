@@ -65,6 +65,9 @@ export default function RootLayout({
               <Link className="hover:text-slate-900" href="/touren">
                 Tourverwaltung
               </Link>
+              <Link className="hover:text-slate-900" href="/einstellungen/fahrprofil">
+                Fahrprofil
+              </Link>
             </nav>
           </div>
         </footer>

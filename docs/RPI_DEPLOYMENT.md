@@ -242,6 +242,9 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis Etappenplanung nach Schwierigkeit einschliesslich sichtbarer Ersetzungsbestaetigung
 - Ergebnis GPX-Import
 - Ergebnis Karte, Marker, POI und Etappenfarben
+- Ergebnis `/einstellungen/fahrprofil`, Profil-Speicherung, Reload sowie Profil-Export/-Import
+- Ergebnis E-Bike-Grunddaten ohne Energie- oder Reichweitenberechnung
+- Ergebnis responsive Darstellung bei 390 und 768 px
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich
 
 ## 8. Updates einspielen
