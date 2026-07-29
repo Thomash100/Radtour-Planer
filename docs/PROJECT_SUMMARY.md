@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-28
+Stand: 2026-07-29
 
 ## Produktstand
 
@@ -52,18 +52,37 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 10: Etappenbewertung nach Schwierigkeit und Belastung abgeschlossen.
 - Paket 11: Reale Fahrradwege in der Direktplanung abgeschlossen und über PR #59 in `private` gemergt.
 - Paket 12: Schwierigkeitsbasierte Etappenplanung abgeschlossen und über PR #60 in `private` gemergt.
-- Konsolidierung Paket 11/12: Nach-Merge-Punkte in Arbeit auf Branch `codex/consolidate-routing-stage-planning`; manueller RPi-Stopppunkt vor Merge.
+- Konsolidierung Paket 11/12: abgeschlossen und über PR #62 in `private` gemergt.
 - Paket 13: Unterkunftsplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #63 in `private` gemergt.
-- Paket 14: Kartenzoom auf Branch `codex/map-zoom-improvements` in Arbeit; eigener Draft-PR und erneute Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
-- Reiseauftrag: PR #61 wird erst nach Abschluss des eigenständigen Zoom-Pakets fortgeführt.
+- Paket 14: Kartenzoom nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #64 in `private` gemergt.
+- Paket 15: Trennung der Bedienstruktur für Routen- und Etappenplanung auf Branch `codex/separate-route-stage-workflows` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Reiseauftrag: PR #61 wird erst nach Abschluss von Paket 15 fortgeführt.
 
-Ausgangsbasis für Paket 14:
+Ausgangsbasis für Paket 15:
 
-- `private`: `8a37c4c42066ae0cc8a9c6707707efdb798c4296` (Merge von PR #63)
-- Unterkunftsplanung fachlich und auf dem Raspberry Pi abgenommen
-- keine Änderung an Kartenstil, Markern, Routing, Unterkunftslogik oder TourState
-- MapLibre-Standardbereich `0..22` ersetzt die bisherigen routenabhängigen Kamera- und Zoomgrenzen
-- automatisches `Route anzeigen` bleibt als reine Ausschnittsfunktion bestehen
+- `private`: `36f3ada420681ad607689be2fe1c8c0368280c25` (Merge von PR #64)
+- Kartenzoom fachlich und auf dem Raspberry Pi abgenommen
+- bestehender TourState bleibt die gemeinsame Grundlage beider Planungsbereiche
+- keine Änderung an Routing, Etappenerzeugung, Unterkunftslogik oder Speichermodell
+- keine neue Energie-, E-Bike- oder Akkurechenlogik
+
+## Paket 15: getrennte Bedienstruktur
+
+Paket 15 trennt den bisherigen Gesamtplaner in zwei klar erkennbare Bedienbereiche, ohne die fachlichen Berechnungen oder den TourState aufzuteilen.
+
+Enthalten:
+
+- `/planer/route` für Eingabeart, direkte Route, GPX-Import, Routenübersicht und Routenkürzung
+- `/planer/etappen` für Etappenerzeugung, Vorschau und Etappenbearbeitung
+- gemeinsame Navigation mit Übergabe der vorhandenen Routengrundlage über denselben lokalen TourState
+- verständlicher Leerzustand der Etappenplanung, solange keine Route vorhanden ist
+- kompatible Weiterleitung alter `/planer`-Links
+
+Nicht enthalten:
+
+- neue Routing- oder Etappenberechnung
+- Änderungen an Energie-, E-Bike- oder Akkulogik
+- Reiseauftrag, Navigation oder Offline-Funktionen
 
 ## Paket 4: Release-Readiness
 

@@ -7,7 +7,7 @@ const links = [
   ["/dashboard/routen", "Gespeicherte Routen"],
   ["/dashboard/reisen", "Reiseplaene"],
   ["/dashboard/favoriten", "Favoriten"],
-  ["/planer", "Neue Route planen"]
+  ["/planer/route", "Neue Route planen"]
 ];
 
 export default function DashboardPage() {

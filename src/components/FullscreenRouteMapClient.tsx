@@ -72,7 +72,7 @@ export function FullscreenRouteMapClient() {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <Link href="/planer">
+              <Link href="/planer/route">
                 <Route className="h-4 w-4" />
                 Zum Planer
               </Link>
@@ -95,13 +95,13 @@ export function FullscreenRouteMapClient() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/planer?step=edit">
+            <Link href="/planer/route?open=last">
               <ArrowLeft className="h-4 w-4" />
               Zur Bearbeitung
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/planer?step=stages">
+            <Link href="/planer/etappen?open=last">
               <MapPinned className="h-4 w-4" />
               Zur Etappenplanung
             </Link>

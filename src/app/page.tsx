@@ -24,21 +24,21 @@ export const metadata: Metadata = {
 
 const primaryActions = [
   {
-    href: "/planer?mode=gpx",
+    href: "/planer/route?mode=gpx",
     icon: ArrowDownToLine,
     title: "GPX laden",
     text: "Empfohlener Einstieg: vorhandene GPX-Datei importieren und als feste Routengrundlage nutzen.",
     variant: "default" as const
   },
   {
-    href: "/planer?mode=demo",
+    href: "/planer/route?mode=demo",
     icon: Map,
     title: "Demo-Tour öffnen",
     text: "Demo bewusst laden. Es wird keine Route automatisch beim Start erzeugt.",
     variant: "secondary" as const
   },
   {
-    href: "/planer?open=last",
+    href: "/planer/route?open=last",
     icon: FileText,
     title: "Gespeicherte Tour",
     text: "Letzten Browser-TourState mit Route, Etappen, Orten und Unterkünften wieder öffnen.",
@@ -99,7 +99,7 @@ export default function HomePage() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild variant="ghost">
-                <Link href="/planer?mode=direct">
+                <Link href="/planer/route?mode=direct">
                   <Route className="h-4 w-4" />
                   Direkte Planung ansehen
                 </Link>

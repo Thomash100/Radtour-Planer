@@ -56,7 +56,7 @@ export function LegalPage({
             <Link href="/">Zur Startseite</Link>
           </Button>
           <Button asChild>
-            <Link href="/planer?mode=gpx">GPX im Planer laden</Link>
+            <Link href="/planer/route?mode=gpx">GPX im Planer laden</Link>
           </Button>
         </div>
       </section>

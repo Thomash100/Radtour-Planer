@@ -183,6 +183,22 @@ Kartenzoom auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
 - Nach Save/Load bleiben Route, Etappen und Unterkunftszuordnungen unverändert.
 - Bei Desktop-, Tablet- und Smartphone-Breite bleiben die Zoom-Schaltflächen erreichbar; Browserkonsole und Layout bleiben fehlerfrei.
 
+## Paket 15
+
+Getrennte Routen- und Etappenbedienung auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
+
+- `/planer/route` zeigt ausschließlich die Arbeitsschritte für Eingabeart, direkte Route, GPX-Import, Routenübersicht und Routenkürzung.
+- Die direkte Routeneingabe enthält Start, Ziel, Zwischenziele und Routingprofil, aber keine Etappen- oder Energieeinstellungen.
+- Die Routenübersicht zeigt Grundroute, Karte, Höhenprofil und Radwegeanteil ohne Etappen-, Unterkunfts- oder POI-Darstellung.
+- `Zur Etappenplanung` öffnet `/planer/etappen` und übernimmt dieselbe Geometrie, Distanz und Höhenwerte aus dem vorhandenen TourState.
+- `/planer/etappen` zeigt ausschließlich Etappenerzeugung, Etappenvorschau und Etappenbearbeitung.
+- Ohne vorhandene Route zeigt `/planer/etappen?open=none` einen verständlichen Leerzustand mit Rückweg zur Routenplanung.
+- Die gemeinsame Navigation ist in beiden Bereichen sichtbar; ohne Route ist der Wechsel zur Etappenplanung aus der Routenansicht deaktiviert.
+- Alte Links wie `/planer?step=stages` werden auf den passenden neuen Planungsbereich weitergeleitet.
+- Save/Load erhält Route, Etappen, Etappengeometrien, Einstellungen und Unterkunftszuordnungen unverändert.
+- Es gibt keine neue Energie-, E-Bike- oder Akkurechenlogik.
+- Bei 390 und 768 px entsteht kein horizontaler Overflow; Browserkonsole und Layout bleiben fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

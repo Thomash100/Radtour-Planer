@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: APP_INDEXING_ALLOWED
       ? {
           userAgent: "*",
-          allow: ["/", "/planer", "/touren", "/impressum", "/datenschutz", "/agb", "/mvp-hinweis"],
+          allow: ["/", "/planer/route", "/planer/etappen", "/touren", "/impressum", "/datenschutz", "/agb", "/mvp-hinweis"],
           disallow: ["/admin", "/api", "/dashboard", "/partner/dashboard"]
         }
       : {

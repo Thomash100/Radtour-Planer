@@ -46,10 +46,45 @@ import {
   MAP_MIN_ZOOM,
   OSM_SOURCE_MAX_ZOOM
 } from "../src/lib/map-zoom";
+import {
+  isPlannerStepForWorkflow,
+  normalizePlannerStep,
+  resolvePlannerStep
+} from "../src/lib/planner-workflow";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
 import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
+
+test("Planungsbereiche erlauben nur ihre eigenen Arbeitsschritte", () => {
+  assert.equal(isPlannerStepForWorkflow("overview", "route"), true);
+  assert.equal(isPlannerStepForWorkflow("stage-edit", "route"), false);
+  assert.equal(isPlannerStepForWorkflow("stage-create", "stages"), true);
+  assert.equal(isPlannerStepForWorkflow("trim", "stages"), false);
+  assert.equal(normalizePlannerStep("stages"), "stage-edit");
+});
+
+test("Etappenplanung übernimmt die gemeinsame Route ohne Routenarbeitsschritt", () => {
+  assert.equal(
+    resolvePlannerStep({
+      workflowView: "stages",
+      preferredStep: "overview",
+      inputMode: "gpx",
+      hasRoute: true,
+      hasStages: false
+    }),
+    "stage-create"
+  );
+  assert.equal(
+    resolvePlannerStep({
+      workflowView: "stages",
+      inputMode: "direct",
+      hasRoute: true,
+      hasStages: true
+    }),
+    "stage-edit"
+  );
+});
 
 const routeGeometry: LineStringGeoJson = {
   type: "LineString",
