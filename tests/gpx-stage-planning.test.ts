@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -239,6 +240,16 @@ test("selects accommodation providers explicitly and keeps production endpoint c
   });
   assert.equal(result.pois.length, 0);
   assert.match(result.warning ?? "", /nicht konfiguriert/i);
+});
+
+test("forwards explicit accommodation provider settings to the Raspberry Pi app container", () => {
+  const compose = readFileSync(new URL("../docker-compose.rpi.yml", import.meta.url), "utf8");
+
+  assert.match(compose, /ACCOMMODATION_PROVIDER: "\$\{ACCOMMODATION_PROVIDER:-production\}"/);
+  assert.match(compose, /ACCOMMODATION_API_URL: "\$\{ACCOMMODATION_API_URL:-\}"/);
+  assert.match(compose, /ACCOMMODATION_TIMEOUT_MS: "\$\{ACCOMMODATION_TIMEOUT_MS:-4000\}"/);
+  assert.match(compose, /ACCOMMODATION_CACHE_TTL_MS: "\$\{ACCOMMODATION_CACHE_TTL_MS:-900000\}"/);
+  assert.doesNotMatch(compose, /ACCOMMODATION_API_URL: "https?:\/\/.*overpass/i);
 });
 
 test("routes accommodation detours with separate BRouter out-and-back geometry", async () => {

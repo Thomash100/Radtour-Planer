@@ -8,6 +8,7 @@
 - Routenansicht auf Direkteingabe, GPX-Import, Grundroute, Karte, Radwegeanteil und Höhenprofil fokussiert
 - Etappenansicht auf Erzeugung, Vorschau und Bearbeitung der Etappen fokussiert
 - alte `/planer`-Links kompatibel auf den passenden neuen Bereich weitergeleitet
+- vorhandene `ACCOMMODATION_*`-Konfiguration für die Raspberry-Pi-Abnahme an den App-Container weitergereicht
 - keine Energie-, E-Bike- oder Akkurechenlogik ergänzt
 
 ## Paket 14 - 2026-07-28

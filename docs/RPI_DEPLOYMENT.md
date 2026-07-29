@@ -83,6 +83,25 @@ Wenn du nur direkt auf dem Raspberry Pi testest, geht auch:
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
+### Unterkunftsdaten fuer die Abnahme
+
+Die in `.env.rpi.example` dokumentierten `ACCOMMODATION_*`-Werte werden an den App-Container weitergereicht. Fuer eine reproduzierbare Raspberry-Pi-Abnahme mit klar gekennzeichneten Testdaten:
+
+```env
+ACCOMMODATION_PROVIDER=local-test
+ACCOMMODATION_API_URL=
+ACCOMMODATION_TIMEOUT_MS=4000
+ACCOMMODATION_CACHE_TTL_MS=900000
+```
+
+`local-test` ist ausschliesslich fuer Entwicklung und Abnahme vorgesehen. Fuer einen produktiven Provider muss `ACCOMMODATION_PROVIDER=production` zusammen mit einer geeigneten `ACCOMMODATION_API_URL` konfiguriert werden. Ohne Endpunkt bleiben externe Unterkunftsdaten deaktiviert; eine oeffentliche Overpass-Instanz wird nicht automatisch verwendet.
+
+Nach dem Containerstart kann die Weitergabe geprueft werden:
+
+```bash
+docker compose -f docker-compose.rpi.yml exec -T app printenv | grep '^ACCOMMODATION_'
+```
+
 Die IP fuer den Aufruf aus dem Heimnetz bekommst du mit:
 
 ```bash
@@ -200,6 +219,7 @@ Pruefpunkte:
 - GPX-Name und Hoehenprofil werden uebernommen, soweit in der Datei vorhanden
 - POI und Marker entlang der Route werden angezeigt
 - POI-Filter fuer Unterkunft, Gepaeck, Werkstatt, Restaurant und Zusatzfilter testen
+- mit `ACCOMMODATION_PROVIDER=local-test` erscheint die klar markierte lokale Test-Pension; Vormerken, Uebernachtung, Save/Load und Kartenmarker pruefen
 - Unterkunfts- oder Gepaecktransfer-Anfrage senden
 - `/admin/partner` oeffnen und Partnerstatus pruefen
 

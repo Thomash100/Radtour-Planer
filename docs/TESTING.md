@@ -196,6 +196,8 @@ Getrennte Routen- und Etappenbedienung auf Desktop, Tablet, Smartphone und Raspb
 - Die gemeinsame Navigation ist in beiden Bereichen sichtbar; ohne Route ist der Wechsel zur Etappenplanung aus der Routenansicht deaktiviert.
 - Alte Links wie `/planer?step=stages` werden auf den passenden neuen Planungsbereich weitergeleitet.
 - Save/Load erhält Route, Etappen, Etappengeometrien, Einstellungen und Unterkunftszuordnungen unverändert.
+- Mit `ACCOMMODATION_PROVIDER=local-test` wird die klar markierte lokale Test-Pension im Raspberry-Pi-App-Container verfügbar; Vormerken, Übernachtung, Save/Load und Kartenmarker prüfen.
+- Ohne expliziten Produktionsendpunkt wird keine öffentliche Overpass-Instanz als Fallback verwendet.
 - Es gibt keine neue Energie-, E-Bike- oder Akkurechenlogik.
 - Bei 390 und 768 px entsteht kein horizontaler Overflow; Browserkonsole und Layout bleiben fehlerfrei.
 

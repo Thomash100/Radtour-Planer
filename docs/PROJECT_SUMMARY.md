@@ -77,6 +77,7 @@ Enthalten:
 - gemeinsame Navigation mit Übergabe der vorhandenen Routengrundlage über denselben lokalen TourState
 - verständlicher Leerzustand der Etappenplanung, solange keine Route vorhanden ist
 - kompatible Weiterleitung alter `/planer`-Links
+- Weitergabe der vorhandenen `ACCOMMODATION_*`-Konfiguration an den Raspberry-Pi-App-Container, damit der explizite `local-test`-Provider reproduzierbar für die Abnahme aktiviert werden kann
 
 Nicht enthalten:
 
