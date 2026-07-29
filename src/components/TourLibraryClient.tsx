@@ -166,13 +166,13 @@ export function TourLibraryClient() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/planer?open=last">
+            <Link href="/planer/route?open=last">
               <FolderOpen className="h-4 w-4" />
               Letzte Tour öffnen
             </Link>
           </Button>
           <Button asChild>
-            <Link href="/planer?mode=gpx">GPX laden</Link>
+            <Link href="/planer/route?mode=gpx">GPX laden</Link>
           </Button>
         </div>
       </div>
@@ -246,7 +246,7 @@ export function TourLibraryClient() {
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Button asChild onClick={() => openTour(entry)}>
-                    <Link href={`/planer?tour=${encodeURIComponent(entry.id)}`}>
+                    <Link href={`/planer/route?tour=${encodeURIComponent(entry.id)}`}>
                       <FolderOpen className="h-4 w-4" />
                       Öffnen
                     </Link>

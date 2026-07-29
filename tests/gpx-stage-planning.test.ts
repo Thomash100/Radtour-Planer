@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -46,10 +47,45 @@ import {
   MAP_MIN_ZOOM,
   OSM_SOURCE_MAX_ZOOM
 } from "../src/lib/map-zoom";
+import {
+  isPlannerStepForWorkflow,
+  normalizePlannerStep,
+  resolvePlannerStep
+} from "../src/lib/planner-workflow";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
 import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
+
+test("Planungsbereiche erlauben nur ihre eigenen Arbeitsschritte", () => {
+  assert.equal(isPlannerStepForWorkflow("overview", "route"), true);
+  assert.equal(isPlannerStepForWorkflow("stage-edit", "route"), false);
+  assert.equal(isPlannerStepForWorkflow("stage-create", "stages"), true);
+  assert.equal(isPlannerStepForWorkflow("trim", "stages"), false);
+  assert.equal(normalizePlannerStep("stages"), "stage-edit");
+});
+
+test("Etappenplanung übernimmt die gemeinsame Route ohne Routenarbeitsschritt", () => {
+  assert.equal(
+    resolvePlannerStep({
+      workflowView: "stages",
+      preferredStep: "overview",
+      inputMode: "gpx",
+      hasRoute: true,
+      hasStages: false
+    }),
+    "stage-create"
+  );
+  assert.equal(
+    resolvePlannerStep({
+      workflowView: "stages",
+      inputMode: "direct",
+      hasRoute: true,
+      hasStages: true
+    }),
+    "stage-edit"
+  );
+});
 
 const routeGeometry: LineStringGeoJson = {
   type: "LineString",
@@ -204,6 +240,16 @@ test("selects accommodation providers explicitly and keeps production endpoint c
   });
   assert.equal(result.pois.length, 0);
   assert.match(result.warning ?? "", /nicht konfiguriert/i);
+});
+
+test("forwards explicit accommodation provider settings to the Raspberry Pi app container", () => {
+  const compose = readFileSync(new URL("../docker-compose.rpi.yml", import.meta.url), "utf8");
+
+  assert.match(compose, /ACCOMMODATION_PROVIDER: "\$\{ACCOMMODATION_PROVIDER:-production\}"/);
+  assert.match(compose, /ACCOMMODATION_API_URL: "\$\{ACCOMMODATION_API_URL:-\}"/);
+  assert.match(compose, /ACCOMMODATION_TIMEOUT_MS: "\$\{ACCOMMODATION_TIMEOUT_MS:-4000\}"/);
+  assert.match(compose, /ACCOMMODATION_CACHE_TTL_MS: "\$\{ACCOMMODATION_CACHE_TTL_MS:-900000\}"/);
+  assert.doesNotMatch(compose, /ACCOMMODATION_API_URL: "https?:\/\/.*overpass/i);
 });
 
 test("routes accommodation detours with separate BRouter out-and-back geometry", async () => {

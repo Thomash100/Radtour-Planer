@@ -1,14 +1,8 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { PlannerClient } from "@/components/PlannerClient";
+import { normalizePlannerStep } from "@/lib/planner-workflow";
 
-export const metadata: Metadata = {
-  title: "Planer",
-  description:
-    "GPX-Route laden, kürzen, Etappen erzeugen, Orte projizieren, Unterkünfte vormerken und die gesamte Tour speichern."
-};
-
-export default function PlannerPage({
+export default function PlannerCompatibilityPage({
   searchParams
 }: {
   searchParams?: {
@@ -20,14 +14,16 @@ export default function PlannerPage({
     tour?: string;
   };
 }) {
-  return (
-    <PlannerClient
-      initialEnd={searchParams?.end ?? ""}
-      initialMode={searchParams?.mode}
-      initialStart={searchParams?.start ?? ""}
-      initialStep={searchParams?.step}
-      initialTourId={searchParams?.tour}
-      openLast={searchParams?.open === "last"}
-    />
-  );
+  const params = new URLSearchParams();
+  Object.entries(searchParams ?? {}).forEach(([key, value]) => {
+    if (value) {
+      params.set(key, value);
+    }
+  });
+
+  const step = normalizePlannerStep(searchParams?.step);
+  const target = step === "stage-create" || step === "stage-edit" ? "/planer/etappen" : "/planer/route";
+  const query = params.toString();
+
+  redirect(query ? `${target}?${query}` : target);
 }

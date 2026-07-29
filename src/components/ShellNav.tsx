@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 const links = [
-  { href: "/planer", label: "Planer", icon: Map },
+  { href: "/planer/route", label: "Planer", icon: Map },
   { href: "/touren", label: "Touren", icon: FolderOpen },
   { href: "/partner", label: "Partner", icon: Building2 },
   { href: "/mvp-hinweis", label: "MVP", icon: FlaskConical },
@@ -35,7 +35,7 @@ export function ShellNav() {
           })}
         </nav>
         <Button asChild size="sm">
-          <Link href="/planer?mode=gpx">GPX laden</Link>
+          <Link href="/planer/route?mode=gpx">GPX laden</Link>
         </Button>
       </div>
     </header>

@@ -30,6 +30,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
+import { PlannerWorkflowNavigation } from "@/components/PlannerWorkflowNavigation";
 import { categoryIcon, RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,15 @@ import {
   type StageBreakpoint
 } from "@/lib/geo";
 import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type StoredTourState, type TourInputMode } from "@/lib/tour-state";
+import {
+  isPlannerStepForWorkflow,
+  normalizePlannerStep,
+  resolvePlannerStep,
+  routePlannerSteps,
+  stagePlannerSteps,
+  type PlannerStep,
+  type PlannerWorkflowView
+} from "@/lib/planner-workflow";
 import {
   TOUR_LIBRARY_STORAGE_KEY,
   createTourLibraryEntry,
@@ -184,7 +194,6 @@ const leadSchema = z.object({
 
 type PlannerForm = z.infer<typeof plannerSchema>;
 type LeadForm = z.infer<typeof leadSchema>;
-type PlannerStep = "mode" | "direct" | "gpx" | "overview" | "trim" | "stage-create" | "stage-edit";
 type VisualizationMode = "map" | "elevation";
 type PendingDirectPlan = {
   values: PlannerForm;
@@ -318,25 +327,6 @@ function normalizeTourMode(value?: string): TourInputMode | null {
   return null;
 }
 
-function normalizePlannerStep(value?: string): PlannerStep | null {
-  if (value === "edit" || value === "stages") {
-    return "stage-edit";
-  }
-
-  if (
-    value === "mode" ||
-    value === "direct" ||
-    value === "gpx" ||
-    value === "overview" ||
-    value === "trim" ||
-    value === "stage-create" ||
-    value === "stage-edit"
-  ) {
-    return value;
-  }
-  return null;
-}
-
 function routeWithOriginalGeometry<T extends RouteCalculation>(routeData: T): T {
   const originalGeometryGeoJson = routeData.originalGeometryGeoJson ?? routeData.geometryGeoJson;
   const originalDistanceKm = routeDistanceKm(originalGeometryGeoJson.coordinates);
@@ -405,7 +395,8 @@ export function PlannerClient({
   initialMode,
   initialStep,
   initialTourId,
-  openLast = false
+  openLast = false,
+  workflowView = "route"
 }: {
   initialStart?: string;
   initialEnd?: string;
@@ -413,12 +404,19 @@ export function PlannerClient({
   initialStep?: string;
   initialTourId?: string;
   openLast?: boolean;
+  workflowView?: PlannerWorkflowView;
 }) {
   const normalizedInitialMode = normalizeTourMode(initialMode);
   const normalizedInitialStep = normalizePlannerStep(initialStep);
-  const initialPlannerStep =
-    normalizedInitialStep ?? (normalizedInitialMode === "direct" ? "direct" : normalizedInitialMode === "gpx" ? "gpx" : "mode");
-  const [inputMode, setInputMode] = useState<TourInputMode>(normalizedInitialMode ?? "direct");
+  const initialInputMode = normalizedInitialMode ?? "direct";
+  const initialPlannerStep = resolvePlannerStep({
+    workflowView,
+    preferredStep: normalizedInitialStep ?? (workflowView === "route" && !normalizedInitialMode ? "mode" : null),
+    inputMode: initialInputMode,
+    hasRoute: false,
+    hasStages: false
+  });
+  const [inputMode, setInputMode] = useState<TourInputMode>(initialInputMode);
   const [plannerStep, setPlannerStep] = useState<PlannerStep>(initialPlannerStep);
   const [waypoints, setWaypoints] = useState<string[]>([]);
   const [draggedWaypointIndex, setDraggedWaypointIndex] = useState<number | null>(null);
@@ -904,10 +902,17 @@ export function PlannerClient({
       }
       setStageAccommodations(stored.stageAccommodations ?? {});
       setLastTourSavedAt(stored.lastSavedAt ?? null);
-      setPlannerStep("overview");
+      setPlannerStep(
+        resolvePlannerStep({
+          workflowView,
+          inputMode: stored.inputMode,
+          hasRoute: true,
+          hasStages: stored.stages.length > 0
+        })
+      );
       setStatus(stored.status ? `${message} ${stored.status}` : message);
     },
-    [plannerForm]
+    [plannerForm, workflowView]
   );
 
   useEffect(() => {
@@ -932,7 +937,15 @@ export function PlannerClient({
         window.localStorage.setItem(TOUR_STATE_STORAGE_KEY, JSON.stringify(nextEntry.state));
         window.localStorage.setItem(TOUR_LIBRARY_STORAGE_KEY, serializeTourLibrary(upsertTourLibraryEntry(library, nextEntry)));
         restoreStoredTourState(nextEntry.state, "Tour aus Verwaltung geladen.");
-        setPlannerStep(urlStep ?? "overview");
+        setPlannerStep(
+          resolvePlannerStep({
+            workflowView,
+            preferredStep: urlStep,
+            inputMode: nextEntry.state.inputMode,
+            hasRoute: true,
+            hasStages: nextEntry.state.stages.length > 0
+          })
+        );
         return;
       }
       setStatus("Tour aus Verwaltung nicht gefunden.");
@@ -940,7 +953,15 @@ export function PlannerClient({
       const stored = parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY));
       if (stored?.route) {
         restoreStoredTourState(stored, "Gespeicherte Tour geladen.");
-        setPlannerStep(urlStep ?? "overview");
+        setPlannerStep(
+          resolvePlannerStep({
+            workflowView,
+            preferredStep: urlStep,
+            inputMode: stored.inputMode,
+            hasRoute: true,
+            hasStages: stored.stages.length > 0
+          })
+        );
         return;
       }
       setStatus("Keine gespeicherte Tour im Browser gefunden.");
@@ -948,17 +969,38 @@ export function PlannerClient({
 
     if (urlMode) {
       setInputMode(urlMode);
-      setPlannerStep(urlMode === "demo" ? "mode" : urlMode);
+      setPlannerStep(
+        resolvePlannerStep({
+          workflowView,
+          preferredStep: urlMode === "demo" ? "mode" : urlMode,
+          inputMode: urlMode,
+          hasRoute: false,
+          hasStages: false
+        })
+      );
     }
 
-    if (urlStep) {
+    if (urlStep && isPlannerStepForWorkflow(urlStep, workflowView)) {
       setPlannerStep(urlStep);
     }
-  }, [initialMode, initialStep, initialTourId, openLast, restoreStoredTourState]);
+  }, [initialMode, initialStep, initialTourId, openLast, restoreStoredTourState, workflowView]);
 
   useEffect(() => {
     persistStoredTourState(buildStoredTourState());
   }, [buildStoredTourState, persistStoredTourState]);
+
+  useEffect(() => {
+    if (!isPlannerStepForWorkflow(plannerStep, workflowView)) {
+      setPlannerStep(
+        resolvePlannerStep({
+          workflowView,
+          inputMode,
+          hasRoute: Boolean(route),
+          hasStages: stages.length > 0
+        })
+      );
+    }
+  }, [inputMode, plannerStep, route, stages.length, workflowView]);
 
   useEffect(() => {
     if (stages.length === 0) {
@@ -2256,33 +2298,42 @@ export function PlannerClient({
 
   const workflowHeader = (
     <section className="rounded-lg border bg-white p-3 shadow-sm">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="text-sm text-muted-foreground">Planungsworkflow</div>
-          <h1 className="text-2xl font-semibold">Radreise planen</h1>
-          <p className="text-sm text-muted-foreground">Modus: {modeLabel}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {[
-            ["mode", "Eingabeart"],
-            ["direct", "Route"],
-            ["gpx", "GPX"],
-            ["overview", "Übersicht"],
-            ["trim", "Route kürzen"],
-            ["stage-create", "Etappen erzeugen"],
-            ["stage-edit", "Etappen bearbeiten"]
-          ].map(([step, label]) => (
-            <Button
-              key={step}
-              disabled={(step === "overview" || step === "trim" || step === "stage-create" || step === "stage-edit") && !route}
-              size="sm"
-              type="button"
-              variant={plannerStep === step ? "default" : "outline"}
-              onClick={() => setPlannerStep(step as PlannerStep)}
-            >
-              {label}
-            </Button>
-          ))}
+      <div className="flex flex-col gap-4">
+        <PlannerWorkflowNavigation activeView={workflowView} hasRoute={Boolean(route)} />
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-sm text-muted-foreground">Planungsworkflow</div>
+            <h1 className="text-2xl font-semibold">{workflowView === "route" ? "Routenplanung" : "Etappenplanung"}</h1>
+            <p className="text-sm text-muted-foreground">
+              {workflowView === "route"
+                ? `Grundroute festlegen und speichern · Modus: ${modeLabel}`
+                : route
+                  ? `${route.startName} – ${route.endName} · gemeinsame Routengrundlage`
+                  : "Benötigt eine gespeicherte Routengrundlage"}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(workflowView === "route" ? routePlannerSteps : stagePlannerSteps).map((step) => (
+              <Button
+                key={step}
+                disabled={(step === "overview" || step === "trim" || step === "stage-create" || step === "stage-edit") && !route}
+                size="sm"
+                type="button"
+                variant={plannerStep === step ? "default" : "outline"}
+                onClick={() => setPlannerStep(step)}
+              >
+                {{
+                  mode: "Eingabeart",
+                  direct: "Direkte Route",
+                  gpx: "GPX-Import",
+                  overview: "Routenübersicht",
+                  trim: "Route kürzen",
+                  "stage-create": "Etappen erzeugen",
+                  "stage-edit": "Etappen bearbeiten"
+                }[step]}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
     </section>
@@ -2364,7 +2415,7 @@ export function PlannerClient({
               </p>
             </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-2">
             <div className="grid gap-2">
               <Label htmlFor="profile">Profil</Label>
               <Select id="profile" {...plannerForm.register("profile")}>
@@ -2375,14 +2426,6 @@ export function PlannerClient({
                 ))}
               </Select>
               <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="targetKm">Tages-km</Label>
-              <Input id="targetKm" type="number" {...plannerForm.register("targetKm")} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="corridorKm">Korridor km</Label>
-              <Input id="corridorKm" step="0.5" type="number" {...plannerForm.register("corridorKm")} />
             </div>
           </div>
           <Button className="w-full" disabled={isBusy} type="submit">
@@ -2472,16 +2515,21 @@ export function PlannerClient({
           <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{pendingRoutePointSelection.warning}</p>
         </CardContent>
       )}
-      <CardContent className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        <Button type="button" variant="secondary" onClick={applyRoutePointAsStart}>
-          Als Start übernehmen
-        </Button>
-        <Button type="button" variant="secondary" onClick={applyRoutePointAsEnd}>
-          Als Ziel übernehmen
-        </Button>
-        <Button type="button" onClick={applyRoutePointAsStageBreakpoint}>
-          Als Etappenpunkt übernehmen
-        </Button>
+      <CardContent className="grid gap-2 sm:grid-cols-2">
+        {workflowView === "route" ? (
+          <>
+            <Button type="button" variant="secondary" onClick={applyRoutePointAsStart}>
+              Als Start übernehmen
+            </Button>
+            <Button type="button" variant="secondary" onClick={applyRoutePointAsEnd}>
+              Als Ziel übernehmen
+            </Button>
+          </>
+        ) : (
+          <Button type="button" onClick={applyRoutePointAsStageBreakpoint}>
+            Als Etappenpunkt übernehmen
+          </Button>
+        )}
         <Button type="button" variant="outline" onClick={() => setPendingRoutePointSelection(null)}>
           Abbrechen
         </Button>
@@ -2515,6 +2563,31 @@ export function PlannerClient({
       </p>
     </div>
   );
+
+  if (workflowView === "stages" && !route) {
+    return (
+      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6">
+        {workflowHeader}
+        <Card>
+          <CardHeader>
+            <CardTitle>Keine Routengrundlage vorhanden</CardTitle>
+            <CardDescription>
+              Die Etappenplanung verwendet denselben TourState wie die Routenplanung. Plane oder lade dort zuerst eine Route.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button asChild>
+              <Link href="/planer/route">
+                <Route className="h-4 w-4" />
+                Zur Routenplanung
+              </Link>
+            </Button>
+            <p className="text-sm text-muted-foreground">{status}</p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   if (plannerStep === "mode") {
     return (
@@ -2570,7 +2643,7 @@ export function PlannerClient({
             </CardHeader>
             <CardContent>
               <Button asChild className="w-full" variant="outline">
-                <Link href="/planer?open=last">
+                <Link href="/planer/route?open=last">
                   <FileText className="h-4 w-4" />
                   Tour öffnen
                 </Link>
@@ -2637,7 +2710,7 @@ export function PlannerClient({
           <CardHeader>
             <CardTitle>Weitere GPX-Datei importieren</CardTitle>
             <CardDescription>
-              Eine neu ausgewählte GPX-Datei legt eine neue Arbeitsroute an. Für die geladene Route nutze Route kürzen, Etappen erzeugen oder Etappen bearbeiten.
+              Eine neu ausgewählte GPX-Datei legt eine neue Arbeitsroute an. Die geladene Grundlage kann anschließend gekürzt, gespeichert und an die Etappenplanung übergeben werden.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -2702,16 +2775,9 @@ export function PlannerClient({
               </div>
             ) : null}
             <RouteMap
-              accommodationDetours={accommodationDetours}
-              pois={mapPois}
               route={route.geometryGeoJson}
-              selectedPoiId={selectedPoi?.id}
-              selectedStageId={selectedStageId}
-              stages={stages}
+              stages={[]}
               waypoints={route.waypoints}
-              onEditStage={selectStageForEditing}
-              onSelectPoi={setSelectedPoi}
-              onSelectStage={selectStageForEditing}
             />
           </div>
           <Card>
@@ -2740,30 +2806,32 @@ export function PlannerClient({
                   Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
                 </p>
               ) : null}
-              {savedRoute ? (
-                <div className="grid gap-2 rounded-md border bg-white p-3">
-                  <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
-                    <Save className="h-4 w-4" />
-                    Alle Änderungen speichern
-                  </Button>
-                  <p className="text-sm font-medium text-emerald-700">
-                    {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Gesamte Tour noch nicht bewusst gespeichert."}
-                  </p>
-                </div>
+              <div className="grid gap-2 rounded-md border bg-white p-3">
+                <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
+                  <Save className="h-4 w-4" />
+                  Grundroute speichern
+                </Button>
+                <p className="text-sm font-medium text-emerald-700">
+                  {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Grundroute noch nicht bewusst gespeichert."}
+                </p>
+              </div>
+              {inputMode === "gpx" ? (
+                <Button className="w-full" type="button" onClick={() => setPlannerStep("trim")}>
+                  <ArrowRight className="h-4 w-4" />
+                  Route kürzen
+                </Button>
               ) : null}
-              <Button className="w-full" type="button" onClick={() => setPlannerStep(inputMode === "gpx" ? "trim" : "stage-edit")}>
-                <ArrowRight className="h-4 w-4" />
-                Weiter bearbeiten
-              </Button>
               <Button asChild className="w-full" variant="outline">
                 <Link href="/planer/karte">
                   <Map className="h-4 w-4" />
                   Vollbildkarte
                 </Link>
               </Button>
-              <Button className="w-full" type="button" variant="secondary" onClick={() => setPlannerStep("stage-edit")}>
-                <Save className="h-4 w-4" />
-                Etappen prüfen
+              <Button asChild className="w-full" variant="secondary">
+                <Link href="/planer/etappen?open=last">
+                  <ArrowRight className="h-4 w-4" />
+                  Zur Etappenplanung
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -2776,8 +2844,8 @@ export function PlannerClient({
     <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
       {workflowHeader}
       {directRouteReplacementCard}
-      <section className={cn("grid gap-4", inputMode === "gpx" ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[360px_minmax(0,1fr)_340px]")}>
-        {inputMode !== "gpx" && (
+      <section className={cn("grid gap-4", workflowView === "stages" && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
+        {workflowView === "route" && plannerStep === "direct" && inputMode !== "gpx" && (
         <aside className="space-y-4">
           <Card>
             <CardHeader>
@@ -2955,7 +3023,10 @@ export function PlannerClient({
             <Metric label="Distanz" value={route ? formatKm(route.distanceKm) : "-"} />
             <Metric label="Höhenmeter" value={route ? `${route.elevationUp} m` : "-"} />
             <Metric label="Fahrzeit" value={route ? formatHours(route.durationHours) : "-"} />
-            <Metric label="Etappen" value={stages.length ? String(stages.length) : "-"} />
+            <Metric
+              label={workflowView === "route" ? "Eingabe" : "Etappen"}
+              value={workflowView === "route" ? modeLabel : stages.length ? String(stages.length) : "-"}
+            />
           </div>
           {routeTrimSummary && (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
@@ -3001,21 +3072,24 @@ export function PlannerClient({
             </div>
             {visualizationMode === "map" ? (
               <RouteMap
-                accommodationDetours={accommodationDetours}
-                pois={mapPois}
+                accommodationDetours={workflowView === "stages" ? accommodationDetours : []}
+                pois={workflowView === "stages" ? mapPois : []}
                 route={route?.geometryGeoJson}
                 routePointSelection={{
                   enabled: isPickingStagePoint,
-                  label: "Auf die GPX-Strecke klicken, um Start, Ziel oder Etappenpunkt zu übernehmen."
+                  label:
+                    workflowView === "route"
+                      ? "Auf die Strecke klicken, um Start oder Ziel der Grundroute zu übernehmen."
+                      : "Auf die Strecke klicken, um einen Etappenpunkt zu übernehmen."
                 }}
-                selectedPoiId={selectedPoi?.id}
-                selectedStageId={selectedStageId}
-                stages={stages}
-                stageBreakpoints={effectiveStageBreakpoints}
+                selectedPoiId={workflowView === "stages" ? selectedPoi?.id : undefined}
+                selectedStageId={workflowView === "stages" ? selectedStageId : undefined}
+                stages={workflowView === "stages" ? stages : []}
+                stageBreakpoints={workflowView === "stages" ? effectiveStageBreakpoints : []}
                 waypoints={route?.waypoints}
-                onEditStage={selectStageForEditing}
-                onSelectPoi={setSelectedPoi}
-                onSelectStage={selectStageForEditing}
+                onEditStage={workflowView === "stages" ? selectStageForEditing : undefined}
+                onSelectPoi={workflowView === "stages" ? setSelectedPoi : undefined}
+                onSelectStage={workflowView === "stages" ? selectStageForEditing : undefined}
                 onRoutePointSelect={captureRoutePointSelection}
               />
             ) : (
@@ -3028,9 +3102,9 @@ export function PlannerClient({
               <div className="flex flex-wrap gap-2">
                 <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
                   <Save className="h-4 w-4" />
-                  Alle Änderungen speichern
+                  {workflowView === "route" ? "Grundroute speichern" : "Alle Änderungen speichern"}
                 </Button>
-                {savedRoute && (
+                {workflowView === "stages" && savedRoute && (
                   <>
                     <Button asChild>
                       <Link href={`/reiseplan/${savedRoute.id}`}>
@@ -3062,16 +3136,20 @@ export function PlannerClient({
                   <ArrowDownToLine className="h-4 w-4" />
                   GPX exportieren
                 </Button>
-                <Button disabled={!route || stages.length === 0} type="button" variant="secondary" onClick={exportGpxWithStageTracks}>
-                  <ArrowDownToLine className="h-4 w-4" />
-                  Etappen-GPX
-                </Button>
+                {workflowView === "stages" && (
+                  <Button disabled={!route || stages.length === 0} type="button" variant="secondary" onClick={exportGpxWithStageTracks}>
+                    <ArrowDownToLine className="h-4 w-4" />
+                    Etappen-GPX
+                  </Button>
+                )}
               </div>
               <p className="text-sm font-medium text-emerald-700">
                 {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Gesamte Tour noch nicht bewusst gespeichert."}
               </p>
               <p className="text-xs text-muted-foreground">
-                GPX exportiert die bearbeitete Routengeometrie. Etappen-GPX schreibt zusätzlich jede Etappe als eigenen Track; Unterkunftsmetadaten bleiben im Tour-JSON.
+                {workflowView === "route"
+                  ? "GPX exportiert die aktuelle Grundroute. Etappen und Unterkünfte bleiben bei dieser Bearbeitung unverändert im gemeinsamen TourState."
+                  : "GPX exportiert die bearbeitete Routengeometrie. Etappen-GPX schreibt zusätzlich jede Etappe als eigenen Track; Unterkunftsmetadaten bleiben im Tour-JSON."}
               </p>
             </div>
           )}
@@ -3086,7 +3164,7 @@ export function PlannerClient({
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">
-                    Die GPX-Route bleibt die feste Grundlage. Orte und Kartenpunkte werden nur auf die vorhandene Route projiziert und erst nach Bestätigung als Start, Ziel oder Etappenpunkt übernommen.
+                    Die GPX-Route bleibt die feste Grundlage. Orte und Kartenpunkte werden nur auf die vorhandene Route projiziert und erst nach Bestätigung als Start oder Ziel übernommen.
                   </div>
                   {placeSearchControls}
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -3816,7 +3894,7 @@ export function PlannerClient({
           </div>
         </section>
 
-        <aside className="space-y-4">
+        {workflowView === "stages" && <aside className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>POI und Angebote</CardTitle>
@@ -3941,7 +4019,7 @@ export function PlannerClient({
               )}
             </CardContent>
           </Card>
-        </aside>
+        </aside>}
       </section>
     </main>
   );

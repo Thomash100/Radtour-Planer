@@ -1,5 +1,16 @@
 # Changelog
 
+## Paket 15 - 2026-07-29
+
+- Routenplanung unter `/planer/route` und Etappenplanung unter `/planer/etappen` als eigene Bedienbereiche getrennt
+- gemeinsame Navigation zwischen beiden Planungsbereichen ergänzt
+- vorhandenen Browser-TourState als unveränderte gemeinsame Routengrundlage beibehalten
+- Routenansicht auf Direkteingabe, GPX-Import, Grundroute, Karte, Radwegeanteil und Höhenprofil fokussiert
+- Etappenansicht auf Erzeugung, Vorschau und Bearbeitung der Etappen fokussiert
+- alte `/planer`-Links kompatibel auf den passenden neuen Bereich weitergeleitet
+- vorhandene `ACCOMMODATION_*`-Konfiguration für die Raspberry-Pi-Abnahme an den App-Container weitergereicht
+- keine Energie-, E-Bike- oder Akkurechenlogik ergänzt
+
 ## Paket 14 - 2026-07-28
 
 - routenabhängige Kartenbegrenzung entfernt
