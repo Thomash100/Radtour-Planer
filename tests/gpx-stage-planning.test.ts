@@ -39,6 +39,13 @@ import {
 } from "../src/lib/road-routing";
 import { configuredRoutingProvider } from "../src/lib/routing-provider";
 import { MAX_ROUTE_WAYPOINTS } from "../src/lib/routing-limits";
+import {
+  CYCLOSM_SOURCE_MAX_ZOOM,
+  MAP_AUTO_FIT_MAX_ZOOM,
+  MAP_MAX_ZOOM,
+  MAP_MIN_ZOOM,
+  OSM_SOURCE_MAX_ZOOM
+} from "../src/lib/map-zoom";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
@@ -86,6 +93,17 @@ const stage: AccommodationStageInput & { distanceKm: number } = {
   distanceKm: 64,
   geometryGeoJson: routeGeometry
 };
+
+test("uses the full native map zoom range without limiting manual controls to the route", () => {
+  assert.equal(MAP_MIN_ZOOM, 0);
+  assert.equal(MAP_MAX_ZOOM, 22);
+  assert.equal(OSM_SOURCE_MAX_ZOOM, 19);
+  assert.equal(CYCLOSM_SOURCE_MAX_ZOOM, 20);
+  assert.ok(OSM_SOURCE_MAX_ZOOM < MAP_MAX_ZOOM);
+  assert.ok(CYCLOSM_SOURCE_MAX_ZOOM < MAP_MAX_ZOOM);
+  assert.ok(MAP_AUTO_FIT_MAX_ZOOM > MAP_MIN_ZOOM);
+  assert.ok(MAP_AUTO_FIT_MAX_ZOOM < MAP_MAX_ZOOM);
+});
 
 test("labels real OSM accommodation data distinctly", () => {
   assert.equal(accommodationDataQualityLabel("osm"), "OSM-Daten");

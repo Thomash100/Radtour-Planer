@@ -1,5 +1,13 @@
 # Changelog
 
+## Paket 14 - 2026-07-28
+
+- routenabhängige Kartenbegrenzung entfernt
+- Zoom-Schaltflächen auf den vollständigen MapLibre-Bereich von 0 bis 22 erweitert
+- native OSM-/CyclOSM-Kachelstufen begrenzt und darüber sauberes Überzoomen aktiviert
+- automatisches Zentrieren der Route von den manuellen Zoomgrenzen getrennt
+- Touch-, Mausrad-, Tastatur- und Save/Load-Verhalten unverändert gelassen
+
 ## Paket 13 - 2026-07-26
 
 - Unterkunft als persistente Etappenentität ergänzt
