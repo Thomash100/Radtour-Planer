@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-29
+Stand: 2026-07-30
 
 ## Produktstand
 
@@ -23,7 +23,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunft je Etappe vormerken oder als Übernachtung persistent auswählen.
 - Unterkunft abseits der Hauptroute als echten BRouter-Hin- und Rückweg separat routen und darstellen.
 - Karte über Schaltflächen, Touch, Mausrad und Tastatur ohne routenabhängige Zoomgrenzen bedienen.
-- Persönliches Fahrer-, Fahrrad- und E-Bike-Grundprofil zentral speichern sowie als JSON exportieren und importieren.
+- Persönliches Fahrer-, Fahrrad-, E-Bike- und Ladeprofil zentral speichern sowie als JSON exportieren und importieren.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -40,7 +40,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Orte verlegen die GPX-Route nicht automatisch; Unterkunftsabstecher werden separat geroutet und verändern die Hauptroute nicht.
 - Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
 - Wetter, Oberfläche, individuelle Leistungsfähigkeit und E-Bike-Akkureichweite werden in der Etappenbewertung noch nicht berücksichtigt.
-- Das persönliche Profil wird in Paket 16 noch nicht für Belastungs-, Energie-, Reichweiten- oder Etappenberechnungen verwendet.
+- Das persönliche Profil wird auch in Paket 17 noch nicht für Belastungs-, Energie-, Reichweiten-, Ladezeit- oder Etappenberechnungen verwendet.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -58,16 +58,39 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 13: Unterkunftsplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #63 in `private` gemergt.
 - Paket 14: Kartenzoom nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #64 in `private` gemergt.
 - Paket 15: Trennung der Bedienstruktur für Routen- und Etappenplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #65 in `private` gemergt.
-- Paket 16: Persönliches Fahrer- und Fahrradprofil auf Branch `codex/rider-bike-profile` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
-- Reiseauftrag: PR #61 wird erst nach Abschluss von Paket 16 fortgeführt.
+- Paket 16: Persönliches Fahrer- und Fahrradprofil nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #66 in `private` gemergt.
+- Paket 17: E-Bike- und Ladeprofil auf Branch `codex/ebike-charging-profile` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Ausgangsbasis für Paket 16:
+Ausgangsbasis für Paket 17:
 
-- `private`: `a750c98b954326985a3743e3f4ec551a354d5c4b` (Merge von PR #65)
-- getrennte Routen- und Etappenbedienung fachlich und auf dem Raspberry Pi abgenommen
-- bestehender TourState bleibt die gemeinsame Routengrundlage und erhält einen validierten Profilsnapshot
+- `private`: `e0bf72cc75424bf13c732d7d590e38daf286213d` (Merge von PR #66)
+- zentrales Fahrer- und Fahrradprofil fachlich und auf dem Raspberry Pi abgenommen
+- bestehender TourState enthält den validierten Profilsnapshot
 - keine Änderung an Routing, Etappenerzeugung oder Unterkunftslogik
-- keine Energie-, Reichweiten- oder Akkuverbrauchsberechnung
+- weiterhin keine Energie-, Reichweiten-, Ladezeit- oder Akkuverbrauchsberechnung
+
+## Paket 17: E-Bike- und Ladeprofil
+
+Paket 17 vervollständigt die Datenbasis für den späteren Rechenkern.
+
+Enthalten:
+
+- nutzbarer Anteil der Akkukapazität
+- Motorunterstützung in Prozent
+- Ladegerätleistung und Ladeverluste
+- persönliches Fahrprofil
+- rückwärtskompatible Standardwerte für gespeicherte Paket-16-Profile
+- Speicherung, Reload, TourState sowie Profil- und Tour-JSON
+
+Nicht enthalten:
+
+- Energiebedarf aus Distanz oder Höhenprofil
+- Fahrer-/Motoranteil, Akkuverbrauch oder Reichweitenprognose
+- Ladezeitberechnung oder Ladepunkte
+- Warnungen oder automatische Etappenoptimierung
+
+Diese deterministische Rechenlogik folgt getrennt in Paket 18.
 
 ## Paket 16: Persönliches Fahrer- und Fahrradprofil
 

@@ -7,6 +7,7 @@ export const fitnessLevels = ["low", "moderate", "high", "very_high"] as const;
 export const experienceLevels = ["beginner", "experienced", "expert"] as const;
 export const bikeTypes = ["trekking", "touring", "gravel", "road", "mountain", "cargo", "ebike"] as const;
 export const assistanceProfiles = ["eco", "tour", "sport", "auto"] as const;
+export const personalRidingStyles = ["economical", "balanced", "sportive"] as const;
 
 export const fitnessLevelLabels: Record<(typeof fitnessLevels)[number], string> = {
   low: "Gelegentlich aktiv",
@@ -38,6 +39,12 @@ export const assistanceProfileLabels: Record<(typeof assistanceProfiles)[number]
   auto: "Automatisch"
 };
 
+export const personalRidingStyleLabels: Record<(typeof personalRidingStyles)[number], string> = {
+  economical: "Reichweitenorientiert",
+  balanced: "Ausgewogen",
+  sportive: "Sportlich"
+};
+
 const riderBikeProfileObjectSchema = z.object({
   schemaVersion: z.literal(1),
   rider: z.object({
@@ -56,10 +63,15 @@ const riderBikeProfileObjectSchema = z.object({
     ebike: z.object({
       batteryCapacityWh: z.number().finite().min(100).max(2500),
       batteryCount: z.number().int().min(1).max(6),
+      usableBatteryCapacityPercent: z.number().finite().min(10).max(100).default(90),
       motorPowerW: z.number().finite().min(100).max(1500),
+      motorAssistancePercent: z.number().finite().min(0).max(400).default(100),
       referenceRangeKm: z.number().finite().min(10).max(500),
       assistanceProfile: z.enum(assistanceProfiles),
-      desiredReservePercent: z.number().finite().min(0).max(60)
+      desiredReservePercent: z.number().finite().min(0).max(60),
+      chargerPowerW: z.number().finite().min(20).max(1000).default(100),
+      chargingLossPercent: z.number().finite().min(0).max(40).default(10),
+      personalRidingStyle: z.enum(personalRidingStyles).default("balanced")
     })
   })
 });
@@ -99,10 +111,15 @@ export const DEFAULT_RIDER_BIKE_PROFILE: RiderBikeProfile = {
     ebike: {
       batteryCapacityWh: 500,
       batteryCount: 1,
+      usableBatteryCapacityPercent: 90,
       motorPowerW: 250,
+      motorAssistancePercent: 100,
       referenceRangeKm: 80,
       assistanceProfile: "tour",
-      desiredReservePercent: 20
+      desiredReservePercent: 20,
+      chargerPowerW: 100,
+      chargingLossPercent: 10,
+      personalRidingStyle: "balanced"
     }
   }
 };

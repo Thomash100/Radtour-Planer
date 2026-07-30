@@ -1,5 +1,14 @@
 # Changelog
 
+## Paket 17 - 2026-07-30
+
+- zentrales E-Bike-Profil um nutzbare Akkukapazität, Motorunterstützung und persönliches Fahrprofil erweitert
+- Ladegerätleistung und Ladeverluste als validierte Ladeparameter ergänzt
+- bestehende Paket-16-Profile durch definierte Standardwerte rückwärtskompatibel gehalten
+- Speicherung, TourState sowie Profil- und Tour-JSON um die neuen Parameter erweitert
+- keine Verbrauchs-, Reichweiten-, Ladezeit- oder Etappenberechnung ergänzt
+- neuen Projektstandard dokumentiert: Ein neuer Auftrag bestätigt den Prüflauf des unmittelbar vorherigen Pakets
+
 ## Paket 16 - 2026-07-29
 
 - zentrale Fahrer-, Fahrrad- und E-Bike-Profiltypen mit gemeinsamer Validierung ergänzt
