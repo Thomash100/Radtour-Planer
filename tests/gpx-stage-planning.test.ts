@@ -88,8 +88,13 @@ const riderBikeProfile = {
       ...DEFAULT_RIDER_BIKE_PROFILE.bike.ebike,
       batteryCapacityWh: 625,
       batteryCount: 2,
+      usableBatteryCapacityPercent: 88,
+      motorAssistancePercent: 140,
       referenceRangeKm: 95,
-      desiredReservePercent: 25
+      desiredReservePercent: 25,
+      chargerPowerW: 180,
+      chargingLossPercent: 12,
+      personalRidingStyle: "economical" as const
     }
   }
 };
@@ -100,6 +105,11 @@ test("validiert das zentrale Fahrer- und Fahrradprofil", () => {
   assert.equal(parsed?.rider.name, "Testfahrerin");
   assert.equal(parsed?.bike.type, "ebike");
   assert.equal(parsed?.bike.ebike.batteryCount, 2);
+  assert.equal(parsed?.bike.ebike.usableBatteryCapacityPercent, 88);
+  assert.equal(parsed?.bike.ebike.motorAssistancePercent, 140);
+  assert.equal(parsed?.bike.ebike.chargerPowerW, 180);
+  assert.equal(parsed?.bike.ebike.chargingLossPercent, 12);
+  assert.equal(parsed?.bike.ebike.personalRidingStyle, "economical");
   assert.equal(
     parseRiderBikeProfileValue({
       ...riderBikeProfile,
@@ -111,6 +121,36 @@ test("validiert das zentrale Fahrer- und Fahrradprofil", () => {
     }),
     null
   );
+  assert.equal(
+    parseRiderBikeProfileValue({
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          usableBatteryCapacityPercent: 101
+        }
+      }
+    }),
+    null
+  );
+});
+
+test("ergänzt Paket-16-Profile rückwärtskompatibel um Ladeparameter", () => {
+  const package16Profile = JSON.parse(JSON.stringify(riderBikeProfile));
+  delete package16Profile.bike.ebike.usableBatteryCapacityPercent;
+  delete package16Profile.bike.ebike.motorAssistancePercent;
+  delete package16Profile.bike.ebike.chargerPowerW;
+  delete package16Profile.bike.ebike.chargingLossPercent;
+  delete package16Profile.bike.ebike.personalRidingStyle;
+
+  const parsed = parseRiderBikeProfileValue(package16Profile);
+
+  assert.equal(parsed?.bike.ebike.usableBatteryCapacityPercent, 90);
+  assert.equal(parsed?.bike.ebike.motorAssistancePercent, 100);
+  assert.equal(parsed?.bike.ebike.chargerPowerW, 100);
+  assert.equal(parsed?.bike.ebike.chargingLossPercent, 10);
+  assert.equal(parsed?.bike.ebike.personalRidingStyle, "balanced");
 });
 
 test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {
@@ -120,6 +160,8 @@ test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {
   assert.equal(profileExport.schema, RIDER_BIKE_PROFILE_EXPORT_SCHEMA);
   assert.equal(restored?.rider.name, "Testfahrerin");
   assert.equal(restored?.bike.ebike.batteryCapacityWh, 625);
+  assert.equal(restored?.bike.ebike.chargerPowerW, 180);
+  assert.equal(restored?.bike.ebike.personalRidingStyle, "economical");
   assert.equal(parseRiderBikeProfileExport(JSON.stringify({ ...profileExport, schema: "unknown" })), null);
 });
 
@@ -138,6 +180,7 @@ test("bewahrt das Fahrer- und Fahrradprofil im TourState", () => {
   assert.equal(stored?.riderBikeProfile?.rider.name, "Testfahrerin");
   assert.equal(stored?.riderBikeProfile?.bike.type, "ebike");
   assert.equal(stored?.riderBikeProfile?.bike.ebike.desiredReservePercent, 25);
+  assert.equal(stored?.riderBikeProfile?.bike.ebike.chargingLossPercent, 12);
 });
 
 test("übernimmt das Profil in Tour-Speicherung und Tour-JSON", () => {
@@ -164,6 +207,7 @@ test("übernimmt das Profil in Tour-Speicherung und Tour-JSON", () => {
 
   assert.equal(restored?.state.riderBikeProfile?.rider.name, "Testfahrerin");
   assert.equal(restored?.state.riderBikeProfile?.bike.ebike.batteryCount, 2);
+  assert.equal(restored?.state.riderBikeProfile?.bike.ebike.motorAssistancePercent, 140);
 });
 
 test("Planungsbereiche erlauben nur ihre eigenen Arbeitsschritte", () => {

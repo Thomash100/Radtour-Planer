@@ -217,6 +217,21 @@ Persönliches Fahrer- und Fahrradprofil auf Desktop, Tablet, Smartphone und Rasp
 - Es wird keine Energie-, Reichweiten-, Ladepunkt- oder automatische Etappenberechnung angezeigt oder ausgelöst.
 - Bei 390 und 768 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
 
+## Paket 17
+
+E-Bike- und Ladeprofil auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
+
+- Fahrradtyp `E-Bike` wählen.
+- Nutzbare Akkukapazität, Motorunterstützung, Ladegerätleistung und Ladeverluste speichern.
+- Persönliches Fahrprofil zwischen `Reichweitenorientiert`, `Ausgewogen` und `Sportlich` wechseln.
+- Nach Reload werden alle Paket-16- und Paket-17-Werte wieder angezeigt.
+- Profil als JSON exportieren und erneut importieren; die neuen Ladeparameter bleiben erhalten.
+- Eine Tour speichern und als JSON exportieren; der Profilsnapshot im TourState enthält die neuen Parameter.
+- Ein Profil aus Paket 16 ohne neue Felder laden; definierte Standardwerte werden ergänzt.
+- Werte außerhalb der sichtbaren Eingabegrenzen werden abgelehnt.
+- Es wird weiterhin keine Energie-, Reichweiten-, Ladezeit- oder Etappenberechnung angezeigt oder ausgelöst.
+- Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

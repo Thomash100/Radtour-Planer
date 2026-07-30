@@ -49,7 +49,9 @@ Ab Paket 16 gilt für alle Entwicklungspakete verbindlich:
 6. Ausdrückliche Merge-Freigabe des Auftraggebers abwarten.
 7. Erst danach Draft auf Ready setzen, nach `private` mergen, `private` aktualisieren und das nächste Paket beginnen.
 
-Ohne die ausdrückliche Formulierung `PR #<nummer> ist zum Merge freigegeben.` darf Codex keinen Paket-PR mergen. Eine technische oder fachliche Abnahme allein ersetzt diese Freigabe nicht.
+Erteilt der Auftraggeber einen neuen Entwicklungsauftrag, gilt der dokumentierte Prüflauf des unmittelbar vorherigen Pakets automatisch als bestätigt. Codex fragt diese Bestätigung nicht erneut ab.
+
+Vor dem Merge bleibt eine ausdrückliche, im Kontext eindeutige Merge-Freigabe erforderlich. Formulierungen wie `PR #<nummer> ist zum Merge freigegeben.` oder ein eindeutig auf den betreffenden PR bezogenes `Ist freigegeben` sind gültig. Eine technische oder fachliche Abnahme allein ersetzt diese Freigabe nicht.
 
 ## Branch- und PR-Regel
 

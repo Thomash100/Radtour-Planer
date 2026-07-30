@@ -21,6 +21,8 @@ import {
   experienceLevels,
   fitnessLevelLabels,
   fitnessLevels,
+  personalRidingStyleLabels,
+  personalRidingStyles,
   parseRiderBikeProfileExport,
   parseRiderBikeProfileValue,
   parseStoredRiderBikeProfile,
@@ -377,7 +379,7 @@ export function RiderBikeProfileClient() {
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">
               <BatteryCharging className="h-5 w-5 text-primary" />
-              <CardTitle>E-Bike-Grunddaten</CardTitle>
+              <CardTitle>E-Bike- und Ladeprofil</CardTitle>
               <Badge variant="outline">Nur Datenmodell</Badge>
             </div>
             <CardDescription>
@@ -430,6 +432,30 @@ export function RiderBikeProfileClient() {
               />
             </div>
             <div className="grid gap-2">
+              <Label htmlFor="usable-battery-capacity">Nutzbare Akkukapazität (%)</Label>
+              <Input
+                disabled={!isEbike}
+                id="usable-battery-capacity"
+                max={100}
+                min={10}
+                step={1}
+                type="number"
+                value={profile.bike.ebike.usableBatteryCapacityPercent}
+                onChange={(event) =>
+                  setProfile((current) => ({
+                    ...current,
+                    bike: {
+                      ...current.bike,
+                      ebike: {
+                        ...current.bike.ebike,
+                        usableBatteryCapacityPercent: Number(event.target.value)
+                      }
+                    }
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="motor-power">Motorleistung (W)</Label>
               <Input
                 disabled={!isEbike}
@@ -445,6 +471,27 @@ export function RiderBikeProfileClient() {
                     bike: {
                       ...current.bike,
                       ebike: { ...current.bike.ebike, motorPowerW: Number(event.target.value) }
+                    }
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="motor-assistance">Motorunterstützung (%)</Label>
+              <Input
+                disabled={!isEbike}
+                id="motor-assistance"
+                max={400}
+                min={0}
+                step={5}
+                type="number"
+                value={profile.bike.ebike.motorAssistancePercent}
+                onChange={(event) =>
+                  setProfile((current) => ({
+                    ...current,
+                    bike: {
+                      ...current.bike,
+                      ebike: { ...current.bike.ebike, motorAssistancePercent: Number(event.target.value) }
                     }
                   }))
                 }
@@ -518,6 +565,74 @@ export function RiderBikeProfileClient() {
                 }
               />
             </div>
+            <div className="grid gap-2">
+              <Label htmlFor="charger-power">Ladegerätleistung (W)</Label>
+              <Input
+                disabled={!isEbike}
+                id="charger-power"
+                max={1000}
+                min={20}
+                step={10}
+                type="number"
+                value={profile.bike.ebike.chargerPowerW}
+                onChange={(event) =>
+                  setProfile((current) => ({
+                    ...current,
+                    bike: {
+                      ...current.bike,
+                      ebike: { ...current.bike.ebike, chargerPowerW: Number(event.target.value) }
+                    }
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="charging-loss">Ladeverluste (%)</Label>
+              <Input
+                disabled={!isEbike}
+                id="charging-loss"
+                max={40}
+                min={0}
+                step={1}
+                type="number"
+                value={profile.bike.ebike.chargingLossPercent}
+                onChange={(event) =>
+                  setProfile((current) => ({
+                    ...current,
+                    bike: {
+                      ...current.bike,
+                      ebike: { ...current.bike.ebike, chargingLossPercent: Number(event.target.value) }
+                    }
+                  }))
+                }
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="personal-riding-style">Persönliches Fahrprofil</Label>
+              <Select
+                disabled={!isEbike}
+                id="personal-riding-style"
+                value={profile.bike.ebike.personalRidingStyle}
+                onChange={(event) =>
+                  setProfile((current) => ({
+                    ...current,
+                    bike: {
+                      ...current.bike,
+                      ebike: {
+                        ...current.bike.ebike,
+                        personalRidingStyle: event.target.value as RiderBikeProfile["bike"]["ebike"]["personalRidingStyle"]
+                      }
+                    }
+                  }))
+                }
+              >
+                {personalRidingStyles.map((ridingStyle) => (
+                  <option key={ridingStyle} value={ridingStyle}>
+                    {personalRidingStyleLabels[ridingStyle]}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </CardContent>
         </Card>
 
@@ -545,7 +660,7 @@ export function RiderBikeProfileClient() {
             </div>
             <div className="mt-4 flex gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              Das Profil wird lokal in diesem Browser gespeichert. Es enthält keine Kontodaten und wird in Paket 16 nicht
+              Das Profil wird lokal in diesem Browser gespeichert. Es enthält keine Kontodaten und wird in Paket 17 nicht
               an einen Server übertragen.
             </div>
           </CardContent>

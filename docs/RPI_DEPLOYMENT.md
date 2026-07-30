@@ -244,6 +244,9 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis Karte, Marker, POI und Etappenfarben
 - Ergebnis `/einstellungen/fahrprofil`, Profil-Speicherung, Reload sowie Profil-Export/-Import
 - Ergebnis E-Bike-Grunddaten ohne Energie- oder Reichweitenberechnung
+- Ergebnis nutzbare Akkukapazität, Motorunterstützung, Ladegerätleistung, Ladeverluste und persönliches Fahrprofil
+- Ergebnis Paket-16-Profilmigration sowie Profil- und Tour-JSON mit den Paket-17-Feldern
+- Ergebnis weiterhin ohne Energie-, Reichweiten-, Ladezeit- oder Etappenberechnung
 - Ergebnis responsive Darstellung bei 390 und 768 px
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich
 

@@ -99,4 +99,6 @@ Jeder neue Entwicklungsauftrag enthält von Beginn an diesen verbindlichen Absch
 6. ausdrückliche Merge-Freigabe durch den Auftraggeber
 7. erst danach Ready for Review, Merge nach `private`, Aktualisierung von `private` und Beginn des nächsten Pakets
 
-Die Merge-Freigabe muss ausdrücklich als `PR #<nummer> ist zum Merge freigegeben.` erteilt werden. Ohne diese Formulierung bleibt der PR offen und wird nicht gemergt. Tags und Releases benötigen eine separate Freigabe.
+Ein neuer Entwicklungsauftrag bestätigt automatisch den dokumentierten Prüflauf des unmittelbar vorherigen Pakets. Diese Bestätigung wird nicht erneut beim Auftraggeber abgefragt.
+
+Vor dem Merge ist weiterhin eine ausdrückliche, im Kontext eindeutige Merge-Freigabe erforderlich. Die Standardformulierung `PR #<nummer> ist zum Merge freigegeben.` und ein eindeutig auf den betreffenden PR bezogenes `Ist freigegeben` sind gleichermaßen gültig. Tags und Releases benötigen eine separate Freigabe.
