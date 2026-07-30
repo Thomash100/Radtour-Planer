@@ -24,6 +24,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunft abseits der Hauptroute als echten BRouter-Hin- und Rückweg separat routen und darstellen.
 - Karte über Schaltflächen, Touch, Mausrad und Tastatur ohne routenabhängige Zoomgrenzen bedienen.
 - Persönliches Fahrer-, Fahrrad-, E-Bike- und Ladeprofil zentral speichern sowie als JSON exportieren und importieren.
+- Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus Profil, Distanz und Höhenprofil prognostizieren.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -39,8 +40,9 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Freie Ortssuche ist nicht Bestandteil des Routingpakets; die Direktplanung nutzt weiterhin den lokalen MVP-Ortskatalog.
 - Orte verlegen die GPX-Route nicht automatisch; Unterkunftsabstecher werden separat geroutet und verändern die Hauptroute nicht.
 - Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
-- Wetter, Oberfläche, individuelle Leistungsfähigkeit und E-Bike-Akkureichweite werden in der Etappenbewertung noch nicht berücksichtigt.
-- Das persönliche Profil wird auch in Paket 17 noch nicht für Belastungs-, Energie-, Reichweiten-, Ladezeit- oder Etappenberechnungen verwendet.
+- Wetter, Wind, Oberfläche, Reifendruck und Temperatur werden in der Energieprognose noch nicht berücksichtigt.
+- Die Energieprognose ist eine deterministische Planungshilfe und keine Garantie für reale Reichweite oder Leistungsfähigkeit.
+- Jede Etappe startet in Paket 18 rechnerisch mit voller nutzbarer Akkukapazität; Nachladen und etappenübergreifende Akkufortschreibung fehlen noch.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -59,16 +61,42 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 14: Kartenzoom nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #64 in `private` gemergt.
 - Paket 15: Trennung der Bedienstruktur für Routen- und Etappenplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #65 in `private` gemergt.
 - Paket 16: Persönliches Fahrer- und Fahrradprofil nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #66 in `private` gemergt.
-- Paket 17: E-Bike- und Ladeprofil auf Branch `codex/ebike-charging-profile` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Paket 17: E-Bike- und Ladeprofil nach bestätigtem Prüflauf über PR #67 in `private` gemergt.
+- Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern auf Branch `codex/ebike-energy-calculation-core` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Paket 19: kombinierte Etappenplanung nach Tagen, Schwierigkeit und Akkugrenze folgt erst nach Freigabe von Paket 18.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Ausgangsbasis für Paket 17:
+Ausgangsbasis für Paket 18:
 
-- `private`: `e0bf72cc75424bf13c732d7d590e38daf286213d` (Merge von PR #66)
-- zentrales Fahrer- und Fahrradprofil fachlich und auf dem Raspberry Pi abgenommen
-- bestehender TourState enthält den validierten Profilsnapshot
+- `private`: `c2bb59b0fdcc7c470095b555a2ef0e48fd994fb6` (Merge von PR #67)
+- E-Bike- und Ladeprofil aus Paket 17 bestätigt
+- bestehender TourState enthält alle Eingaben für den Rechenkern
 - keine Änderung an Routing, Etappenerzeugung oder Unterkunftslogik
-- weiterhin keine Energie-, Reichweiten-, Ladezeit- oder Akkuverbrauchsberechnung
+- keine automatische Etappenänderung oder Ladepunktplanung
+
+## Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern
+
+Paket 18 wertet Profil, Etappendistanz und das echte Höhenprofil erstmals reproduzierbar aus.
+
+Enthalten:
+
+- reine, versionierte Rechenfunktion ohne Netzwerk-, Zeit- oder Zufallsabhängigkeit
+- segmentweise Unterscheidung von Ebene, Steigung und Gefälle
+- Rollwiderstand, Luftwiderstand, Lageenergie und Antriebsverluste
+- Fahrer- und Motoranteil unter Beachtung der Motorleistungsgrenze
+- Energiebedarf, Akkuverbrauch, Restenergie und Restkapazität
+- persönliche Belastung und Reichweitenprognose
+- Reservewarnung und nachvollziehbare Prognosequalität
+- Ergebnisanzeige je Etappe
+
+Nicht enthalten:
+
+- automatische Etappenverschiebung oder Akkuoptimierung
+- Ladepunkte, Nachladen oder etappenübergreifende Akkufortschreibung
+- alternative Routen oder automatische Motorsteuerung
+- Wetter- und Winddaten
+
+Formeln, Modellparameter und Grenzen: [docs/E_BIKE_ENERGY_MODEL.md](E_BIKE_ENERGY_MODEL.md).
 
 ## Paket 17: E-Bike- und Ladeprofil
 

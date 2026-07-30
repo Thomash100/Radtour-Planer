@@ -11,6 +11,8 @@ Das Profil ist die gemeinsame fachliche Grundlage für spätere Module:
 - Akku- und Reichweitenplanung
 - Reiseplanung
 
+Seit Paket 18 verwendet der deterministische Energie-Rechenkern diese zentrale Konfiguration. Die daraus abgeleiteten Modellannahmen für Fahrerleistung und Motorwirkungsgrad werden in der Etappenansicht transparent angezeigt.
+
 Paket 16 und 17 speichern und übertragen ausschließlich Profildaten. Sie berechnen weder Energieverbrauch noch Reichweite, Ladezeit oder automatische Etappen.
 
 ## Datenmodell
@@ -51,5 +53,5 @@ Die in Paket 17 ergänzten Felder besitzen validierte Standardwerte. Dadurch wer
 - Speicherung erfolgt lokal im Browser.
 - Paket 16 und 17 übertragen das Profil nicht an den Server.
 - Es gibt weiterhin keine Nutzerkonten.
-- E-Bike-Werte werden nicht für Verbrauch, Motorregelung oder Reichweite ausgewertet.
+- E-Bike-Werte werden seit Paket 18 für eine deterministische Planungsprognose ausgewertet, aber nicht für Motorregelung oder eine garantierte reale Reichweite.
 - Das Profil ist keine medizinische, sportwissenschaftliche oder sicherheitsbezogene Eignungsbewertung.

@@ -21,6 +21,10 @@ import { calculateAccommodationDetour } from "../src/lib/accommodation-routing";
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import { replaceRouteAfterSuccessfulCalculation } from "../src/lib/direct-route-replacement";
 import {
+  calculateStageEnergyProjection,
+  type StageEnergyProjectionInput
+} from "../src/lib/ebike-energy";
+import {
   createValidatedStageSliceFromBounds,
   distancePointToLineKm,
   elevationMetricsForRange,
@@ -99,6 +103,35 @@ const riderBikeProfile = {
   }
 };
 
+const measuredFlatProfile = (distanceKm: number) =>
+  Array.from({ length: Math.ceil(distanceKm / 2) + 1 }, (_, index) => ({
+    distanceKm: Math.min(index * 2, distanceKm),
+    elevationM: 100
+  })).filter((point, index, points) => index === 0 || point.distanceKm > points[index - 1].distanceKm);
+
+const measuredClimbProfile = (distanceKm: number, elevationGainM: number) =>
+  Array.from({ length: Math.ceil(distanceKm) + 1 }, (_, index) => {
+    const pointDistanceKm = Math.min(index, distanceKm);
+    return {
+      distanceKm: pointDistanceKm,
+      elevationM: 100 + (elevationGainM * pointDistanceKm) / distanceKm
+    };
+  }).filter((point, index, points) => index === 0 || point.distanceKm > points[index - 1].distanceKm);
+
+function energyProjection(
+  overrides: Partial<StageEnergyProjectionInput> = {}
+) {
+  return calculateStageEnergyProjection({
+    profile: riderBikeProfile,
+    distanceKm: 40,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(40),
+    elevationDataStatus: "measured",
+    ...overrides
+  });
+}
+
 test("validiert das zentrale Fahrer- und Fahrradprofil", () => {
   const parsed = parseRiderBikeProfileValue(riderBikeProfile);
 
@@ -151,6 +184,213 @@ test("ergänzt Paket-16-Profile rückwärtskompatibel um Ladeparameter", () => {
   assert.equal(parsed?.bike.ebike.chargerPowerW, 100);
   assert.equal(parsed?.bike.ebike.chargingLossPercent, 10);
   assert.equal(parsed?.bike.ebike.personalRidingStyle, "balanced");
+});
+
+test("berechnet eine flache Referenzstrecke segmentweise und reproduzierbar", () => {
+  const first = energyProjection();
+  const second = energyProjection();
+
+  assert.deepEqual(first, second);
+  assert.equal(first.modelVersion, "biketriphub-energy-v1");
+  assert.equal(first.quality, "high");
+  assert.equal(first.terrain.flat.distanceKm, 40);
+  assert.equal(first.terrain.climb.distanceKm, 0);
+  assert.ok(first.batteryEnergyWh && first.batteryEnergyWh > 0);
+  assert.ok(first.batteryConsumptionPercent && first.batteryConsumptionPercent > 0);
+});
+
+test("berechnet für eine kurze steile Etappe mehr Energie als für eine flache Etappe", () => {
+  const flat = energyProjection({
+    distanceKm: 12,
+    elevationProfile: measuredFlatProfile(12)
+  });
+  const steep = energyProjection({
+    distanceKm: 12,
+    elevationUp: 720,
+    elevationProfile: measuredClimbProfile(12, 720)
+  });
+
+  assert.ok(steep.energyNeedWh > flat.energyNeedWh);
+  assert.ok(steep.terrain.climb.mechanicalEnergyWh > 0);
+  assert.ok(steep.personalLoadScore >= flat.personalLoadScore);
+});
+
+test("trennt Steigung, Gefälle und elektrische Verluste", () => {
+  const rolling = energyProjection({
+    distanceKm: 20,
+    elevationUp: 400,
+    elevationDown: 400,
+    elevationProfile: [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: 10, elevationM: 500 },
+      { distanceKm: 20, elevationM: 100 }
+    ]
+  });
+
+  assert.ok(rolling.terrain.climb.distanceKm > 0);
+  assert.ok(rolling.terrain.descent.distanceKm > 0);
+  assert.ok(rolling.conversionLossWh > 0);
+  assert.ok(
+    Math.abs(
+      (rolling.batteryEnergyWh ?? 0) -
+        rolling.motorMechanicalEnergyWh -
+        rolling.conversionLossWh
+    ) <= 1
+  );
+});
+
+test("berechnet für eine lange flache Etappe mehr Verbrauch als für eine kurze", () => {
+  const short = energyProjection({
+    distanceKm: 30,
+    elevationProfile: measuredFlatProfile(30)
+  });
+  const long = energyProjection({
+    distanceKm: 100,
+    elevationProfile: measuredFlatProfile(100)
+  });
+
+  assert.ok(long.energyNeedWh > short.energyNeedWh);
+  assert.ok((long.batteryConsumptionPercent ?? 0) > (short.batteryConsumptionPercent ?? 0));
+});
+
+test("berücksichtigt unterschiedliches Gesamtgewicht deterministisch", () => {
+  const light = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      rider: { ...riderBikeProfile.rider, bodyWeightKg: 55 },
+      bike: { ...riderBikeProfile.bike, luggageWeightKg: 5 }
+    },
+    elevationUp: 500,
+    distanceKm: 40,
+    elevationProfile: measuredClimbProfile(40, 500)
+  });
+  const heavy = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      rider: { ...riderBikeProfile.rider, bodyWeightKg: 105 },
+      bike: { ...riderBikeProfile.bike, luggageWeightKg: 30 }
+    },
+    elevationUp: 500,
+    distanceKm: 40,
+    elevationProfile: measuredClimbProfile(40, 500)
+  });
+
+  assert.ok(heavy.energyNeedWh > light.energyNeedWh);
+  assert.ok(heavy.totalMassKg > light.totalMassKg);
+});
+
+test("trennt Fahrer- und Motoranteil bei unterschiedlicher Unterstützung", () => {
+  const lowSupport = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: { ...riderBikeProfile.bike.ebike, motorAssistancePercent: 50 }
+      }
+    }
+  });
+  const highSupport = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: { ...riderBikeProfile.bike.ebike, motorAssistancePercent: 250 }
+      }
+    }
+  });
+
+  assert.ok((highSupport.batteryEnergyWh ?? 0) > (lowSupport.batteryEnergyWh ?? 0));
+  assert.ok(highSupport.riderEnergyWh < lowSupport.riderEnergyWh);
+});
+
+test("weist beim klassischen Fahrrad keine Akkuwerte aus", () => {
+  const classic = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: { ...riderBikeProfile.bike, type: "touring" as const }
+    }
+  });
+
+  assert.equal(classic.bicycleMode, "classic");
+  assert.equal(classic.batteryEnergyWh, null);
+  assert.equal(classic.batteryConsumptionPercent, null);
+  assert.equal(classic.remainingCapacityPercent, null);
+  assert.equal(classic.reserveStatus, "not_applicable");
+  assert.ok(classic.energyNeedWh > 0);
+});
+
+test("ein zweiter Akku senkt den prozentualen Verbrauch bei gleichem Energiebedarf", () => {
+  const oneBattery = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: { ...riderBikeProfile.bike.ebike, batteryCount: 1 }
+      }
+    }
+  });
+  const twoBatteries = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: { ...riderBikeProfile.bike.ebike, batteryCount: 2 }
+      }
+    }
+  });
+
+  assert.equal(twoBatteries.batteryEnergyWh, oneBattery.batteryEnergyWh);
+  assert.ok((twoBatteries.batteryConsumptionPercent ?? 100) < (oneBattery.batteryConsumptionPercent ?? 0));
+  assert.ok((twoBatteries.remainingEnergyWh ?? 0) > (oneBattery.remainingEnergyWh ?? 0));
+});
+
+test("warnt bei unterschrittener Reserve und leerer nutzbarer Kapazität", () => {
+  const belowReserve = energyProjection({
+    distanceKm: 90,
+    elevationUp: 900,
+    elevationProfile: measuredClimbProfile(90, 900),
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          batteryCapacityWh: 400,
+          batteryCount: 1,
+          usableBatteryCapacityPercent: 80,
+          desiredReservePercent: 30
+        }
+      }
+    }
+  });
+
+  assert.ok(belowReserve.reserveStatus === "below_reserve" || belowReserve.reserveStatus === "depleted");
+  assert.ok(belowReserve.reserveWarning);
+});
+
+test("kennzeichnet fehlende oder unvollständige Höhendaten mit niedriger Qualität", () => {
+  const missing = energyProjection({
+    distanceKm: 60,
+    elevationUp: 600,
+    elevationDown: 400,
+    elevationProfile: [],
+    elevationDataStatus: "missing"
+  });
+  const incomplete = energyProjection({
+    distanceKm: 60,
+    elevationUp: 300,
+    elevationDown: 0,
+    elevationProfile: [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: 10, elevationM: 400 }
+    ],
+    elevationDataStatus: "measured"
+  });
+
+  assert.equal(missing.quality, "low");
+  assert.equal(incomplete.quality, "low");
+  assert.ok(missing.qualityReasons.length > 0);
+  assert.ok(incomplete.qualityReasons.length > 0);
 });
 
 test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {

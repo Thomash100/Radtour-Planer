@@ -232,6 +232,24 @@ E-Bike- und Ladeprofil auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
 - Es wird weiterhin keine Energie-, Reichweiten-, Ladezeit- oder Etappenberechnung angezeigt oder ausgelöst.
 - Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
 
+## Paket 18
+
+Deterministischen Energie- und Reichweiten-Rechenkern prüfen:
+
+- Dieselben Eingaben mehrfach berechnen; das vollständige Ergebnis bleibt identisch.
+- Flache Referenzstrecke, kurze steile Etappe und lange flache Etappe vergleichen.
+- Höheres Fahrer-/Fahrrad-/Gepäckgewicht erhöht bei gleicher Strecke den Energiebedarf.
+- Höhere Motorunterstützung erhöht den Akkuanteil und senkt den Fahreranteil.
+- Klassisches Fahrrad zeigt mechanischen Bedarf und persönliche Belastung, aber keine Akkuwerte.
+- E-Bike mit einem und zwei Akkus vergleichen; der Energiebedarf bleibt gleich, der prozentuale Verbrauch sinkt mit zwei Akkus.
+- Reserveunterschreitung und nicht ausreichende Akkukapazität erzeugen verständliche Warnungen.
+- Vollständiges echtes Höhenprofil ergibt hohe, geschätztes Profil höchstens mittlere und fehlendes/unvollständiges Profil niedrige Prognosequalität.
+- Etappenansicht zeigt Energiebedarf, Verbrauch, Restenergie, Restkapazität, persönliche Belastung, Restreichweite, Reserve und Qualität.
+- Fahrerleistung, Motorwirkungsgrad und Modellgeschwindigkeit werden als Annahmen sichtbar ausgewiesen.
+- Jede Etappe startet rechnerisch mit voller nutzbarer Kapazität; es gibt keine Lade- oder etappenübergreifende Akkufortschreibung.
+- Keine automatische Etappenverschiebung, Ladepunktplanung, alternative Route oder Wetter-/Windberechnung wird ausgelöst.
+- Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

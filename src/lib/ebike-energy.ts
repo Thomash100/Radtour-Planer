@@ -1,0 +1,513 @@
+import type { ElevationPoint } from "@/lib/geo";
+import type { RiderBikeProfile } from "@/lib/rider-bike-profile";
+
+export const EBIKE_ENERGY_MODEL_VERSION = "biketriphub-energy-v1";
+
+export type EnergyTerrain = "flat" | "climb" | "descent";
+export type EnergyProjectionQuality = "high" | "medium" | "low";
+export type EnergyReserveStatus = "not_applicable" | "sufficient" | "below_reserve" | "depleted";
+export type ElevationDataStatus = "measured" | "estimated" | "missing";
+
+export type StageEnergyProjectionInput = {
+  profile: RiderBikeProfile;
+  distanceKm: number;
+  elevationUp?: number | null;
+  elevationDown?: number | null;
+  elevationProfile?: ElevationPoint[];
+  elevationDataStatus?: ElevationDataStatus;
+  riderPowerW?: number;
+  motorEfficiencyPercent?: number;
+};
+
+export type StageEnergyProjection = {
+  modelVersion: typeof EBIKE_ENERGY_MODEL_VERSION;
+  bicycleMode: "classic" | "ebike";
+  distanceKm: number;
+  totalMassKg: number;
+  energyNeedWh: number;
+  mechanicalEnergyWh: number;
+  riderEnergyWh: number;
+  motorMechanicalEnergyWh: number;
+  conversionLossWh: number;
+  batteryEnergyWh: number | null;
+  usableBatteryEnergyWh: number | null;
+  batteryConsumptionPercent: number | null;
+  remainingEnergyWh: number | null;
+  remainingCapacityPercent: number | null;
+  projectedTotalRangeKm: number | null;
+  projectedRemainingRangeKm: number | null;
+  personalLoadScore: number;
+  personalLoadLabel: string;
+  reserveStatus: EnergyReserveStatus;
+  reserveWarning: string | null;
+  recommendation: string;
+  quality: EnergyProjectionQuality;
+  qualityLabel: string;
+  qualityReasons: string[];
+  assumptions: {
+    riderPowerW: number;
+    motorEfficiencyPercent: number | null;
+    averageSpeedKmh: number;
+    rollingResistanceCoefficient: number;
+    aerodynamicDragAreaM2: number;
+    startsWithFullUsableBattery: boolean;
+  };
+  terrain: Record<
+    EnergyTerrain,
+    {
+      distanceKm: number;
+      mechanicalEnergyWh: number;
+      riderEnergyWh: number;
+      motorMechanicalEnergyWh: number;
+      batteryEnergyWh: number;
+    }
+  >;
+};
+
+type CalculationSegment = {
+  distanceKm: number;
+  elevationDeltaM: number;
+  terrain: EnergyTerrain;
+};
+
+const gravityMps2 = 9.80665;
+const airDensityKgM3 = 1.225;
+
+const riderPowerByFitness: Record<RiderBikeProfile["rider"]["fitnessLevel"], number> = {
+  low: 90,
+  moderate: 125,
+  high: 160,
+  very_high: 195
+};
+
+const ridingStylePowerFactor: Record<RiderBikeProfile["bike"]["ebike"]["personalRidingStyle"], number> = {
+  economical: 0.9,
+  balanced: 1,
+  sportive: 1.1
+};
+
+const assistanceFactor: Record<RiderBikeProfile["bike"]["ebike"]["assistanceProfile"], number> = {
+  eco: 0.7,
+  tour: 1,
+  sport: 1.25,
+  auto: 1.05
+};
+
+const motorEfficiencyByProfile: Record<RiderBikeProfile["bike"]["ebike"]["assistanceProfile"], number> = {
+  eco: 86,
+  tour: 83,
+  sport: 79,
+  auto: 82
+};
+
+const rollingResistanceByBike: Record<RiderBikeProfile["bike"]["type"], number> = {
+  trekking: 0.006,
+  touring: 0.0065,
+  gravel: 0.0075,
+  road: 0.0045,
+  mountain: 0.011,
+  cargo: 0.009,
+  ebike: 0.007
+};
+
+const dragAreaByBike: Record<RiderBikeProfile["bike"]["type"], number> = {
+  trekking: 0.52,
+  touring: 0.55,
+  gravel: 0.48,
+  road: 0.38,
+  mountain: 0.58,
+  cargo: 0.7,
+  ebike: 0.56
+};
+
+const baseSpeedByBike: Record<RiderBikeProfile["bike"]["type"], number> = {
+  trekking: 18,
+  touring: 17,
+  gravel: 19,
+  road: 23,
+  mountain: 16,
+  cargo: 15,
+  ebike: 20
+};
+
+const emptyTerrain = () => ({
+  flat: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 },
+  climb: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 },
+  descent: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 }
+});
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function finiteNonNegative(value: number | null | undefined) {
+  return Number.isFinite(value) ? Math.max(0, Number(value)) : 0;
+}
+
+function round(value: number, digits = 0) {
+  const factor = 10 ** digits;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function terrainFor(distanceKm: number, elevationDeltaM: number): EnergyTerrain {
+  const grade = distanceKm > 0 ? elevationDeltaM / (distanceKm * 1000) : 0;
+  if (grade > 0.005) return "climb";
+  if (grade < -0.005) return "descent";
+  return "flat";
+}
+
+function aggregateSegments(distanceKm: number, elevationUp: number, elevationDown: number): CalculationSegment[] {
+  if (distanceKm <= 0) {
+    return [];
+  }
+
+  const averageFallbackGrade = 0.04;
+  let climbDistanceKm = elevationUp / (averageFallbackGrade * 1000);
+  let descentDistanceKm = elevationDown / (averageFallbackGrade * 1000);
+  const slopedDistanceKm = climbDistanceKm + descentDistanceKm;
+  if (slopedDistanceKm > distanceKm && slopedDistanceKm > 0) {
+    const factor = distanceKm / slopedDistanceKm;
+    climbDistanceKm *= factor;
+    descentDistanceKm *= factor;
+  }
+  const flatDistanceKm = Math.max(0, distanceKm - climbDistanceKm - descentDistanceKm);
+
+  return [
+    ...(flatDistanceKm > 0.0001 ? [{ distanceKm: flatDistanceKm, elevationDeltaM: 0, terrain: "flat" as const }] : []),
+    ...(climbDistanceKm > 0.0001
+      ? [{ distanceKm: climbDistanceKm, elevationDeltaM: elevationUp, terrain: "climb" as const }]
+      : []),
+    ...(descentDistanceKm > 0.0001
+      ? [{ distanceKm: descentDistanceKm, elevationDeltaM: -elevationDown, terrain: "descent" as const }]
+      : [])
+  ];
+}
+
+function profileSegments(
+  distanceKm: number,
+  elevationProfile: ElevationPoint[],
+  targetElevationUp: number | null,
+  targetElevationDown: number | null
+) {
+  const sorted = elevationProfile
+    .filter((point) => Number.isFinite(point.distanceKm) && Number.isFinite(point.elevationM))
+    .map((point) => ({ distanceKm: Math.max(0, Number(point.distanceKm)), elevationM: Number(point.elevationM) }))
+    .sort((left, right) => left.distanceKm - right.distanceKm)
+    .filter((point, index, points) => index === 0 || point.distanceKm > points[index - 1].distanceKm);
+
+  if (sorted.length < 2 || distanceKm <= 0) {
+    return null;
+  }
+
+  const firstDistanceKm = sorted[0].distanceKm;
+  const rebased = sorted
+    .map((point) => ({ ...point, distanceKm: point.distanceKm - firstDistanceKm }))
+    .filter((point) => point.distanceKm <= distanceKm + 0.001);
+  if (rebased.length < 2) {
+    return null;
+  }
+
+  const observedEndKm = rebased[rebased.length - 1].distanceKm;
+  const observedCoverage = clamp(observedEndKm / distanceKm, 0, 1);
+  const complete = [...rebased];
+  if (complete[0].distanceKm > 0.001) {
+    complete.unshift({ distanceKm: 0, elevationM: complete[0].elevationM });
+  }
+  if (observedEndKm < distanceKm - 0.001) {
+    complete.push({ distanceKm, elevationM: complete[complete.length - 1].elevationM });
+  }
+
+  const rawDeltas = complete.slice(1).map((point, index) => point.elevationM - complete[index].elevationM);
+  const rawUp = rawDeltas.reduce((sum, delta) => sum + Math.max(0, delta), 0);
+  const rawDown = rawDeltas.reduce((sum, delta) => sum + Math.max(0, -delta), 0);
+  if (
+    (targetElevationUp !== null && targetElevationUp > 0 && rawUp === 0) ||
+    (targetElevationDown !== null && targetElevationDown > 0 && rawDown === 0)
+  ) {
+    return null;
+  }
+
+  const upFactor = rawUp > 0 && targetElevationUp !== null ? targetElevationUp / rawUp : 1;
+  const downFactor = rawDown > 0 && targetElevationDown !== null ? targetElevationDown / rawDown : 1;
+  let maxGapKm = 0;
+  const segments = complete.slice(1).map((point, index) => {
+    const previous = complete[index];
+    const segmentDistanceKm = point.distanceKm - previous.distanceKm;
+    maxGapKm = Math.max(maxGapKm, segmentDistanceKm);
+    const rawDelta = point.elevationM - previous.elevationM;
+    const elevationDeltaM = rawDelta > 0 ? rawDelta * upFactor : rawDelta < 0 ? rawDelta * downFactor : 0;
+    return {
+      distanceKm: segmentDistanceKm,
+      elevationDeltaM,
+      terrain: terrainFor(segmentDistanceKm, elevationDeltaM)
+    };
+  });
+
+  return {
+    segments: segments.filter((segment) => segment.distanceKm > 0.0001),
+    coverage: observedCoverage,
+    maxGapKm
+  };
+}
+
+function resolveQuality(
+  profileResult: ReturnType<typeof profileSegments>,
+  elevationDataStatus: ElevationDataStatus
+): { quality: EnergyProjectionQuality; reasons: string[] } {
+  if (!profileResult) {
+    return {
+      quality: "low",
+      reasons: ["Kein ausreichend vollständiges Höhenprofil; die Berechnung verwendet aggregierte Höhenmeter."]
+    };
+  }
+
+  const reasons: string[] = [];
+  if (elevationDataStatus === "estimated") {
+    reasons.push("Das Höhenprofil ist als geschätzt gekennzeichnet.");
+  }
+  if (profileResult.coverage < 0.95) {
+    reasons.push(`Das Höhenprofil deckt ${round(profileResult.coverage * 100)} % der Etappe ab.`);
+  }
+  if (profileResult.maxGapKm > 5) {
+    reasons.push(`Der größte Abstand zwischen Höhenpunkten beträgt ${round(profileResult.maxGapKm, 1)} km.`);
+  }
+
+  if (
+    elevationDataStatus === "measured" &&
+    profileResult.coverage >= 0.95 &&
+    profileResult.maxGapKm <= 5
+  ) {
+    return { quality: "high", reasons: ["Vollständiges GPX- oder Provider-Höhenprofil mit dichter Segmentierung."] };
+  }
+
+  if (profileResult.coverage >= 0.75 && elevationDataStatus !== "missing") {
+    return { quality: "medium", reasons: reasons.length > 0 ? reasons : ["Höhenprofil vorhanden, aber nur mittlere Datendichte."] };
+  }
+
+  return {
+    quality: "low",
+    reasons: reasons.length > 0 ? reasons : ["Höhendaten sind unvollständig."]
+  };
+}
+
+function qualityLabel(quality: EnergyProjectionQuality) {
+  if (quality === "high") return "hoch";
+  if (quality === "medium") return "mittel";
+  return "niedrig";
+}
+
+function personalLoadLabel(score: number) {
+  if (score < 35) return "gering";
+  if (score < 60) return "mittel";
+  if (score < 80) return "hoch";
+  return "sehr hoch";
+}
+
+export function resolveRiderPowerW(profile: RiderBikeProfile) {
+  return round(
+    riderPowerByFitness[profile.rider.fitnessLevel] *
+      ridingStylePowerFactor[profile.bike.ebike.personalRidingStyle]
+  );
+}
+
+export function resolveMotorEfficiencyPercent(profile: RiderBikeProfile) {
+  return motorEfficiencyByProfile[profile.bike.ebike.assistanceProfile];
+}
+
+export function calculateStageEnergyProjection(input: StageEnergyProjectionInput): StageEnergyProjection {
+  const distanceKm = finiteNonNegative(input.distanceKm);
+  const hasElevationUp = Number.isFinite(input.elevationUp);
+  const hasElevationDown = Number.isFinite(input.elevationDown);
+  const elevationUp = finiteNonNegative(input.elevationUp);
+  const elevationDown = finiteNonNegative(input.elevationDown);
+  const elevationDataStatus = input.elevationDataStatus ?? "missing";
+  const profileResult = profileSegments(
+    distanceKm,
+    input.elevationProfile ?? [],
+    hasElevationUp ? elevationUp : null,
+    hasElevationDown ? elevationDown : null
+  );
+  const segments = profileResult?.segments ?? aggregateSegments(distanceKm, elevationUp, elevationDown);
+  const qualityResult = resolveQuality(profileResult, elevationDataStatus);
+  const profile = input.profile;
+  const bicycleMode = profile.bike.type === "ebike" ? "ebike" : "classic";
+  const totalMassKg = profile.rider.bodyWeightKg + profile.bike.bikeWeightKg + profile.bike.luggageWeightKg;
+  const rollingResistanceCoefficient = rollingResistanceByBike[profile.bike.type];
+  const aerodynamicDragAreaM2 = dragAreaByBike[profile.bike.type];
+  const riderPowerW = clamp(
+    Number.isFinite(input.riderPowerW) ? Number(input.riderPowerW) : resolveRiderPowerW(profile),
+    40,
+    400
+  );
+  const motorEfficiencyPercent =
+    bicycleMode === "ebike"
+      ? clamp(
+          Number.isFinite(input.motorEfficiencyPercent)
+            ? Number(input.motorEfficiencyPercent)
+            : resolveMotorEfficiencyPercent(profile),
+          50,
+          98
+        )
+      : null;
+  const styleSpeedFactor =
+    profile.bike.ebike.personalRidingStyle === "economical"
+      ? 0.9
+      : profile.bike.ebike.personalRidingStyle === "sportive"
+        ? 1.05
+        : 1;
+  const baseSpeedKmh = baseSpeedByBike[profile.bike.type] * styleSpeedFactor;
+  const configuredAssistance =
+    bicycleMode === "ebike"
+      ? Math.max(0, (profile.bike.ebike.motorAssistancePercent / 100) * assistanceFactor[profile.bike.ebike.assistanceProfile])
+      : 0;
+  const desiredMotorShare = configuredAssistance > 0 ? configuredAssistance / (1 + configuredAssistance) : 0;
+  const terrain = emptyTerrain();
+
+  let mechanicalEnergyWh = 0;
+  let riderEnergyWh = 0;
+  let motorMechanicalEnergyWh = 0;
+  let batteryEnergyWh = 0;
+  let durationHours = 0;
+
+  for (const segment of segments) {
+    const distanceM = segment.distanceKm * 1000;
+    const grade = distanceM > 0 ? segment.elevationDeltaM / distanceM : 0;
+    const terrainSpeedFactor =
+      segment.terrain === "climb"
+        ? clamp(1 - Math.min(Math.max(grade, 0), 0.18) * 5, 0.4, 0.95)
+        : segment.terrain === "descent"
+          ? clamp(1 + Math.min(Math.abs(grade), 0.18) * 4, 1.05, 1.5)
+          : 1;
+    const speedKmh = Math.max(6, baseSpeedKmh * terrainSpeedFactor);
+    const speedMps = speedKmh / 3.6;
+    const segmentDurationHours = segment.distanceKm / speedKmh;
+    const rollingWh = (rollingResistanceCoefficient * totalMassKg * gravityMps2 * distanceM) / 3600;
+    const aerodynamicWh = (0.5 * airDensityKgM3 * aerodynamicDragAreaM2 * speedMps ** 2 * distanceM) / 3600;
+    const gravityWh = (totalMassKg * gravityMps2 * segment.elevationDeltaM) / 3600;
+    const segmentMechanicalWh = Math.max(0, rollingWh + aerodynamicWh + gravityWh);
+
+    let segmentMotorWh = 0;
+    if (bicycleMode === "ebike" && segmentMechanicalWh > 0) {
+      const maximumMotorWh = profile.bike.ebike.motorPowerW * segmentDurationHours;
+      const desiredMotorWh = segmentMechanicalWh * desiredMotorShare;
+      const desiredRiderWh = segmentMechanicalWh - desiredMotorWh;
+      const riderCapacityWh = riderPowerW * segmentDurationHours;
+      const riderDeficitWh = Math.max(0, desiredRiderWh - riderCapacityWh);
+      segmentMotorWh = Math.min(maximumMotorWh, desiredMotorWh + riderDeficitWh);
+    }
+
+    const segmentRiderWh = Math.max(0, segmentMechanicalWh - segmentMotorWh);
+    const segmentBatteryWh =
+      motorEfficiencyPercent === null || segmentMotorWh === 0
+        ? 0
+        : segmentMotorWh / (motorEfficiencyPercent / 100);
+
+    mechanicalEnergyWh += segmentMechanicalWh;
+    riderEnergyWh += segmentRiderWh;
+    motorMechanicalEnergyWh += segmentMotorWh;
+    batteryEnergyWh += segmentBatteryWh;
+    durationHours += segmentDurationHours;
+    terrain[segment.terrain].distanceKm += segment.distanceKm;
+    terrain[segment.terrain].mechanicalEnergyWh += segmentMechanicalWh;
+    terrain[segment.terrain].riderEnergyWh += segmentRiderWh;
+    terrain[segment.terrain].motorMechanicalEnergyWh += segmentMotorWh;
+    terrain[segment.terrain].batteryEnergyWh += segmentBatteryWh;
+  }
+
+  const usableBatteryEnergyWh =
+    bicycleMode === "ebike"
+      ? profile.bike.ebike.batteryCapacityWh *
+        profile.bike.ebike.batteryCount *
+        (profile.bike.ebike.usableBatteryCapacityPercent / 100)
+      : null;
+  const remainingEnergyWh =
+    usableBatteryEnergyWh === null ? null : Math.max(0, usableBatteryEnergyWh - batteryEnergyWh);
+  const batteryConsumptionPercent =
+    usableBatteryEnergyWh && usableBatteryEnergyWh > 0 ? (batteryEnergyWh / usableBatteryEnergyWh) * 100 : null;
+  const remainingCapacityPercent =
+    usableBatteryEnergyWh && remainingEnergyWh !== null
+      ? (remainingEnergyWh / usableBatteryEnergyWh) * 100
+      : null;
+  const batteryWhPerKm = distanceKm > 0 ? batteryEnergyWh / distanceKm : 0;
+  const projectedTotalRangeKm =
+    usableBatteryEnergyWh && batteryWhPerKm > 0 ? usableBatteryEnergyWh / batteryWhPerKm : null;
+  const projectedRemainingRangeKm =
+    remainingEnergyWh !== null && batteryWhPerKm > 0 ? remainingEnergyWh / batteryWhPerKm : null;
+  const preferredRiderEnergyWh = riderPowerW * profile.rider.preferredDailyRideHours;
+  const personalLoadScore =
+    preferredRiderEnergyWh > 0 ? clamp((riderEnergyWh / preferredRiderEnergyWh) * 100, 0, 100) : 0;
+
+  let reserveStatus: EnergyReserveStatus = "not_applicable";
+  let reserveWarning: string | null = null;
+  if (bicycleMode === "ebike" && remainingCapacityPercent !== null) {
+    if (batteryConsumptionPercent !== null && batteryConsumptionPercent >= 100) {
+      reserveStatus = "depleted";
+      reserveWarning = "Die nutzbare Akkukapazität reicht für diese Etappe voraussichtlich nicht aus.";
+    } else if (remainingCapacityPercent < profile.bike.ebike.desiredReservePercent) {
+      reserveStatus = "below_reserve";
+      reserveWarning = `Die gewünschte Reserve von ${profile.bike.ebike.desiredReservePercent} % wird voraussichtlich unterschritten.`;
+    } else {
+      reserveStatus = "sufficient";
+    }
+  }
+
+  const recommendation =
+    reserveStatus === "depleted"
+      ? "Akkukapazität reicht voraussichtlich nicht"
+      : reserveStatus === "below_reserve"
+        ? "Reserve prüfen"
+        : personalLoadScore >= 80
+          ? "Machbar, aber persönlich sehr fordernd"
+          : bicycleMode === "classic"
+            ? "Ohne Akku, persönliche Belastung beachten"
+            : "Gut machbar";
+
+  const roundedTerrain = Object.fromEntries(
+    Object.entries(terrain).map(([key, value]) => [
+      key,
+      {
+        distanceKm: round(value.distanceKm, 2),
+        mechanicalEnergyWh: round(value.mechanicalEnergyWh, 1),
+        riderEnergyWh: round(value.riderEnergyWh, 1),
+        motorMechanicalEnergyWh: round(value.motorMechanicalEnergyWh, 1),
+        batteryEnergyWh: round(value.batteryEnergyWh, 1)
+      }
+    ])
+  ) as StageEnergyProjection["terrain"];
+
+  return {
+    modelVersion: EBIKE_ENERGY_MODEL_VERSION,
+    bicycleMode,
+    distanceKm: round(distanceKm, 2),
+    totalMassKg: round(totalMassKg, 1),
+    energyNeedWh: round(bicycleMode === "ebike" ? batteryEnergyWh : mechanicalEnergyWh),
+    mechanicalEnergyWh: round(mechanicalEnergyWh),
+    riderEnergyWh: round(riderEnergyWh),
+    motorMechanicalEnergyWh: round(motorMechanicalEnergyWh),
+    conversionLossWh: round(Math.max(0, batteryEnergyWh - motorMechanicalEnergyWh)),
+    batteryEnergyWh: bicycleMode === "ebike" ? round(batteryEnergyWh) : null,
+    usableBatteryEnergyWh: usableBatteryEnergyWh === null ? null : round(usableBatteryEnergyWh),
+    batteryConsumptionPercent: batteryConsumptionPercent === null ? null : round(batteryConsumptionPercent, 1),
+    remainingEnergyWh: remainingEnergyWh === null ? null : round(remainingEnergyWh),
+    remainingCapacityPercent: remainingCapacityPercent === null ? null : round(remainingCapacityPercent, 1),
+    projectedTotalRangeKm: projectedTotalRangeKm === null ? null : round(projectedTotalRangeKm, 1),
+    projectedRemainingRangeKm: projectedRemainingRangeKm === null ? null : round(projectedRemainingRangeKm, 1),
+    personalLoadScore: round(personalLoadScore),
+    personalLoadLabel: personalLoadLabel(personalLoadScore),
+    reserveStatus,
+    reserveWarning,
+    recommendation,
+    quality: qualityResult.quality,
+    qualityLabel: qualityLabel(qualityResult.quality),
+    qualityReasons: qualityResult.reasons,
+    assumptions: {
+      riderPowerW: round(riderPowerW),
+      motorEfficiencyPercent: motorEfficiencyPercent === null ? null : round(motorEfficiencyPercent),
+      averageSpeedKmh: durationHours > 0 ? round(distanceKm / durationHours, 1) : 0,
+      rollingResistanceCoefficient,
+      aerodynamicDragAreaM2,
+      startsWithFullUsableBattery: bicycleMode === "ebike"
+    },
+    terrain: roundedTerrain
+  };
+}
