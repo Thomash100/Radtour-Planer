@@ -201,6 +201,22 @@ Getrennte Routen- und Etappenbedienung auf Desktop, Tablet, Smartphone und Raspb
 - Es gibt keine neue Energie-, E-Bike- oder Akkurechenlogik.
 - Bei 390 und 768 px entsteht kein horizontaler Overflow; Browserkonsole und Layout bleiben fehlerfrei.
 
+## Paket 16
+
+Persönliches Fahrer- und Fahrradprofil auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
+
+- `/einstellungen/fahrprofil` ist über die Kopf- und Fußnavigation erreichbar.
+- Fahrername, Körpergewicht, Fitnesslevel, Erfahrungsniveau, Tagesbelastung sowie bevorzugte und maximale Fahrzeit speichern.
+- Maximale Fahrzeit kleiner als bevorzugte Fahrzeit wird verständlich abgelehnt.
+- Jeden unterstützten Fahrradtyp auswählen; Fahrrad- und Gepäckgewicht bleiben nach Reload erhalten.
+- Fahrradtyp `E-Bike` wählen und Akkukapazität, Akkuanzahl, Motorleistung, Referenzreichweite, Unterstützungsprofil und Reserve speichern.
+- Nach Reload werden alle gespeicherten Werte wieder angezeigt.
+- Profil als JSON exportieren, Werte ändern und die Datei wieder importieren.
+- Eine Tour speichern und als JSON exportieren; der validierte Profilsnapshot ist im TourState enthalten.
+- Gespeicherte Tour erneut öffnen; das Profil wird zentral wiederhergestellt.
+- Es wird keine Energie-, Reichweiten-, Ladepunkt- oder automatische Etappenberechnung angezeigt oder ausgelöst.
+- Bei 390 und 768 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

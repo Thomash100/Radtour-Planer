@@ -1,4 +1,4 @@
-import { Bike, Building2, FlaskConical, FolderOpen, Map, ShieldCheck } from "lucide-react";
+import { Bike, Building2, FlaskConical, FolderOpen, Map, ShieldCheck, UserRoundCog } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,17 @@ export function ShellNav() {
             );
           })}
         </nav>
-        <Button asChild size="sm">
-          <Link href="/planer/route?mode=gpx">GPX laden</Link>
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button asChild size="sm" variant="ghost">
+            <Link aria-label="Fahrer- und Fahrradprofil" href="/einstellungen/fahrprofil">
+              <UserRoundCog className="h-4 w-4" />
+              <span className="hidden lg:inline">Fahrprofil</span>
+            </Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/planer/route?mode=gpx">GPX laden</Link>
+          </Button>
+        </div>
       </div>
     </header>
   );

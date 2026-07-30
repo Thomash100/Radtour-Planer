@@ -37,6 +37,20 @@ Ein Abschnitt endet erst, wenn mindestens einer dieser Zustaende erreicht ist:
 
 Kein Abschnitt endet mit unklarem Zwischenstand.
 
+## Abnahme und Merge-Freigabe
+
+Ab Paket 16 gilt für alle Entwicklungspakete verbindlich:
+
+1. Entwicklung abschließen.
+2. Automatische Prüfungen dokumentieren.
+3. Draft-PR erstellen oder aktualisieren.
+4. Raspberry-Pi-Abnahme durchführen.
+5. Fachliche Abnahme durch den Auftraggeber dokumentieren.
+6. Ausdrückliche Merge-Freigabe des Auftraggebers abwarten.
+7. Erst danach Draft auf Ready setzen, nach `private` mergen, `private` aktualisieren und das nächste Paket beginnen.
+
+Ohne die ausdrückliche Formulierung `PR #<nummer> ist zum Merge freigegeben.` darf Codex keinen Paket-PR mergen. Eine technische oder fachliche Abnahme allein ersetzt diese Freigabe nicht.
+
 ## Branch- und PR-Regel
 
 - Neue Arbeit erfolgt auf `codex/<kurzer-auftrag>`.

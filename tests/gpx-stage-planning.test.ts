@@ -52,10 +52,119 @@ import {
   normalizePlannerStep,
   resolvePlannerStep
 } from "../src/lib/planner-workflow";
+import {
+  DEFAULT_RIDER_BIKE_PROFILE,
+  RIDER_BIKE_PROFILE_EXPORT_SCHEMA,
+  createRiderBikeProfileExport,
+  parseRiderBikeProfileExport,
+  parseRiderBikeProfileValue
+} from "../src/lib/rider-bike-profile";
+import {
+  createTourExport,
+  createTourLibraryEntry,
+  parseTourExport
+} from "../src/lib/tour-library";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
 import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
+
+const riderBikeProfile = {
+  ...DEFAULT_RIDER_BIKE_PROFILE,
+  rider: {
+    ...DEFAULT_RIDER_BIKE_PROFILE.rider,
+    name: "  Testfahrerin  ",
+    bodyWeightKg: 68,
+    desiredDailyLoad: 62,
+    preferredDailyRideHours: 5.5,
+    maximumDailyRideHours: 8
+  },
+  bike: {
+    ...DEFAULT_RIDER_BIKE_PROFILE.bike,
+    type: "ebike" as const,
+    bikeWeightKg: 24,
+    luggageWeightKg: 16,
+    ebike: {
+      ...DEFAULT_RIDER_BIKE_PROFILE.bike.ebike,
+      batteryCapacityWh: 625,
+      batteryCount: 2,
+      referenceRangeKm: 95,
+      desiredReservePercent: 25
+    }
+  }
+};
+
+test("validiert das zentrale Fahrer- und Fahrradprofil", () => {
+  const parsed = parseRiderBikeProfileValue(riderBikeProfile);
+
+  assert.equal(parsed?.rider.name, "Testfahrerin");
+  assert.equal(parsed?.bike.type, "ebike");
+  assert.equal(parsed?.bike.ebike.batteryCount, 2);
+  assert.equal(
+    parseRiderBikeProfileValue({
+      ...riderBikeProfile,
+      rider: {
+        ...riderBikeProfile.rider,
+        preferredDailyRideHours: 9,
+        maximumDailyRideHours: 8
+      }
+    }),
+    null
+  );
+});
+
+test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {
+  const profileExport = createRiderBikeProfileExport(riderBikeProfile, "2026-07-29T20:00:00.000Z");
+  const restored = parseRiderBikeProfileExport(JSON.stringify(profileExport));
+
+  assert.equal(profileExport.schema, RIDER_BIKE_PROFILE_EXPORT_SCHEMA);
+  assert.equal(restored?.rider.name, "Testfahrerin");
+  assert.equal(restored?.bike.ebike.batteryCapacityWh, 625);
+  assert.equal(parseRiderBikeProfileExport(JSON.stringify({ ...profileExport, schema: "unknown" })), null);
+});
+
+test("bewahrt das Fahrer- und Fahrradprofil im TourState", () => {
+  const stored = parseStoredTourState(
+    JSON.stringify({
+      route: { geometryGeoJson: { type: "LineString", coordinates: [[13, 51], [13.1, 51.1]] } },
+      stages: [],
+      pois: [],
+      inputMode: "direct",
+      riderBikeProfile,
+      updatedAt: "2026-07-29T20:00:00.000Z"
+    })
+  );
+
+  assert.equal(stored?.riderBikeProfile?.rider.name, "Testfahrerin");
+  assert.equal(stored?.riderBikeProfile?.bike.type, "ebike");
+  assert.equal(stored?.riderBikeProfile?.bike.ebike.desiredReservePercent, 25);
+});
+
+test("übernimmt das Profil in Tour-Speicherung und Tour-JSON", () => {
+  const stored = parseStoredTourState(
+    JSON.stringify({
+      route: { geometryGeoJson: { type: "LineString", coordinates: [[13, 51], [13.1, 51.1]] } },
+      stages: [],
+      pois: [],
+      inputMode: "direct",
+      riderBikeProfile,
+      updatedAt: "2026-07-29T20:00:00.000Z"
+    })
+  );
+  assert.ok(stored);
+
+  const entry = createTourLibraryEntry(stored, {
+    id: "tour-profile-test",
+    name: "Profiltest",
+    now: "2026-07-29T20:00:00.000Z"
+  });
+  const restored = parseTourExport(
+    JSON.stringify(createTourExport(entry, "2026-07-29T20:05:00.000Z"))
+  );
+
+  assert.equal(restored?.state.riderBikeProfile?.rider.name, "Testfahrerin");
+  assert.equal(restored?.state.riderBikeProfile?.bike.ebike.batteryCount, 2);
+});
 
 test("Planungsbereiche erlauben nur ihre eigenen Arbeitsschritte", () => {
   assert.equal(isPlannerStepForWorkflow("overview", "route"), true);
