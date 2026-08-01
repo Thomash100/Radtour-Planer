@@ -263,6 +263,27 @@ Deterministischen Energie- und Reichweiten-Rechenkern prüfen:
 - Keine automatische Etappenverschiebung, Ladepunktplanung, alternative Route oder Wetter-/Windberechnung wird ausgelöst.
 - Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
 
+## Paket 19
+
+Deterministische E-Bike-Ladeplanung prüfen:
+
+- Kurze Tour mit ausreichender Kapazität zeigt keinen unnötigen Ladehalt.
+- Längere Tour kennzeichnet die erste kritische Stelle und fügt einen erreichbaren automatischen Ladehalt ein.
+- Tour mit mehreren Energiegrenzen erzeugt mehrere Ladehalte in stabiler Routenreihenfolge.
+- Ohne erreichbaren Ladepunkt erscheinen Reserve- und Erreichbarkeitswarnung.
+- Eigenen Ladepunkt mit Name, Routen-km, Steckertyp, Ladeleistung, Betreiber, Öffnungszeiten, Kosten und Verfügbarkeit erfassen.
+- Manuellen Ladehalt hinzufügen, entfernen und in der Reihenfolge verschieben.
+- Ziel-Ladung zwischen 80, 90 und 100 % ändern; Ankunftsakku, Abfahrtsakku und Ladezeit werden sofort neu berechnet.
+- Unbekannte Ladeleistung verwendet sichtbar die konfigurierte Ladegerätleistung als Schätzannahme.
+- Nicht verfügbarer Ladepunkt wird nicht automatisch verwendet und erzeugt bei manueller Auswahl eine Warnung.
+- Etappenansicht zeigt Ladehalte, Akkuwerte, Restreichweite und Ladezeit.
+- Tourübersicht zeigt Fahrenergie, Nachladung, gesamte Ladezeit und Fahrzeit einschließlich Laden.
+- Tour speichern, neu laden sowie als JSON exportieren/importieren; eigene Punkte und manuelle Ladehalte bleiben erhalten.
+- Dieselben Eingaben vor und nach Reload ergeben vollständig identische Ladeergebnisse.
+- Klassisches Fahrrad zeigt keine Ladeplanung.
+- Keine Live-Abfrage, Reservierung, Wetterintegration, Routenänderung oder KI-Optimierung wird ausgelöst.
+- Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:
