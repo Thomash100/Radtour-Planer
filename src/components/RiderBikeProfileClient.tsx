@@ -143,8 +143,8 @@ export function RiderBikeProfileClient() {
           <Badge>Persönliche Einstellungen</Badge>
           <h1 className="mt-3 text-3xl font-bold text-slate-950">Fahrer- und Fahrradprofil</h1>
           <p className="mt-2 max-w-3xl text-muted-foreground">
-            Eine zentrale Konfiguration für spätere Etappen-, Belastungs-, Reichweiten- und Reiseplanung. In diesem Paket
-            werden die Angaben ausschließlich gespeichert – es findet keine Energie- oder Akku-Berechnung statt.
+            Eine zentrale Konfiguration für Etappen-, Belastungs-, Reichweiten- und Reiseplanung. Seit Paket 18 verwendet
+            die Etappenansicht diese Angaben für eine transparente Energieprognose; eine automatische Motorsteuerung findet nicht statt.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -380,11 +380,11 @@ export function RiderBikeProfileClient() {
             <div className="flex flex-wrap items-center gap-2">
               <BatteryCharging className="h-5 w-5 text-primary" />
               <CardTitle>E-Bike- und Ladeprofil</CardTitle>
-              <Badge variant="outline">Nur Datenmodell</Badge>
+              <Badge variant="outline">Grundlage der Energieprognose</Badge>
             </div>
             <CardDescription>
               {isEbike
-                ? "Diese Angaben werden gespeichert, aber noch nicht für Verbrauch oder Reichweite verwendet."
+                ? "Diese Angaben werden gespeichert und für die deterministische Energieprognose je Etappe verwendet."
                 : "Wähle als Fahrradtyp E-Bike, um die Grunddaten zu bearbeiten. Vorhandene Werte bleiben gespeichert."}
             </CardDescription>
           </CardHeader>
@@ -660,8 +660,8 @@ export function RiderBikeProfileClient() {
             </div>
             <div className="mt-4 flex gap-2 rounded-md bg-muted p-3 text-sm text-muted-foreground">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              Das Profil wird lokal in diesem Browser gespeichert. Es enthält keine Kontodaten und wird in Paket 17 nicht
-              an einen Server übertragen.
+              Das Profil wird lokal in diesem Browser gespeichert. Es enthält keine Kontodaten und wird nicht an einen
+              Server übertragen.
             </div>
           </CardContent>
         </Card>

@@ -247,6 +247,11 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis nutzbare Akkukapazität, Motorunterstützung, Ladegerätleistung, Ladeverluste und persönliches Fahrprofil
 - Ergebnis Paket-16-Profilmigration sowie Profil- und Tour-JSON mit den Paket-17-Feldern
 - Ergebnis weiterhin ohne Energie-, Reichweiten-, Ladezeit- oder Etappenberechnung
+- Ergebnis Energieprognose je Etappe mit Verbrauch, Rest, persönlicher Belastung, Reichweite, Reserve und Qualität
+- Ergebnis für klassische Fahrräder sowie E-Bike mit einem und zwei Akkus
+- Ergebnis mit vollständigem und fehlendem/unvollständigem Höhenprofil
+- Ergebnis deterministische Wiederholung ohne veränderte Werte
+- Ergebnis ohne automatische Etappenänderung, Ladepunktplanung oder Wetter-/Winddaten
 - Ergebnis responsive Darstellung bei 390 und 768 px
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich
 

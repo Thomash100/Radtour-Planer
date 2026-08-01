@@ -6,6 +6,7 @@ import {
   ArrowDownToLine,
   ArrowRight,
   BadgeEuro,
+  BatteryCharging,
   Bed,
   Bike,
   Briefcase,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/accommodations";
 import { replaceRouteAfterSuccessfulCalculation } from "@/lib/direct-route-replacement";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
+import { calculateStageEnergyProjection } from "@/lib/ebike-energy";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
 import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
@@ -218,6 +220,8 @@ type StagePlanPreviewItem = {
   startName: string;
   endName: string;
   distanceKm: number;
+  routeStartKm: number;
+  routeEndKm: number;
   elevationUp?: number;
   elevationDown?: number;
   difficulty?: ReturnType<typeof calculateStageDifficulty>;
@@ -593,6 +597,8 @@ export function PlannerClient({
         startName: stage.startName,
         endName: stage.endName,
         distanceKm: stage.distanceKm,
+        routeStartKm: stage.routeStartKm,
+        routeEndKm: stage.routeEndKm,
         elevationUp: stage.elevationUp,
         elevationDown: stage.elevationDown,
         difficulty: stage.difficulty
@@ -616,12 +622,20 @@ export function PlannerClient({
       effectiveStageBreakpoints.length > 0
         ? ["Start", ...effectiveStageBreakpoints.map((breakpoint) => breakpoint.name), "Ziel"]
         : ["Start", ...splitPoints.slice(1, -1).map((_, index) => `Etappenpunkt ${index + 1}`), "Ziel"];
-    return splitPoints.slice(0, -1).map((startKm, index) => ({
-      dayNumber: index + 1,
-      startName: names[index],
-      endName: names[index + 1],
-      distanceKm: Number((splitPoints[index + 1] - startKm).toFixed(1))
-    }));
+    return splitPoints.slice(0, -1).map((startKm, index) => {
+      const endKm = splitPoints[index + 1];
+      const elevation = elevationMetricsForRange(route.elevationProfile, startKm, endKm);
+      return {
+        dayNumber: index + 1,
+        startName: names[index],
+        endName: names[index + 1],
+        distanceKm: Number((endKm - startKm).toFixed(1)),
+        routeStartKm: startKm,
+        routeEndKm: endKm,
+        elevationUp: elevation?.elevationUp,
+        elevationDown: elevation?.elevationDown
+      };
+    });
   }, [difficultyStagePlan, effectiveStageBreakpoints, route, routeTotalKm, stageGenerationMode, travelDayValidation]);
   const modeLabel = inputMode === "direct" ? "Direkte Eingabe" : inputMode === "gpx" ? "GPX-Datei" : "Demo-Tour";
   const lastTourSavedLabel = useMemo(() => formatSavedTime(lastTourSavedAt), [lastTourSavedAt]);
@@ -3460,27 +3474,61 @@ export function PlannerClient({
                         </div>
                       ) : null}
                       <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        {stagePlanPreview.map((stage) => (
-                          <div key={stage.dayNumber} className="rounded-md bg-white p-3 text-sm">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div className="font-semibold">Tag {stage.dayNumber}</div>
-                              {stage.difficulty ? (
-                                <Badge variant="outline">
-                                  {stage.difficulty.label} · {stage.difficulty.effortScore}/100
-                                </Badge>
-                              ) : null}
-                            </div>
-                            <div className="text-muted-foreground">
-                              {stage.startName} - {stage.endName}
-                            </div>
-                            <div>{formatKm(stage.distanceKm)}</div>
-                            {typeof stage.elevationUp === "number" && typeof stage.elevationDown === "number" ? (
-                              <div className="text-muted-foreground">
-                                {stage.elevationUp} Hm bergauf · {stage.elevationDown} Hm bergab
+                        {stagePlanPreview.map((stage) => {
+                          const previewElevationProfile = route
+                            ? sliceElevationProfile(route.elevationProfile, stage.routeStartKm, stage.routeEndKm)
+                            : [];
+                          const previewEnergy = calculateStageEnergyProjection({
+                            profile: riderBikeProfile,
+                            distanceKm: stage.distanceKm,
+                            elevationUp: stage.elevationUp,
+                            elevationDown: stage.elevationDown,
+                            elevationProfile: previewElevationProfile,
+                            elevationDataStatus:
+                              route?.elevationSource === "estimated" || route?.routingProvider === "mock"
+                                ? "estimated"
+                                : previewElevationProfile.length >= 2
+                                  ? "measured"
+                                  : "missing"
+                          });
+                          return (
+                            <div key={stage.dayNumber} className="rounded-md bg-white p-3 text-sm">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="font-semibold">Tag {stage.dayNumber}</div>
+                                {stage.difficulty ? (
+                                  <Badge variant="outline">
+                                    {stage.difficulty.label} · {stage.difficulty.effortScore}/100
+                                  </Badge>
+                                ) : null}
                               </div>
-                            ) : null}
-                          </div>
-                        ))}
+                              <div className="text-muted-foreground">
+                                {stage.startName} - {stage.endName}
+                              </div>
+                              <div>{formatKm(stage.distanceKm)}</div>
+                              {typeof stage.elevationUp === "number" && typeof stage.elevationDown === "number" ? (
+                                <div className="text-muted-foreground">
+                                  {stage.elevationUp} Hm bergauf · {stage.elevationDown} Hm bergab
+                                </div>
+                              ) : null}
+                              <div className="mt-2 border-t pt-2 text-xs" data-energy-preview={stage.dayNumber}>
+                                <div className="font-medium">Energieprognose</div>
+                                {previewEnergy.bicycleMode === "ebike" ? (
+                                  <div>
+                                    Verbrauch {previewEnergy.batteryConsumptionPercent?.toFixed(1)} % · Rest{" "}
+                                    {previewEnergy.remainingCapacityPercent?.toFixed(1)} %
+                                  </div>
+                                ) : (
+                                  <div>Klassisches Fahrrad · keine Akkuwerte</div>
+                                )}
+                                <div>
+                                  {previewEnergy.energyNeedWh} Wh · Belastung {previewEnergy.personalLoadScore}/100 · Qualität{" "}
+                                  {previewEnergy.qualityLabel}
+                                </div>
+                                <div className="text-muted-foreground">{previewEnergy.recommendation}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -3591,6 +3639,22 @@ export function PlannerClient({
                     durationHours: stage.distanceKm / 17
                   });
                   const stageDifficultyNotes = [...stageDifficulty.warnings, ...stageDifficulty.suggestions].slice(0, 3);
+                  const stageElevationProfile = route
+                    ? sliceElevationProfile(route.elevationProfile, stageKmBounds.startKm, stageKmBounds.endKm)
+                    : [];
+                  const stageEnergy = calculateStageEnergyProjection({
+                    profile: riderBikeProfile,
+                    distanceKm: stage.distanceKm,
+                    elevationUp: stage.elevationUp,
+                    elevationDown: stage.elevationDown,
+                    elevationProfile: stageElevationProfile,
+                    elevationDataStatus:
+                      route?.elevationSource === "estimated" || route?.routingProvider === "mock"
+                        ? "estimated"
+                        : stageElevationProfile.length >= 2
+                          ? "measured"
+                          : "missing"
+                  });
 
                   return (
                     <div
@@ -3733,6 +3797,61 @@ export function PlannerClient({
                               ))}
                             </div>
                           )}
+                        </div>
+                        <div
+                          className="grid min-w-0 gap-2 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm"
+                          data-energy-projection={stage.id}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <BatteryCharging className="h-4 w-4 text-sky-800" />
+                            <h3 className="font-semibold text-sky-950">Energieprognose</h3>
+                            {stageEnergy.bicycleMode === "ebike" ? (
+                              <>
+                                <Badge variant="outline">
+                                  Verbrauch: {stageEnergy.batteryConsumptionPercent?.toFixed(1)} %
+                                </Badge>
+                                <Badge variant="outline">
+                                  Rest: {stageEnergy.remainingCapacityPercent?.toFixed(1)} %
+                                </Badge>
+                              </>
+                            ) : (
+                              <Badge variant="outline">Klassisches Fahrrad</Badge>
+                            )}
+                            <Badge variant="outline">Prognosequalität: {stageEnergy.qualityLabel}</Badge>
+                          </div>
+                          <div className="grid gap-1 text-xs text-slate-700 sm:grid-cols-2 lg:grid-cols-4">
+                            <span>
+                              {stageEnergy.bicycleMode === "ebike" ? "Energiebedarf" : "Mechanischer Bedarf"}:{" "}
+                              {stageEnergy.energyNeedWh} Wh
+                            </span>
+                            <span>Persönliche Belastung: {stageEnergy.personalLoadScore}/100</span>
+                            <span>
+                              Restenergie: {stageEnergy.remainingEnergyWh === null ? "nicht anwendbar" : `${stageEnergy.remainingEnergyWh} Wh`}
+                            </span>
+                            <span>
+                              Restreichweite:{" "}
+                              {stageEnergy.projectedRemainingRangeKm === null
+                                ? "nicht anwendbar"
+                                : formatKm(stageEnergy.projectedRemainingRangeKm)}
+                            </span>
+                          </div>
+                          <p className="text-xs font-medium text-sky-950">Empfehlung: {stageEnergy.recommendation}</p>
+                          {stageEnergy.reserveWarning && (
+                            <p className="text-xs font-medium text-amber-900">Reservewarnung: {stageEnergy.reserveWarning}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            Modellannahmen: Fahrerleistung {stageEnergy.assumptions.riderPowerW} W
+                            {stageEnergy.assumptions.motorEfficiencyPercent === null
+                              ? ""
+                              : ` · Motorwirkungsgrad ${stageEnergy.assumptions.motorEfficiencyPercent} %`}
+                            {" · "}Ø {stageEnergy.assumptions.averageSpeedKmh.toFixed(1)} km/h
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {stageEnergy.qualityReasons[0]}{" "}
+                            {stageEnergy.bicycleMode === "ebike"
+                              ? "Die Etappe startet rechnerisch mit der vollständig nutzbaren konfigurierten Akkukapazität."
+                              : "Für ein klassisches Fahrrad werden keine Akkuwerte abgeleitet."}
+                          </p>
                         </div>
                         <div className="grid min-w-0 gap-3 rounded-md border bg-slate-50 p-3">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

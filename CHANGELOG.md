@@ -1,5 +1,16 @@
 # Changelog
 
+## Paket 18 - 2026-07-30
+
+- deterministischen, versionierten Energie- und Reichweiten-Rechenkern ergänzt
+- echtes Etappen-Höhenprofil segmentweise nach Ebene, Steigung und Gefälle ausgewertet
+- Roll-, Luft-, Lageenergie sowie Fahrer-, Motor- und Verlustanteil getrennt berechnet
+- Akkuverbrauch, Restenergie, Restkapazität, Reichweitenprognose und Reservewarnung ergänzt
+- klassische Fahrräder ohne erfundene Akkuwerte unterstützt
+- Prognosequalität für vollständige, geschätzte und unvollständige Höhendaten ausgewiesen
+- verständliche Energieprognose in der Etappenansicht ergänzt
+- keine automatische Etappenänderung, Ladeplanung oder Wetter-/Windmodellierung ergänzt
+
 ## Paket 17 - 2026-07-30
 
 - zentrales E-Bike-Profil um nutzbare Akkukapazität, Motorunterstützung und persönliches Fahrprofil erweitert
