@@ -3854,6 +3854,25 @@ export function PlannerClient({
                                 <span>Kalibrierungsfaktor: {stageEnergy.calibration.appliedFactor.toFixed(3)}</span>
                               </>
                             )}
+                            {stageEnergy.energyBreakdown && (
+                              <>
+                                <span>
+                                  Flacher kalibrierter Grundverbrauch: {stageEnergy.energyBreakdown.calibratedFlatBaseWh} Wh
+                                </span>
+                                <span>Steigungszuschlag: +{stageEnergy.energyBreakdown.climbSurchargeWh} Wh</span>
+                                <span>Entlastung durch Gefälle: −{stageEnergy.energyBreakdown.descentReliefWh} Wh</span>
+                                <span>
+                                  Gesamter kalibrierter Akkuverbrauch: {stageEnergy.energyBreakdown.totalCalibratedBatteryEnergyWh} Wh
+                                </span>
+                                <span>Positive Höhenmeter: {stageEnergy.energyBreakdown.positiveElevationM} Hm</span>
+                                <span>
+                                  Akkuverbrauch je 100 Hm:{" "}
+                                  {stageEnergy.energyBreakdown.batteryWhPer100ElevationM === null
+                                    ? "nicht anwendbar"
+                                    : `${stageEnergy.energyBreakdown.batteryWhPer100ElevationM.toFixed(1)} Wh`}
+                                </span>
+                              </>
+                            )}
                           </div>
                           <p className="text-xs font-medium text-sky-950">Empfehlung: {stageEnergy.recommendation}</p>
                           {stageEnergy.reserveWarning && (

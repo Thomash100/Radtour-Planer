@@ -95,7 +95,9 @@ Enthalten:
 Nach dem Raspberry-Pi-Praxistest ergänzt Modellversion `biketriphub-energy-v2`:
 
 - persönlichen Referenzverbrauch aus nutzbarer Gesamtenergie und flacher Referenzreichweite
-- segmentweise Kalibrierung bei weiterhin getrenntem physikalischem Rohverbrauch
+- Kalibrierung ausschließlich des flachen Grundverbrauchs bei weiterhin getrenntem physikalischem Rohverbrauch
+- unskalierter physikalischer Steigungszuschlag und auf null begrenzte Gefälleentlastung
+- monotone Höhenmeter-Regression für 100 km mit 100, 1.000 und 2.000 positiven Höhenmetern
 - sichere Reichweite bis zur separat bewerteten Reserve
 - transparente Faktoren, harte Grenzen und sichtbare Hinweise bei auffälliger Kalibrierung
 - eindeutige Semantik der Referenzreichweite für die gesamte konfigurierte Akkuanzahl

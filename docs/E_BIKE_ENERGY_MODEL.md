@@ -71,8 +71,17 @@ Danach wird der persönliche Referenzverbrauch darauf bezogen:
 ```text
 Rohfaktor = persönlicher Referenzverbrauch / physikalischer Referenzverbrauch
 Kalibrierungsfaktor = begrenze(Rohfaktor, 0,1, 20)
-kalibrierter Segmentverbrauch = physikalischer Segmentverbrauch × Kalibrierungsfaktor
+kalibrierter flacher Grundverbrauch = physikalischer flacher Verbrauch × Kalibrierungsfaktor
+Steigungszuschlag = max(0, physikalischer Verbrauch bergauf - physikalischer Verbrauch derselben Strecke flach)
+Gefälleentlastung = min(kalibrierter flacher Grundverbrauch, max(0, physikalischer Verbrauch flach - physikalischer Verbrauch bergab))
+Gesamtverbrauch = kalibrierter flacher Grundverbrauch + Steigungszuschlag - Gefälleentlastung
 ```
+
+Der Kalibrierungsfaktor wird damit ausschließlich auf den flachen Grundverbrauch angewendet. Die zusätzliche Lageenergie
+positiver Höhenmeter wird mit der segmentweisen Fahrer-/Motoraufteilung und dem Motorwirkungsgrad berechnet und danach
+**ohne Kalibrierungsfaktor** addiert. Ein kleiner Faktor kann den Höhenmeterbedarf nicht neutralisieren. Gefälle wird nur
+bis zur Höhe des kalibrierten flachen Segmentverbrauchs entlastend berücksichtigt; negative Akkuenergie und Rekuperation
+sind ausgeschlossen.
 
 Die Grenzen verhindern unkontrollierte Extremkorrekturen. Ein Faktor außerhalb `0,5..2` erzeugt einen sichtbaren
 Prüfhinweis. Muss die harte Grenze `0,1..20` angewendet werden, werden Rohfaktor, angewandter Faktor und Begrenzung
@@ -84,9 +93,28 @@ Die Ergebnisstruktur trennt:
 - `batteryEnergyWh`: kalibrierter, für Reserve und Ladeplanung verbindlicher Verbrauch,
 - `calibrationAdjustmentWh`: Differenz zwischen beiden Werten,
 - `conversionLossWh`: reine physikalische Motorumwandlungsverluste,
+- `energyBreakdown.calibratedFlatBaseWh`: kalibrierter flacher Grundverbrauch,
+- `energyBreakdown.climbSurchargeWh`: zusätzlicher physikalischer Akkuverbrauch bergauf,
+- `energyBreakdown.descentReliefWh`: begrenzte Entlastung bergab,
+- `energyBreakdown.positiveElevationM`: berücksichtigte positive Höhenmeter,
+- `energyBreakdown.batteryWhPer100ElevationM`: Steigungszuschlag je 100 positive Höhenmeter,
 - persönliche Referenzreichweite und Referenzverbrauch,
 - sichere Reichweite bis zur Reserve,
 - Rohfaktor, angewandten Faktor und Kalibrierungswarnung.
+
+## Höhenmeter-Referenzvergleich
+
+Mit 500 Wh nutzbarer Energie, 80 km flacher Referenzreichweite, 20 % Reserve und identischem Fahrer-, Fahrrad- und
+Unterstützungsprofil ergibt die aggregierte 100-km-Prüfstrecke:
+
+| Fall | Bergauf/Bergab | Grundverbrauch | Steigungszuschlag | Gefälleentlastung | Gesamt | Verbrauch |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A – nahezu flach | 100/100 Hm | 625 Wh | +17 Wh | −8 Wh | 635 Wh | 126,9 % |
+| B – mittel | 1.000/1.000 Hm | 625 Wh | +173 Wh | −76 Wh | 722 Wh | 144,4 % |
+| C – bergig | 2.000/2.000 Hm | 625 Wh | +347 Wh | −152 Wh | 819 Wh | 163,8 % |
+
+Damit gilt verbindlich `A < B < C`. Die Werte sind deterministische Modellwerte der dokumentierten Ersatzsegmentierung;
+mit einem echten Höhenprofil werden die Höhenmeter entlang der tatsächlichen Segmente verteilt.
 
 ## Akku, Reichweite und Status
 

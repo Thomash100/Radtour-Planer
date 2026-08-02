@@ -61,7 +61,8 @@ import {
   RIDER_BIKE_PROFILE_EXPORT_SCHEMA,
   createRiderBikeProfileExport,
   parseRiderBikeProfileExport,
-  parseRiderBikeProfileValue
+  parseRiderBikeProfileValue,
+  type RiderBikeProfile
 } from "../src/lib/rider-bike-profile";
 import {
   createTourExport,
@@ -103,6 +104,29 @@ const riderBikeProfile = {
   }
 };
 
+const elevationComparisonProfile: RiderBikeProfile = {
+  ...riderBikeProfile,
+  rider: {
+    ...riderBikeProfile.rider,
+    bodyWeightKg: 75
+  },
+  bike: {
+    ...riderBikeProfile.bike,
+    bikeWeightKg: 24,
+    luggageWeightKg: 12,
+    ebike: {
+      ...riderBikeProfile.bike.ebike,
+      batteryCapacityWh: 500,
+      batteryCount: 1,
+      usableBatteryCapacityPercent: 100,
+      motorAssistancePercent: 100,
+      referenceRangeKm: 80,
+      desiredReservePercent: 20,
+      personalRidingStyle: "balanced"
+    }
+  }
+};
+
 const measuredFlatProfile = (distanceKm: number) =>
   Array.from({ length: Math.ceil(distanceKm / 2) + 1 }, (_, index) => ({
     distanceKm: Math.min(index * 2, distanceKm),
@@ -129,6 +153,21 @@ function energyProjection(
     elevationProfile: measuredFlatProfile(40),
     elevationDataStatus: "measured",
     ...overrides
+  });
+}
+
+function elevationComparisonProjection(
+  elevationUp: number,
+  elevationDown = elevationUp,
+  profile: RiderBikeProfile = elevationComparisonProfile
+) {
+  return calculateStageEnergyProjection({
+    profile,
+    distanceKm: 100,
+    elevationUp,
+    elevationDown,
+    elevationProfile: [],
+    elevationDataStatus: "missing"
   });
 }
 
@@ -335,6 +374,88 @@ test("kennzeichnet 100 km bei 80 km Referenzreichweite als nicht ohne Laden fahr
   assert.equal(projection.remainingCapacityPercent, 0);
   assert.equal(projection.reserveStatus, "depleted");
   assert.notEqual(projection.batteryConsumptionPercent, 20);
+});
+
+test("erhöht den Akkuverbrauch bei 100 km monoton mit 100, 1000 und 2000 positiven Höhenmetern", () => {
+  const flat = elevationComparisonProjection(100);
+  const medium = elevationComparisonProjection(1000);
+  const mountainous = elevationComparisonProjection(2000);
+
+  assert.ok(flat.energyNeedWh < medium.energyNeedWh);
+  assert.ok(medium.energyNeedWh < mountainous.energyNeedWh);
+  assert.deepEqual(
+    [flat.energyNeedWh, medium.energyNeedWh, mountainous.energyNeedWh],
+    [635, 722, 819]
+  );
+  assert.deepEqual(
+    [flat.batteryConsumptionPercent, medium.batteryConsumptionPercent, mountainous.batteryConsumptionPercent],
+    [126.9, 144.4, 163.8]
+  );
+  assert.deepEqual(
+    [flat.energyBreakdown?.positiveElevationM, medium.energyBreakdown?.positiveElevationM, mountainous.energyBreakdown?.positiveElevationM],
+    [100, 1000, 2000]
+  );
+});
+
+test("kalibriert nur den flachen Grundverbrauch und addiert den physikalischen Steigungszuschlag separat", () => {
+  const projection = elevationComparisonProjection(1000);
+  const breakdown = projection.energyBreakdown;
+
+  assert.ok(breakdown);
+  assert.equal(breakdown?.calibratedFlatBaseWh, 625);
+  assert.equal(breakdown?.climbSurchargeWh, 173);
+  assert.equal(breakdown?.descentReliefWh, 76);
+  assert.equal(breakdown?.batteryWhPer100ElevationM, 17.3);
+  assert.equal(
+    breakdown?.totalCalibratedBatteryEnergyWh,
+    (breakdown?.calibratedFlatBaseWh ?? 0) +
+      (breakdown?.climbSurchargeWh ?? 0) -
+      (breakdown?.descentReliefWh ?? 0)
+  );
+});
+
+test("höheres Gesamtgewicht erhöht den unkalibrierten Steigungszuschlag", () => {
+  const light = elevationComparisonProjection(1000, 1000, {
+    ...elevationComparisonProfile,
+    rider: { ...elevationComparisonProfile.rider, bodyWeightKg: 55 },
+    bike: { ...elevationComparisonProfile.bike, luggageWeightKg: 5 }
+  });
+  const heavy = elevationComparisonProjection(1000, 1000, {
+    ...elevationComparisonProfile,
+    rider: { ...elevationComparisonProfile.rider, bodyWeightKg: 105 },
+    bike: { ...elevationComparisonProfile.bike, luggageWeightKg: 30 }
+  });
+
+  assert.ok((heavy.energyBreakdown?.climbSurchargeWh ?? 0) > (light.energyBreakdown?.climbSurchargeWh ?? 0));
+});
+
+test("höhere Motorunterstützung erhöht den Akkuanteil am Steigungszuschlag", () => {
+  const lowSupport = elevationComparisonProjection(1000, 1000, {
+    ...elevationComparisonProfile,
+    bike: {
+      ...elevationComparisonProfile.bike,
+      ebike: { ...elevationComparisonProfile.bike.ebike, motorAssistancePercent: 50 }
+    }
+  });
+  const highSupport = elevationComparisonProjection(1000, 1000, {
+    ...elevationComparisonProfile,
+    bike: {
+      ...elevationComparisonProfile.bike,
+      ebike: { ...elevationComparisonProfile.bike.ebike, motorAssistancePercent: 250 }
+    }
+  });
+
+  assert.ok((highSupport.energyBreakdown?.climbSurchargeWh ?? 0) > (lowSupport.energyBreakdown?.climbSurchargeWh ?? 0));
+});
+
+test("begrenzt Gefälle auf Entlastung ohne negative Akkuenergie oder Rekuperation", () => {
+  const descent = elevationComparisonProjection(0, 2000);
+
+  assert.equal(descent.energyBreakdown?.climbSurchargeWh, 0);
+  assert.ok((descent.energyBreakdown?.descentReliefWh ?? 0) > 0);
+  assert.ok((descent.batteryEnergyWh ?? -1) >= 0);
+  assert.ok(descent.terrain.descent.batteryEnergyWh >= 0);
+  assert.ok(descent.terrain.descent.descentReliefWh <= descent.terrain.descent.calibratedFlatBaseWh);
 });
 
 test("berücksichtigt unterschiedliches Gesamtgewicht deterministisch", () => {

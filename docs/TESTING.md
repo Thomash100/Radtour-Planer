@@ -244,6 +244,11 @@ Deterministischen Energie- und Reichweiten-Rechenkern prüfen:
 - Physikalischen Rohverbrauch, kalibrierten Verbrauch und Kalibrierungsfaktor vergleichen.
 - Ein Faktor außerhalb `0,5..2` zeigt einen Prüfhinweis; eine Begrenzung auf `0,1..20` wird ausdrücklich ausgewiesen.
 - Flache Referenzstrecke, kurze steile Etappe und lange flache Etappe vergleichen.
+- Bei identischen 100-km-Strecken gilt für 100, 1.000 und 2.000 positive Höhenmeter zwingend: Verbrauch A < B < C.
+- Der Kalibrierungsfaktor wirkt nur auf den flachen Grundverbrauch; der physikalische Steigungszuschlag wird unskaliert addiert.
+- Höheres Gesamtgewicht und höhere Motorunterstützung erhöhen den Akkuanteil am Steigungszuschlag.
+- Gefälle reduziert den Bedarf höchstens bis null und erzeugt weder negative Akkuenergie noch Rekuperation.
+- Etappenansicht zeigt flachen Grundverbrauch, Steigungszuschlag, Gefälleentlastung, Gesamtverbrauch, positive Höhenmeter und Wh je 100 Hm getrennt.
 - Höheres Fahrer-/Fahrrad-/Gepäckgewicht erhöht bei gleicher Strecke den Energiebedarf.
 - Höhere Motorunterstützung erhöht den Akkuanteil und senkt den Fahreranteil.
 - Klassisches Fahrrad zeigt mechanischen Bedarf und persönliche Belastung, aber keine Akkuwerte.

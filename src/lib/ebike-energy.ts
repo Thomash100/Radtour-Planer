@@ -67,6 +67,14 @@ export type StageEnergyProjection = {
     limitApplied: boolean;
     warning: string | null;
   } | null;
+  energyBreakdown: {
+    calibratedFlatBaseWh: number;
+    climbSurchargeWh: number;
+    descentReliefWh: number;
+    totalCalibratedBatteryEnergyWh: number;
+    positiveElevationM: number;
+    batteryWhPer100ElevationM: number | null;
+  } | null;
   assumptions: {
     riderPowerW: number;
     motorEfficiencyPercent: number | null;
@@ -83,6 +91,10 @@ export type StageEnergyProjection = {
       riderEnergyWh: number;
       motorMechanicalEnergyWh: number;
       physicalRawBatteryEnergyWh: number;
+      physicalFlatBatteryEnergyWh: number;
+      calibratedFlatBaseWh: number;
+      climbSurchargeWh: number;
+      descentReliefWh: number;
       batteryEnergyWh: number;
     }
   >;
@@ -154,10 +166,23 @@ const baseSpeedByBike: Record<RiderBikeProfile["bike"]["type"], number> = {
   ebike: 20
 };
 
+const emptyTerrainValues = () => ({
+  distanceKm: 0,
+  mechanicalEnergyWh: 0,
+  riderEnergyWh: 0,
+  motorMechanicalEnergyWh: 0,
+  physicalRawBatteryEnergyWh: 0,
+  physicalFlatBatteryEnergyWh: 0,
+  calibratedFlatBaseWh: 0,
+  climbSurchargeWh: 0,
+  descentReliefWh: 0,
+  batteryEnergyWh: 0
+});
+
 const emptyTerrain = () => ({
-  flat: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 },
-  climb: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 },
-  descent: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 }
+  flat: emptyTerrainValues(),
+  climb: emptyTerrainValues(),
+  descent: emptyTerrainValues()
 });
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -434,9 +459,20 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
   let motorMechanicalEnergyWh = 0;
   let physicalRawBatteryEnergyWh = 0;
   let durationHours = 0;
+  const calculatedSegments: Array<{
+    segment: CalculationSegment;
+    physical: ReturnType<typeof calculatePhysicalSegment>;
+    physicalFlat: ReturnType<typeof calculatePhysicalSegment>;
+  }> = [];
 
   for (const segment of segments) {
     const physical = calculatePhysicalSegment(segment);
+    const physicalFlat = calculatePhysicalSegment({
+      distanceKm: segment.distanceKm,
+      elevationDeltaM: 0,
+      terrain: "flat"
+    });
+    calculatedSegments.push({ segment, physical, physicalFlat });
     mechanicalEnergyWh += physical.mechanicalWh;
     riderEnergyWh += physical.riderWh;
     motorMechanicalEnergyWh += physical.motorMechanicalWh;
@@ -447,6 +483,7 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
     terrain[segment.terrain].riderEnergyWh += physical.riderWh;
     terrain[segment.terrain].motorMechanicalEnergyWh += physical.motorMechanicalWh;
     terrain[segment.terrain].physicalRawBatteryEnergyWh += physical.batteryWh;
+    terrain[segment.terrain].physicalFlatBatteryEnergyWh += physicalFlat.batteryWh;
   }
 
   const usableBatteryEnergyWh =
@@ -487,13 +524,39 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
         : calibrationFactor < calibrationWarningMinimum || calibrationFactor > calibrationWarningMaximum
           ? `Der persönliche Referenzwert führt zu einem deutlich korrigierenden Kalibrierungsfaktor von ${round(calibrationFactor, 2)}. Bitte Akkudaten und Referenzreichweite prüfen.`
           : null;
-  const batteryEnergyWh =
-    bicycleMode === "ebike" ? physicalRawBatteryEnergyWh * calibrationFactor : 0;
+  let calibratedFlatBaseWh = 0;
+  let climbSurchargeWh = 0;
+  let descentReliefWh = 0;
+  let batteryEnergyWh = 0;
   if (bicycleMode === "ebike") {
-    for (const values of Object.values(terrain)) {
-      values.batteryEnergyWh = values.physicalRawBatteryEnergyWh * calibrationFactor;
+    for (const calculated of calculatedSegments) {
+      const segmentCalibratedFlatWh = calculated.physicalFlat.batteryWh * calibrationFactor;
+      const rawTerrainDifferenceWh = calculated.physical.batteryWh - calculated.physicalFlat.batteryWh;
+      const segmentClimbSurchargeWh =
+        calculated.segment.elevationDeltaM > 0 ? Math.max(0, rawTerrainDifferenceWh) : 0;
+      const segmentDescentReliefWh =
+        calculated.segment.elevationDeltaM < 0
+          ? Math.min(segmentCalibratedFlatWh, Math.max(0, -rawTerrainDifferenceWh))
+          : 0;
+      const segmentBatteryWh = Math.max(
+        0,
+        segmentCalibratedFlatWh + segmentClimbSurchargeWh - segmentDescentReliefWh
+      );
+      const terrainValues = terrain[calculated.segment.terrain];
+      terrainValues.calibratedFlatBaseWh += segmentCalibratedFlatWh;
+      terrainValues.climbSurchargeWh += segmentClimbSurchargeWh;
+      terrainValues.descentReliefWh += segmentDescentReliefWh;
+      terrainValues.batteryEnergyWh += segmentBatteryWh;
+      calibratedFlatBaseWh += segmentCalibratedFlatWh;
+      climbSurchargeWh += segmentClimbSurchargeWh;
+      descentReliefWh += segmentDescentReliefWh;
+      batteryEnergyWh += segmentBatteryWh;
     }
   }
+  const positiveElevationM = segments.reduce(
+    (sum, segment) => sum + Math.max(0, segment.elevationDeltaM),
+    0
+  );
   const remainingEnergyWh =
     usableBatteryEnergyWh === null ? null : Math.max(0, usableBatteryEnergyWh - batteryEnergyWh);
   const batteryConsumptionPercent =
@@ -545,6 +608,10 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
         riderEnergyWh: round(value.riderEnergyWh, 1),
         motorMechanicalEnergyWh: round(value.motorMechanicalEnergyWh, 1),
         physicalRawBatteryEnergyWh: round(value.physicalRawBatteryEnergyWh, 1),
+        physicalFlatBatteryEnergyWh: round(value.physicalFlatBatteryEnergyWh, 1),
+        calibratedFlatBaseWh: round(value.calibratedFlatBaseWh, 1),
+        climbSurchargeWh: round(value.climbSurchargeWh, 1),
+        descentReliefWh: round(value.descentReliefWh, 1),
         batteryEnergyWh: round(value.batteryEnergyWh, 1)
       }
     ])
@@ -601,6 +668,18 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
             maximumFactor: maximumCalibrationFactor,
             limitApplied: calibrationLimitApplied,
             warning: calibrationWarning
+          }
+        : null,
+    energyBreakdown:
+      bicycleMode === "ebike"
+        ? {
+            calibratedFlatBaseWh: round(calibratedFlatBaseWh),
+            climbSurchargeWh: round(climbSurchargeWh),
+            descentReliefWh: round(descentReliefWh),
+            totalCalibratedBatteryEnergyWh: round(batteryEnergyWh),
+            positiveElevationM: round(positiveElevationM),
+            batteryWhPer100ElevationM:
+              positiveElevationM > 0 ? round((climbSurchargeWh / positiveElevationM) * 100, 1) : null
           }
         : null,
     assumptions: {

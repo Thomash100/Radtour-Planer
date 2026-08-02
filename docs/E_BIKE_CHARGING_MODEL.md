@@ -12,6 +12,8 @@ Die Ladeplanung darf ausschließlich den kalibrierten Verbrauch verwenden:
 - `terrain.*.batteryEnergyWh` enthält den kalibrierten Bedarf des jeweiligen Segmenttyps.
 - `physicalRawBatteryEnergyWh` dient nur der Transparenz und darf nicht für Akkustände, Reservewarnungen oder Ladehalte
   verwendet werden.
+- Der verbindliche Bedarf setzt sich aus kalibriertem flachem Grundverbrauch, unskaliertem Steigungszuschlag und
+  begrenzter Gefälleentlastung zusammen. Die Komponenten stehen in `energyBreakdown`.
 
 Beim Aufbau streckenbezogener Ladesegmente muss deren Summe deterministisch exakt auf den kalibrierten Etappenbedarf
 abgestimmt werden. Gleiche Profile, Routen, Höhenprofile und Ladepunkte müssen identische Ergebnisse liefern.
@@ -36,8 +38,9 @@ Vor einer Freigabe von PR #69 sind verpflichtend:
 2. Alle Paket-19-Tests erneut ausführen.
 3. Einen Regressionstest 500 Wh / 80 km / 100 km ohne Ladehalt ergänzen.
 4. Prüfen, dass ein automatischer Ladehalt erforderlich wird und die Reservewarnung den kalibrierten Bedarf verwendet.
-5. Save/Load, manuelle Ladehalte und deterministische Wiederholung erneut prüfen.
-6. Raspberry-Pi-Praxistest mit denselben Profilwerten wiederholen.
+5. Prüfen, dass 100 km mit 100, 1.000 und 2.000 positiven Höhenmetern monoton steigende Ladebedarfe ergeben.
+6. Save/Load, manuelle Ladehalte und deterministische Wiederholung erneut prüfen.
+7. Raspberry-Pi-Praxistest mit denselben Profilwerten wiederholen.
 
 ## Grenzen
 
