@@ -518,6 +518,18 @@ export function RiderBikeProfileClient() {
                 }
               />
             </div>
+            <div
+              className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 sm:col-span-2 lg:col-span-3"
+              data-reference-range-basis
+            >
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>
+                Die Referenzreichweite gilt bis 0 % für die aktuell konfigurierte Gesamtkapazität aller Akkus, nicht pro
+                Einzelakku. Nach einer Änderung von Akkukapazität, Akkuanzahl, nutzbarem Anteil oder Unterstützung muss
+                dieser persönliche Erfahrungswert geprüft und gegebenenfalls angepasst werden. Die gewünschte Reserve
+                wird erst in der Planung separat abgezogen.
+              </p>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="assistance-profile">Unterstützungsprofil</Label>
               <Select

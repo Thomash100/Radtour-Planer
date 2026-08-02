@@ -191,7 +191,7 @@ test("berechnet eine flache Referenzstrecke segmentweise und reproduzierbar", ()
   const second = energyProjection();
 
   assert.deepEqual(first, second);
-  assert.equal(first.modelVersion, "biketriphub-energy-v1");
+  assert.equal(first.modelVersion, "biketriphub-energy-v2");
   assert.equal(first.quality, "high");
   assert.equal(first.terrain.flat.distanceKm, 40);
   assert.equal(first.terrain.climb.distanceKm, 0);
@@ -232,11 +232,12 @@ test("trennt Steigung, Gefälle und elektrische Verluste", () => {
   assert.ok(rolling.conversionLossWh > 0);
   assert.ok(
     Math.abs(
-      (rolling.batteryEnergyWh ?? 0) -
+      (rolling.physicalRawBatteryEnergyWh ?? 0) -
         rolling.motorMechanicalEnergyWh -
         rolling.conversionLossWh
     ) <= 1
   );
+  assert.ok((rolling.batteryEnergyWh ?? 0) > (rolling.physicalRawBatteryEnergyWh ?? 0));
 });
 
 test("berechnet für eine lange flache Etappe mehr Verbrauch als für eine kurze", () => {
@@ -251,6 +252,89 @@ test("berechnet für eine lange flache Etappe mehr Verbrauch als für eine kurze
 
   assert.ok(long.energyNeedWh > short.energyNeedWh);
   assert.ok((long.batteryConsumptionPercent ?? 0) > (short.batteryConsumptionPercent ?? 0));
+});
+
+test("kalibriert 80 km flache Referenzstrecke auf 100 Prozent nutzbare Akkukapazität", () => {
+  const projection = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          batteryCapacityWh: 500,
+          batteryCount: 1,
+          usableBatteryCapacityPercent: 100,
+          motorAssistancePercent: 100,
+          referenceRangeKm: 80,
+          desiredReservePercent: 0
+        }
+      }
+    },
+    distanceKm: 80,
+    elevationProfile: measuredFlatProfile(80)
+  });
+
+  assert.ok(Math.abs((projection.batteryEnergyWh ?? 0) - 500) <= 1);
+  assert.ok(Math.abs((projection.batteryConsumptionPercent ?? 0) - 100) <= 0.1);
+  assert.equal(projection.remainingCapacityPercent, 0);
+  assert.equal(projection.projectedTotalRangeKm, 80);
+  assert.equal(projection.calibration?.referenceConsumptionWhPerKm, 6.25);
+});
+
+test("hält nach 64 von 80 Referenzkilometern die Reserve von 20 Prozent gerade ein", () => {
+  const projection = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          batteryCapacityWh: 500,
+          batteryCount: 1,
+          usableBatteryCapacityPercent: 100,
+          motorAssistancePercent: 100,
+          referenceRangeKm: 80,
+          desiredReservePercent: 20
+        }
+      }
+    },
+    distanceKm: 64,
+    elevationProfile: measuredFlatProfile(64)
+  });
+
+  assert.ok(Math.abs((projection.batteryConsumptionPercent ?? 0) - 80) <= 0.1);
+  assert.ok(Math.abs((projection.remainingCapacityPercent ?? 0) - 20) <= 0.1);
+  assert.equal(projection.reserveStatus, "sufficient");
+  assert.equal(projection.calibration?.safeRangeKm, 64);
+});
+
+test("kennzeichnet 100 km bei 80 km Referenzreichweite als nicht ohne Laden fahrbar", () => {
+  const projection = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          batteryCapacityWh: 500,
+          batteryCount: 1,
+          usableBatteryCapacityPercent: 100,
+          motorAssistancePercent: 100,
+          referenceRangeKm: 80,
+          desiredReservePercent: 20
+        }
+      }
+    },
+    distanceKm: 100,
+    elevationProfile: measuredFlatProfile(100)
+  });
+
+  assert.ok((projection.energyNeedWh ?? 0) > 500);
+  assert.ok((projection.batteryConsumptionPercent ?? 0) >= 125);
+  assert.equal(projection.remainingCapacityPercent, 0);
+  assert.equal(projection.reserveStatus, "depleted");
+  assert.notEqual(projection.batteryConsumptionPercent, 20);
 });
 
 test("berücksichtigt unterschiedliches Gesamtgewicht deterministisch", () => {
@@ -287,7 +371,10 @@ test("trennt Fahrer- und Motoranteil bei unterschiedlicher Unterstützung", () =
         ...riderBikeProfile.bike,
         ebike: { ...riderBikeProfile.bike.ebike, motorAssistancePercent: 50 }
       }
-    }
+    },
+    distanceKm: 40,
+    elevationUp: 600,
+    elevationProfile: measuredClimbProfile(40, 600)
   });
   const highSupport = energyProjection({
     profile: {
@@ -296,7 +383,10 @@ test("trennt Fahrer- und Motoranteil bei unterschiedlicher Unterstützung", () =
         ...riderBikeProfile.bike,
         ebike: { ...riderBikeProfile.bike.ebike, motorAssistancePercent: 250 }
       }
-    }
+    },
+    distanceKm: 40,
+    elevationUp: 600,
+    elevationProfile: measuredClimbProfile(40, 600)
   });
 
   assert.ok((highSupport.batteryEnergyWh ?? 0) > (lowSupport.batteryEnergyWh ?? 0));
@@ -319,7 +409,7 @@ test("weist beim klassischen Fahrrad keine Akkuwerte aus", () => {
   assert.ok(classic.energyNeedWh > 0);
 });
 
-test("ein zweiter Akku senkt den prozentualen Verbrauch bei gleichem Energiebedarf", () => {
+test("bezieht die persönliche Referenzreichweite auf die konfigurierte Gesamtakkuanzahl", () => {
   const oneBattery = energyProjection({
     profile: {
       ...riderBikeProfile,
@@ -339,9 +429,66 @@ test("ein zweiter Akku senkt den prozentualen Verbrauch bei gleichem Energiebeda
     }
   });
 
-  assert.equal(twoBatteries.batteryEnergyWh, oneBattery.batteryEnergyWh);
-  assert.ok((twoBatteries.batteryConsumptionPercent ?? 100) < (oneBattery.batteryConsumptionPercent ?? 0));
+  assert.equal(twoBatteries.physicalRawBatteryEnergyWh, oneBattery.physicalRawBatteryEnergyWh);
+  assert.ok((twoBatteries.batteryEnergyWh ?? 0) > (oneBattery.batteryEnergyWh ?? 0));
+  assert.equal(twoBatteries.batteryConsumptionPercent, oneBattery.batteryConsumptionPercent);
+  assert.equal(twoBatteries.projectedTotalRangeKm, oneBattery.projectedTotalRangeKm);
   assert.ok((twoBatteries.remainingEnergyWh ?? 0) > (oneBattery.remainingEnergyWh ?? 0));
+});
+
+test("behandelt eine Kapazitätsänderung bei unveränderter Gesamtreferenzreichweite eindeutig", () => {
+  const projectionForCapacity = (batteryCapacityWh: number) =>
+    energyProjection({
+      profile: {
+        ...riderBikeProfile,
+        bike: {
+          ...riderBikeProfile.bike,
+          ebike: {
+            ...riderBikeProfile.bike.ebike,
+            batteryCapacityWh,
+            batteryCount: 1,
+            usableBatteryCapacityPercent: 100,
+            motorAssistancePercent: 100,
+            referenceRangeKm: 80
+          }
+        }
+      },
+      distanceKm: 40,
+      elevationProfile: measuredFlatProfile(40)
+    });
+  const smaller = projectionForCapacity(500);
+  const larger = projectionForCapacity(750);
+
+  assert.equal(smaller.batteryConsumptionPercent, 50);
+  assert.equal(larger.batteryConsumptionPercent, 50);
+  assert.equal(smaller.projectedTotalRangeKm, 80);
+  assert.equal(larger.projectedTotalRangeKm, 80);
+  assert.ok((larger.batteryEnergyWh ?? 0) > (smaller.batteryEnergyWh ?? 0));
+});
+
+test("begrenzt extreme Kalibrierungsfaktoren und weist die Begrenzung transparent aus", () => {
+  const projection = energyProjection({
+    profile: {
+      ...riderBikeProfile,
+      bike: {
+        ...riderBikeProfile.bike,
+        ebike: {
+          ...riderBikeProfile.bike.ebike,
+          batteryCapacityWh: 2500,
+          batteryCount: 6,
+          usableBatteryCapacityPercent: 100,
+          motorAssistancePercent: 100,
+          referenceRangeKm: 10
+        }
+      }
+    },
+    distanceKm: 10,
+    elevationProfile: measuredFlatProfile(10)
+  });
+
+  assert.equal(projection.calibration?.limitApplied, true);
+  assert.equal(projection.calibration?.appliedFactor, projection.calibration?.maximumFactor);
+  assert.ok(projection.calibration?.warning);
 });
 
 test("warnt bei unterschrittener Reserve und leerer nutzbarer Kapazität", () => {
@@ -403,6 +550,25 @@ test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {
   assert.equal(restored?.bike.ebike.chargerPowerW, 180);
   assert.equal(restored?.bike.ebike.personalRidingStyle, "economical");
   assert.equal(parseRiderBikeProfileExport(JSON.stringify({ ...profileExport, schema: "unknown" })), null);
+});
+
+test("liefert nach Profil-JSON-Export und -Import dieselbe kalibrierte Energieprognose", () => {
+  const before = energyProjection({
+    distanceKm: 100,
+    elevationUp: 700,
+    elevationProfile: measuredClimbProfile(100, 700)
+  });
+  const exported = createRiderBikeProfileExport(riderBikeProfile, "2026-08-02T08:00:00.000Z");
+  const restored = parseRiderBikeProfileExport(JSON.stringify(exported));
+
+  assert.ok(restored);
+  const after = energyProjection({
+    profile: restored!,
+    distanceKm: 100,
+    elevationUp: 700,
+    elevationProfile: measuredClimbProfile(100, 700)
+  });
+  assert.deepEqual(after, before);
 });
 
 test("bewahrt das Fahrer- und Fahrradprofil im TourState", () => {

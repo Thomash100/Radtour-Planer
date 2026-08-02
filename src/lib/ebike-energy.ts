@@ -1,7 +1,12 @@
 import type { ElevationPoint } from "@/lib/geo";
 import type { RiderBikeProfile } from "@/lib/rider-bike-profile";
 
-export const EBIKE_ENERGY_MODEL_VERSION = "biketriphub-energy-v1";
+export const EBIKE_ENERGY_MODEL_VERSION = "biketriphub-energy-v2";
+
+const minimumCalibrationFactor = 0.1;
+const maximumCalibrationFactor = 20;
+const calibrationWarningMinimum = 0.5;
+const calibrationWarningMaximum = 2;
 
 export type EnergyTerrain = "flat" | "climb" | "descent";
 export type EnergyProjectionQuality = "high" | "medium" | "low";
@@ -29,6 +34,8 @@ export type StageEnergyProjection = {
   riderEnergyWh: number;
   motorMechanicalEnergyWh: number;
   conversionLossWh: number;
+  physicalRawBatteryEnergyWh: number | null;
+  calibrationAdjustmentWh: number | null;
   batteryEnergyWh: number | null;
   usableBatteryEnergyWh: number | null;
   batteryConsumptionPercent: number | null;
@@ -44,6 +51,22 @@ export type StageEnergyProjection = {
   quality: EnergyProjectionQuality;
   qualityLabel: string;
   qualityReasons: string[];
+  calibration: {
+    referenceRangeKm: number;
+    referenceConsumptionWhPerKm: number;
+    safeRangeKm: number;
+    physicalReferenceConsumptionWhPerKm: number;
+    referenceMotorAssistancePercent: 100;
+    referenceAssistanceProfile: RiderBikeProfile["bike"]["ebike"]["assistanceProfile"];
+    physicalRawConsumptionWh: number;
+    calibratedConsumptionWh: number;
+    rawFactor: number;
+    appliedFactor: number;
+    minimumFactor: number;
+    maximumFactor: number;
+    limitApplied: boolean;
+    warning: string | null;
+  } | null;
   assumptions: {
     riderPowerW: number;
     motorEfficiencyPercent: number | null;
@@ -59,6 +82,7 @@ export type StageEnergyProjection = {
       mechanicalEnergyWh: number;
       riderEnergyWh: number;
       motorMechanicalEnergyWh: number;
+      physicalRawBatteryEnergyWh: number;
       batteryEnergyWh: number;
     }
   >;
@@ -131,9 +155,9 @@ const baseSpeedByBike: Record<RiderBikeProfile["bike"]["type"], number> = {
 };
 
 const emptyTerrain = () => ({
-  flat: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 },
-  climb: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 },
-  descent: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, batteryEnergyWh: 0 }
+  flat: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 },
+  climb: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 },
+  descent: { distanceKm: 0, mechanicalEnergyWh: 0, riderEnergyWh: 0, motorMechanicalEnergyWh: 0, physicalRawBatteryEnergyWh: 0, batteryEnergyWh: 0 }
 });
 
 function clamp(value: number, minimum: number, maximum: number) {
@@ -361,15 +385,15 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
       ? Math.max(0, (profile.bike.ebike.motorAssistancePercent / 100) * assistanceFactor[profile.bike.ebike.assistanceProfile])
       : 0;
   const desiredMotorShare = configuredAssistance > 0 ? configuredAssistance / (1 + configuredAssistance) : 0;
+  const referenceConfiguredAssistance =
+    bicycleMode === "ebike" ? assistanceFactor[profile.bike.ebike.assistanceProfile] : 0;
+  const referenceMotorShare =
+    referenceConfiguredAssistance > 0
+      ? referenceConfiguredAssistance / (1 + referenceConfiguredAssistance)
+      : 0;
   const terrain = emptyTerrain();
 
-  let mechanicalEnergyWh = 0;
-  let riderEnergyWh = 0;
-  let motorMechanicalEnergyWh = 0;
-  let batteryEnergyWh = 0;
-  let durationHours = 0;
-
-  for (const segment of segments) {
+  function calculatePhysicalSegment(segment: CalculationSegment, motorShare = desiredMotorShare) {
     const distanceM = segment.distanceKm * 1000;
     const grade = distanceM > 0 ? segment.elevationDeltaM / distanceM : 0;
     const terrainSpeedFactor =
@@ -380,38 +404,49 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
           : 1;
     const speedKmh = Math.max(6, baseSpeedKmh * terrainSpeedFactor);
     const speedMps = speedKmh / 3.6;
-    const segmentDurationHours = segment.distanceKm / speedKmh;
+    const durationHours = segment.distanceKm / speedKmh;
     const rollingWh = (rollingResistanceCoefficient * totalMassKg * gravityMps2 * distanceM) / 3600;
     const aerodynamicWh = (0.5 * airDensityKgM3 * aerodynamicDragAreaM2 * speedMps ** 2 * distanceM) / 3600;
     const gravityWh = (totalMassKg * gravityMps2 * segment.elevationDeltaM) / 3600;
-    const segmentMechanicalWh = Math.max(0, rollingWh + aerodynamicWh + gravityWh);
+    const mechanicalWh = Math.max(0, rollingWh + aerodynamicWh + gravityWh);
 
-    let segmentMotorWh = 0;
-    if (bicycleMode === "ebike" && segmentMechanicalWh > 0) {
-      const maximumMotorWh = profile.bike.ebike.motorPowerW * segmentDurationHours;
-      const desiredMotorWh = segmentMechanicalWh * desiredMotorShare;
-      const desiredRiderWh = segmentMechanicalWh - desiredMotorWh;
-      const riderCapacityWh = riderPowerW * segmentDurationHours;
+    let motorMechanicalWh = 0;
+    if (bicycleMode === "ebike" && mechanicalWh > 0) {
+      const maximumMotorWh = profile.bike.ebike.motorPowerW * durationHours;
+      const desiredMotorWh = mechanicalWh * motorShare;
+      const desiredRiderWh = mechanicalWh - desiredMotorWh;
+      const riderCapacityWh = riderPowerW * durationHours;
       const riderDeficitWh = Math.max(0, desiredRiderWh - riderCapacityWh);
-      segmentMotorWh = Math.min(maximumMotorWh, desiredMotorWh + riderDeficitWh);
+      motorMechanicalWh = Math.min(maximumMotorWh, desiredMotorWh + riderDeficitWh);
     }
 
-    const segmentRiderWh = Math.max(0, segmentMechanicalWh - segmentMotorWh);
-    const segmentBatteryWh =
-      motorEfficiencyPercent === null || segmentMotorWh === 0
+    const riderWh = Math.max(0, mechanicalWh - motorMechanicalWh);
+    const batteryWh =
+      motorEfficiencyPercent === null || motorMechanicalWh === 0
         ? 0
-        : segmentMotorWh / (motorEfficiencyPercent / 100);
+        : motorMechanicalWh / (motorEfficiencyPercent / 100);
 
-    mechanicalEnergyWh += segmentMechanicalWh;
-    riderEnergyWh += segmentRiderWh;
-    motorMechanicalEnergyWh += segmentMotorWh;
-    batteryEnergyWh += segmentBatteryWh;
-    durationHours += segmentDurationHours;
+    return { durationHours, mechanicalWh, riderWh, motorMechanicalWh, batteryWh };
+  }
+
+  let mechanicalEnergyWh = 0;
+  let riderEnergyWh = 0;
+  let motorMechanicalEnergyWh = 0;
+  let physicalRawBatteryEnergyWh = 0;
+  let durationHours = 0;
+
+  for (const segment of segments) {
+    const physical = calculatePhysicalSegment(segment);
+    mechanicalEnergyWh += physical.mechanicalWh;
+    riderEnergyWh += physical.riderWh;
+    motorMechanicalEnergyWh += physical.motorMechanicalWh;
+    physicalRawBatteryEnergyWh += physical.batteryWh;
+    durationHours += physical.durationHours;
     terrain[segment.terrain].distanceKm += segment.distanceKm;
-    terrain[segment.terrain].mechanicalEnergyWh += segmentMechanicalWh;
-    terrain[segment.terrain].riderEnergyWh += segmentRiderWh;
-    terrain[segment.terrain].motorMechanicalEnergyWh += segmentMotorWh;
-    terrain[segment.terrain].batteryEnergyWh += segmentBatteryWh;
+    terrain[segment.terrain].mechanicalEnergyWh += physical.mechanicalWh;
+    terrain[segment.terrain].riderEnergyWh += physical.riderWh;
+    terrain[segment.terrain].motorMechanicalEnergyWh += physical.motorMechanicalWh;
+    terrain[segment.terrain].physicalRawBatteryEnergyWh += physical.batteryWh;
   }
 
   const usableBatteryEnergyWh =
@@ -420,6 +455,45 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
         profile.bike.ebike.batteryCount *
         (profile.bike.ebike.usableBatteryCapacityPercent / 100)
       : null;
+  const referenceRangeKm = bicycleMode === "ebike" ? profile.bike.ebike.referenceRangeKm : null;
+  const referenceConsumptionWhPerKm =
+    usableBatteryEnergyWh !== null && referenceRangeKm !== null && referenceRangeKm > 0
+      ? usableBatteryEnergyWh / referenceRangeKm
+      : null;
+  const physicalReferenceConsumptionWhPerKm =
+    bicycleMode === "ebike"
+      ? calculatePhysicalSegment(
+          { distanceKm: 1, elevationDeltaM: 0, terrain: "flat" },
+          referenceMotorShare
+        ).batteryWh
+      : null;
+  const rawCalibrationFactor =
+    referenceConsumptionWhPerKm !== null &&
+    physicalReferenceConsumptionWhPerKm !== null &&
+    physicalReferenceConsumptionWhPerKm > 0
+      ? referenceConsumptionWhPerKm / physicalReferenceConsumptionWhPerKm
+      : 1;
+  const calibrationFactor =
+    bicycleMode === "ebike"
+      ? clamp(rawCalibrationFactor, minimumCalibrationFactor, maximumCalibrationFactor)
+      : 1;
+  const calibrationLimitApplied =
+    bicycleMode === "ebike" && Math.abs(calibrationFactor - rawCalibrationFactor) > 0.000001;
+  const calibrationWarning =
+    bicycleMode !== "ebike"
+      ? null
+      : calibrationLimitApplied
+        ? `Der berechnete Kalibrierungsfaktor ${round(rawCalibrationFactor, 2)} liegt außerhalb des zulässigen Bereichs ${minimumCalibrationFactor}–${maximumCalibrationFactor} und wurde auf ${round(calibrationFactor, 2)} begrenzt.`
+        : calibrationFactor < calibrationWarningMinimum || calibrationFactor > calibrationWarningMaximum
+          ? `Der persönliche Referenzwert führt zu einem deutlich korrigierenden Kalibrierungsfaktor von ${round(calibrationFactor, 2)}. Bitte Akkudaten und Referenzreichweite prüfen.`
+          : null;
+  const batteryEnergyWh =
+    bicycleMode === "ebike" ? physicalRawBatteryEnergyWh * calibrationFactor : 0;
+  if (bicycleMode === "ebike") {
+    for (const values of Object.values(terrain)) {
+      values.batteryEnergyWh = values.physicalRawBatteryEnergyWh * calibrationFactor;
+    }
+  }
   const remainingEnergyWh =
     usableBatteryEnergyWh === null ? null : Math.max(0, usableBatteryEnergyWh - batteryEnergyWh);
   const batteryConsumptionPercent =
@@ -443,7 +517,7 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
     if (batteryConsumptionPercent !== null && batteryConsumptionPercent >= 100) {
       reserveStatus = "depleted";
       reserveWarning = "Die nutzbare Akkukapazität reicht für diese Etappe voraussichtlich nicht aus.";
-    } else if (remainingCapacityPercent < profile.bike.ebike.desiredReservePercent) {
+    } else if (remainingCapacityPercent + 0.05 < profile.bike.ebike.desiredReservePercent) {
       reserveStatus = "below_reserve";
       reserveWarning = `Die gewünschte Reserve von ${profile.bike.ebike.desiredReservePercent} % wird voraussichtlich unterschritten.`;
     } else {
@@ -470,6 +544,7 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
         mechanicalEnergyWh: round(value.mechanicalEnergyWh, 1),
         riderEnergyWh: round(value.riderEnergyWh, 1),
         motorMechanicalEnergyWh: round(value.motorMechanicalEnergyWh, 1),
+        physicalRawBatteryEnergyWh: round(value.physicalRawBatteryEnergyWh, 1),
         batteryEnergyWh: round(value.batteryEnergyWh, 1)
       }
     ])
@@ -484,7 +559,10 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
     mechanicalEnergyWh: round(mechanicalEnergyWh),
     riderEnergyWh: round(riderEnergyWh),
     motorMechanicalEnergyWh: round(motorMechanicalEnergyWh),
-    conversionLossWh: round(Math.max(0, batteryEnergyWh - motorMechanicalEnergyWh)),
+    conversionLossWh: round(Math.max(0, physicalRawBatteryEnergyWh - motorMechanicalEnergyWh)),
+    physicalRawBatteryEnergyWh: bicycleMode === "ebike" ? round(physicalRawBatteryEnergyWh) : null,
+    calibrationAdjustmentWh:
+      bicycleMode === "ebike" ? round(batteryEnergyWh - physicalRawBatteryEnergyWh) : null,
     batteryEnergyWh: bicycleMode === "ebike" ? round(batteryEnergyWh) : null,
     usableBatteryEnergyWh: usableBatteryEnergyWh === null ? null : round(usableBatteryEnergyWh),
     batteryConsumptionPercent: batteryConsumptionPercent === null ? null : round(batteryConsumptionPercent, 1),
@@ -500,6 +578,31 @@ export function calculateStageEnergyProjection(input: StageEnergyProjectionInput
     quality: qualityResult.quality,
     qualityLabel: qualityLabel(qualityResult.quality),
     qualityReasons: qualityResult.reasons,
+    calibration:
+      bicycleMode === "ebike" &&
+      referenceRangeKm !== null &&
+      referenceConsumptionWhPerKm !== null &&
+      physicalReferenceConsumptionWhPerKm !== null
+        ? {
+            referenceRangeKm: round(referenceRangeKm, 1),
+            referenceConsumptionWhPerKm: round(referenceConsumptionWhPerKm, 3),
+            safeRangeKm: round(
+              referenceRangeKm * (1 - profile.bike.ebike.desiredReservePercent / 100),
+              1
+            ),
+            physicalReferenceConsumptionWhPerKm: round(physicalReferenceConsumptionWhPerKm, 3),
+            referenceMotorAssistancePercent: 100,
+            referenceAssistanceProfile: profile.bike.ebike.assistanceProfile,
+            physicalRawConsumptionWh: round(physicalRawBatteryEnergyWh),
+            calibratedConsumptionWh: round(batteryEnergyWh),
+            rawFactor: round(rawCalibrationFactor, 3),
+            appliedFactor: round(calibrationFactor, 3),
+            minimumFactor: minimumCalibrationFactor,
+            maximumFactor: maximumCalibrationFactor,
+            limitApplied: calibrationLimitApplied,
+            warning: calibrationWarning
+          }
+        : null,
     assumptions: {
       riderPowerW: round(riderPowerW),
       motorEfficiencyPercent: motorEfficiencyPercent === null ? null : round(motorEfficiencyPercent),
