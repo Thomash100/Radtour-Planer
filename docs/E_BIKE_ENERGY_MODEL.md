@@ -1,98 +1,146 @@
 # Deterministischer Energie- und Reichweiten-Rechenkern
 
-Paket 18 führt das versionierte Modell `biketriphub-energy-v1` ein. Der Rechenkern liegt in
-`src/lib/ebike-energy.ts` und ist eine reine Funktion: Gleiche Eingaben erzeugen ohne Netzwerkzugriff, Zufallswerte oder Zeitabhängigkeit dasselbe Ergebnis.
+Die Modellversion `biketriphub-energy-v2` kalibriert den segmentweisen physikalischen Rechenkern mit der persönlichen
+flachen Referenzreichweite. Der Rechenkern liegt in `src/lib/ebike-energy.ts` und ist eine reine Funktion ohne Netzwerk-,
+Zeit- oder Zufallsabhängigkeit.
 
-## Eingaben
+## Bedeutung der Referenzreichweite
 
-- Fahrer-, Fahrrad- und Gepäckgewicht
-- Fahrradtyp
-- Akkukapazität, Akkuanzahl und nutzbarer Kapazitätsanteil
-- Fitnesslevel und persönliches Fahrprofil
-- Motorleistung, Motorunterstützung und Unterstützungsprofil
-- Distanz, Bergauf- und Bergabmeter
-- auf die Etappe zugeschnittenes GPX- oder Provider-Höhenprofil
-- optional explizite Fahrerleistung und expliziter Motorwirkungsgrad
-- gewünschte Restreserve
+`referenceRangeKm` ist die technische Reichweite von 100 % der **nutzbaren Gesamtenergie bis 0 %** unter flachen
+Referenzbedingungen. Sie gilt für die gesamte aktuell konfigurierte Akkuanzahl, nicht für einen einzelnen Akku.
 
-Ohne explizite Fahrerleistung wird eine reproduzierbare Modellannahme aus Fitnesslevel und persönlichem Fahrprofil abgeleitet:
+```text
+nutzbare Gesamtenergie = Kapazität je Akku × Akkuanzahl × nutzbarer Anteil
+persönlicher Referenzverbrauch = nutzbare Gesamtenergie / Referenzreichweite
+sichere Reichweite = Referenzreichweite × (1 - gewünschte Reserve / 100)
+```
 
-| Fitnesslevel | Basisleistung |
-| --- | ---: |
-| Gelegentlich aktiv | 90 W |
-| Regelmäßig aktiv | 125 W |
-| Trainiert | 160 W |
-| Sehr trainiert | 195 W |
+Beispiel mit 500 Wh nutzbarer Energie, 80 km Referenzreichweite und 20 % Reserve:
 
-`Reichweitenorientiert`, `Ausgewogen` und `Sportlich` skalieren diese Basis mit `0,9`, `1,0` beziehungsweise `1,1`.
+```text
+Referenzverbrauch = 500 Wh / 80 km = 6,25 Wh/km
+sichere Reichweite = 80 km × 0,8 = 64 km
+80 km flach = 500 Wh = 100 % Verbrauch
+100 km flach = 625 Wh = 125 % Verbrauch, Akku reicht nicht bis zum Ziel
+```
 
-Der Motorwirkungsgrad wird ohne explizite Eingabe deterministisch aus dem Unterstützungsprofil abgeleitet:
+Die Reserve verändert die Referenzreichweite nicht. Sie wird anschließend als Sicherheitsgrenze bewertet. Änderungen an
+Akkukapazität, Akkuanzahl, nutzbarem Anteil oder Unterstützungsparametern ändern die Referenzbedingungen. Die Oberfläche
+weist deshalb darauf hin, den persönlichen Erfahrungswert danach zu prüfen und gegebenenfalls anzupassen.
 
-| Profil | Wirkungsgrad |
-| --- | ---: |
-| Eco | 86 % |
-| Tour | 83 % |
-| Sport | 79 % |
-| Automatisch | 82 % |
+## Referenzbedingungen
 
-Beide Modellannahmen werden in der Etappenansicht angezeigt.
+Die flache physikalische Referenzrechnung verwendet:
 
-## Segmentrechnung
+- das gespeicherte Fahrer-, Fahrrad- und Gepäckgewicht,
+- Fahrradtyp, Motorleistung, Wirkungsgrad, Fitness und persönliches Fahrprofil,
+- das gespeicherte Unterstützungsprofil (`eco`, `tour`, `sport` oder `auto`),
+- 100 % nominale Motorunterstützung als reproduzierbaren Referenzpunkt,
+- keine Steigung, kein Gefälle, keinen Wind und keine Wetterdaten.
 
-Das vorhandene Höhenprofil wird auf die jeweilige Etappe zugeschnitten. Aufeinanderfolgende Höhenpunkte bilden Segmente:
+Die konfigurierte Motorunterstützung der geplanten Fahrt wird weiterhin in der Segmentrechnung verwendet. Werte über dem
+nominalen Referenzpunkt erhöhen, Werte darunter senken den Motoranteil. Der Nominalpunkt wird in der Ergebnisstruktur und
+in der Oberfläche ausgewiesen.
 
-- `Steigung` bei mehr als `0,5 %`
-- `Gefälle` bei weniger als `-0,5 %`
-- sonst `eben`
+## Physikalische Segmentrechnung
 
-Je Segment werden berechnet:
+Aufeinanderfolgende Höhenpunkte bilden Segmente:
+
+- `Steigung` bei mehr als `0,5 %`,
+- `Gefälle` bei weniger als `-0,5 %`,
+- sonst `eben`.
+
+Je Segment werden Roll-, Luft- und Lageenergie sowie Fahrer- und Motoranteil bestimmt:
 
 ```text
 Rollenergie = Rollwiderstandskoeffizient × Gesamtmasse × g × Strecke
 Luftenergie = 0,5 × Luftdichte × CdA × Geschwindigkeit² × Strecke
 Lageenergie = Gesamtmasse × g × Höhendifferenz
 mechanischer Bedarf = max(0, Rollenergie + Luftenergie + Lageenergie)
+physikalischer Akku-Rohverbrauch = mechanischer Motoranteil / Motorwirkungsgrad
 ```
 
-Rollwiderstand, aerodynamische Stirnfläche und Modellgeschwindigkeit sind feste, dokumentierte Parameter je Fahrradtyp. Steigungen reduzieren und Gefälle erhöhen die Modellgeschwindigkeit innerhalb fester Grenzen.
+Steigung, Gefälle, Masse, Motorunterstützung und Leistungsgrenzen bleiben damit segmentweise wirksam. Gefälle erzeugt
+keine Rekuperation.
 
-Die konfigurierte Motorunterstützung bestimmt den gewünschten Motoranteil. Dieser wird durch die Motorleistung je Segment begrenzt. Übersteigt der verbleibende Fahreranteil die aus Fahrerleistung und Segmentdauer ableitbare Leistung, kann der Motor im Rahmen seiner Leistungsgrenze den Fehlbetrag übernehmen.
+## Kalibrierung
+
+Zuerst wird der physikalische Rohverbrauch einer flachen Ein-Kilometer-Referenzstrecke für das aktuelle Profil berechnet.
+Danach wird der persönliche Referenzverbrauch darauf bezogen:
 
 ```text
-elektrischer Akkuenergiebedarf = mechanischer Motoranteil / Motorwirkungsgrad
-Verlust = elektrischer Akkuenergiebedarf - mechanischer Motoranteil
+Rohfaktor = persönlicher Referenzverbrauch / physikalischer Referenzverbrauch
+Kalibrierungsfaktor = begrenze(Rohfaktor, 0,1, 20)
+kalibrierter flacher Grundverbrauch = physikalischer flacher Verbrauch × Kalibrierungsfaktor
+Steigungszuschlag = max(0, physikalischer Verbrauch bergauf - physikalischer Verbrauch derselben Strecke flach)
+Gefälleentlastung = min(kalibrierter flacher Grundverbrauch, max(0, physikalischer Verbrauch flach - physikalischer Verbrauch bergab))
+Gesamtverbrauch = kalibrierter flacher Grundverbrauch + Steigungszuschlag - Gefälleentlastung
 ```
 
-Gefälle erzeugt keine Rekuperation. Wetter, Wind, Straßenbelag, Reifendruck, Temperatur und Stop-and-go werden nicht modelliert.
+Der Kalibrierungsfaktor wird damit ausschließlich auf den flachen Grundverbrauch angewendet. Die zusätzliche Lageenergie
+positiver Höhenmeter wird mit der segmentweisen Fahrer-/Motoraufteilung und dem Motorwirkungsgrad berechnet und danach
+**ohne Kalibrierungsfaktor** addiert. Ein kleiner Faktor kann den Höhenmeterbedarf nicht neutralisieren. Gefälle wird nur
+bis zur Höhe des kalibrierten flachen Segmentverbrauchs entlastend berücksichtigt; negative Akkuenergie und Rekuperation
+sind ausgeschlossen.
 
-## Akku und Reichweite
+Die Grenzen verhindern unkontrollierte Extremkorrekturen. Ein Faktor außerhalb `0,5..2` erzeugt einen sichtbaren
+Prüfhinweis. Muss die harte Grenze `0,1..20` angewendet werden, werden Rohfaktor, angewandter Faktor und Begrenzung
+explizit ausgewiesen.
+
+Die Ergebnisstruktur trennt:
+
+- `physicalRawBatteryEnergyWh`: physikalischer Akku-Rohverbrauch,
+- `batteryEnergyWh`: kalibrierter, für Reserve und Ladeplanung verbindlicher Verbrauch,
+- `calibrationAdjustmentWh`: Differenz zwischen beiden Werten,
+- `conversionLossWh`: reine physikalische Motorumwandlungsverluste,
+- `energyBreakdown.calibratedFlatBaseWh`: kalibrierter flacher Grundverbrauch,
+- `energyBreakdown.climbSurchargeWh`: zusätzlicher physikalischer Akkuverbrauch bergauf,
+- `energyBreakdown.descentReliefWh`: begrenzte Entlastung bergab,
+- `energyBreakdown.positiveElevationM`: berücksichtigte positive Höhenmeter,
+- `energyBreakdown.batteryWhPer100ElevationM`: Steigungszuschlag je 100 positive Höhenmeter,
+- persönliche Referenzreichweite und Referenzverbrauch,
+- sichere Reichweite bis zur Reserve,
+- Rohfaktor, angewandten Faktor und Kalibrierungswarnung.
+
+## Höhenmeter-Referenzvergleich
+
+Mit 500 Wh nutzbarer Energie, 80 km flacher Referenzreichweite, 20 % Reserve und identischem Fahrer-, Fahrrad- und
+Unterstützungsprofil ergibt die aggregierte 100-km-Prüfstrecke:
+
+| Fall | Bergauf/Bergab | Grundverbrauch | Steigungszuschlag | Gefälleentlastung | Gesamt | Verbrauch |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| A – nahezu flach | 100/100 Hm | 625 Wh | +17 Wh | −8 Wh | 635 Wh | 126,9 % |
+| B – mittel | 1.000/1.000 Hm | 625 Wh | +173 Wh | −76 Wh | 722 Wh | 144,4 % |
+| C – bergig | 2.000/2.000 Hm | 625 Wh | +347 Wh | −152 Wh | 819 Wh | 163,8 % |
+
+Damit gilt verbindlich `A < B < C`. Die Werte sind deterministische Modellwerte der dokumentierten Ersatzsegmentierung;
+mit einem echten Höhenprofil werden die Höhenmeter entlang der tatsächlichen Segmente verteilt.
+
+## Akku, Reichweite und Status
 
 ```text
-nutzbare Energie = Kapazität je Akku × Anzahl Akkus × nutzbarer Anteil
-Restenergie = max(0, nutzbare Energie - Akkuenergiebedarf)
-Verbrauch in % = Akkuenergiebedarf / nutzbare Energie
-Restreichweite = Restenergie / Akkuenergiebedarf je Kilometer
+Restenergie = max(0, nutzbare Gesamtenergie - kalibrierter Verbrauch)
+Verbrauch in % = kalibrierter Verbrauch / nutzbare Gesamtenergie
+Restreichweite = Restenergie / kalibrierter Verbrauch je Kilometer
 ```
 
-Jede Etappe beginnt in Paket 18 rechnerisch mit der vollständig nutzbaren konfigurierten Akkukapazität. Es gibt noch keine etappenübergreifende Akkufortschreibung, Ladepunktplanung oder Nachladung unterwegs.
+- `sufficient`: Restkapazität liegt auf oder über der Reserve.
+- `below_reserve`: Ziel ist erreichbar, aber die Reserve wird unterschritten.
+- `depleted`: kalibrierter Bedarf erreicht oder überschreitet die nutzbare Gesamtenergie.
+- `not_applicable`: klassisches Fahrrad ohne Akkuwerte.
 
-Für klassische Fahrräder werden mechanischer Energiebedarf und persönliche Belastung berechnet. Akkuverbrauch, Restkapazität und Reichweite sind ausdrücklich nicht anwendbar.
+Jede Etappe startet in Paket 18 rechnerisch mit voller nutzbarer Gesamtenergie. Die etappenübergreifende Fortschreibung und
+Ladehalte gehören zu Paket 19; sie müssen nach dem Rebase ausschließlich `batteryEnergyWh` beziehungsweise die daraus
+abgeleiteten kalibrierten Segmente verwenden.
 
-## Prognosequalität
+## Prognosequalität und Grenzen
 
-- `hoch`: vollständiges, dichtes GPX- oder Provider-Höhenprofil
-- `mittel`: geschätztes oder weniger dichtes, aber weitgehend vollständiges Höhenprofil
-- `niedrig`: fehlende oder deutlich unvollständige Höhendaten; aggregierte Bergauf-/Bergabwerte werden auf Ersatzsegmente verteilt
+Die Prognosequalität bewertet die Höhenbasis:
 
-Die Qualitätsgründe werden zusammen mit dem Ergebnis ausgegeben. Die Prognose ist eine nachvollziehbare Planungshilfe, keine Garantie für reale Reichweite oder Leistungsfähigkeit.
+- `hoch`: vollständiges, dichtes GPX- oder Provider-Höhenprofil,
+- `mittel`: geschätztes oder weniger dichtes, weitgehend vollständiges Profil,
+- `niedrig`: fehlende oder deutlich unvollständige Höhendaten.
 
-## Abgrenzung
-
-Nicht Bestandteil von Paket 18:
-
-- automatische Etappenverschiebung
-- Ladepunkt- oder Nachladeplanung
-- alternative Routen
-- automatische Unterstützungssteuerung
-- Wetter- oder Winddaten
-- Paket-19-Optimierung nach Tagen, Schwierigkeit und Akkugrenze
+Kalibrierungswarnungen werden davon getrennt dargestellt. Wetter, Wind, Straßenbelag, Reifendruck, Temperatur,
+Stop-and-go, Alterung des Akkus und Rekuperation werden weiterhin nicht modelliert. Die Prognose bleibt eine transparente
+Planungshilfe und keine Reichweitengarantie.

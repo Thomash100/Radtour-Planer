@@ -3513,10 +3513,18 @@ export function PlannerClient({
                               <div className="mt-2 border-t pt-2 text-xs" data-energy-preview={stage.dayNumber}>
                                 <div className="font-medium">Energieprognose</div>
                                 {previewEnergy.bicycleMode === "ebike" ? (
-                                  <div>
-                                    Verbrauch {previewEnergy.batteryConsumptionPercent?.toFixed(1)} % · Rest{" "}
-                                    {previewEnergy.remainingCapacityPercent?.toFixed(1)} %
-                                  </div>
+                                  <>
+                                    <div>
+                                      Verbrauch {previewEnergy.batteryConsumptionPercent?.toFixed(1)} % · Rest{" "}
+                                      {previewEnergy.remainingCapacityPercent?.toFixed(1)} %
+                                    </div>
+                                    {previewEnergy.calibration && (
+                                      <div className="text-muted-foreground">
+                                        Referenz {formatKm(previewEnergy.calibration.referenceRangeKm)} · sicher bis Reserve{" "}
+                                        {formatKm(previewEnergy.calibration.safeRangeKm)}
+                                      </div>
+                                    )}
+                                  </>
                                 ) : (
                                   <div>Klassisches Fahrrad · keine Akkuwerte</div>
                                 )}
@@ -3834,10 +3842,46 @@ export function PlannerClient({
                                 ? "nicht anwendbar"
                                 : formatKm(stageEnergy.projectedRemainingRangeKm)}
                             </span>
+                            {stageEnergy.calibration && (
+                              <>
+                                <span>Persönliche Referenzreichweite: {formatKm(stageEnergy.calibration.referenceRangeKm)}</span>
+                                <span>
+                                  Referenzverbrauch: {stageEnergy.calibration.referenceConsumptionWhPerKm.toFixed(3)} Wh/km
+                                </span>
+                                <span>Sichere Reichweite bis Reserve: {formatKm(stageEnergy.calibration.safeRangeKm)}</span>
+                                <span>Physikalischer Rohverbrauch: {stageEnergy.calibration.physicalRawConsumptionWh} Wh</span>
+                                <span>Kalibrierter Verbrauch: {stageEnergy.calibration.calibratedConsumptionWh} Wh</span>
+                                <span>Kalibrierungsfaktor: {stageEnergy.calibration.appliedFactor.toFixed(3)}</span>
+                              </>
+                            )}
+                            {stageEnergy.energyBreakdown && (
+                              <>
+                                <span>
+                                  Flacher kalibrierter Grundverbrauch: {stageEnergy.energyBreakdown.calibratedFlatBaseWh} Wh
+                                </span>
+                                <span>Steigungszuschlag: +{stageEnergy.energyBreakdown.climbSurchargeWh} Wh</span>
+                                <span>Entlastung durch Gefälle: −{stageEnergy.energyBreakdown.descentReliefWh} Wh</span>
+                                <span>
+                                  Gesamter kalibrierter Akkuverbrauch: {stageEnergy.energyBreakdown.totalCalibratedBatteryEnergyWh} Wh
+                                </span>
+                                <span>Positive Höhenmeter: {stageEnergy.energyBreakdown.positiveElevationM} Hm</span>
+                                <span>
+                                  Akkuverbrauch je 100 Hm:{" "}
+                                  {stageEnergy.energyBreakdown.batteryWhPer100ElevationM === null
+                                    ? "nicht anwendbar"
+                                    : `${stageEnergy.energyBreakdown.batteryWhPer100ElevationM.toFixed(1)} Wh`}
+                                </span>
+                              </>
+                            )}
                           </div>
                           <p className="text-xs font-medium text-sky-950">Empfehlung: {stageEnergy.recommendation}</p>
                           {stageEnergy.reserveWarning && (
                             <p className="text-xs font-medium text-amber-900">Reservewarnung: {stageEnergy.reserveWarning}</p>
+                          )}
+                          {stageEnergy.calibration?.warning && (
+                            <p className="text-xs font-medium text-amber-900">
+                              Kalibrierungshinweis: {stageEnergy.calibration.warning}
+                            </p>
                           )}
                           <p className="text-xs text-muted-foreground">
                             Modellannahmen: Fahrerleistung {stageEnergy.assumptions.riderPowerW} W
@@ -3846,6 +3890,13 @@ export function PlannerClient({
                               : ` · Motorwirkungsgrad ${stageEnergy.assumptions.motorEfficiencyPercent} %`}
                             {" · "}Ø {stageEnergy.assumptions.averageSpeedKmh.toFixed(1)} km/h
                           </p>
+                          {stageEnergy.calibration && (
+                            <p className="text-xs text-muted-foreground">
+                              Die Referenzreichweite gilt bis 0 % für die gesamte konfigurierte Akkuanzahl. Die Kalibrierung
+                              verwendet 100 % nominale Motorunterstützung im Profil {stageEnergy.calibration.referenceAssistanceProfile};
+                              die gewünschte Reserve wird anschließend separat bewertet.
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {stageEnergy.qualityReasons[0]}{" "}
                             {stageEnergy.bicycleMode === "ebike"

@@ -248,6 +248,13 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis Paket-16-Profilmigration sowie Profil- und Tour-JSON mit den Paket-17-Feldern
 - Ergebnis weiterhin ohne Energie-, Reichweiten-, Ladezeit- oder Etappenberechnung
 - Ergebnis Energieprognose je Etappe mit Verbrauch, Rest, persönlicher Belastung, Reichweite, Reserve und Qualität
+- Ergebnis Referenzkalibrierung mit 500 Wh nutzbarer Energie und 80 km Referenzreichweite: 80 km flach ≈ 100 %, 64 km bei 20 % Reserve ≈ 80 %, 100 km flach ≈ 125 % und `depleted`
+- Ergebnis sichtbare persönliche Referenzreichweite, Referenzverbrauch in Wh/km, sichere Reichweite, physikalischer Rohverbrauch, kalibrierter Verbrauch und Kalibrierungsfaktor
+- Ergebnis 100-km-Höhenvergleich mit identischem Profil: 100 Hm ≈ 635 Wh / 126,9 %, 1.000 Hm ≈ 722 Wh / 144,4 %, 2.000 Hm ≈ 819 Wh / 163,8 %
+- Ergebnis sichtbarer flacher Grundverbrauch, Steigungszuschlag, Gefälleentlastung, Gesamtverbrauch, positive Höhenmeter und Wh je 100 Hm
+- Ergebnis Gefälle ohne negative Akkuenergie und ohne Rekuperation
+- Ergebnis Hinweis nach Änderung von Akkukapazität oder Akkuanzahl, dass die Referenzreichweite für die Gesamtkonfiguration geprüft werden muss
+- Ergebnis Profil-/Tour-Save/Load und JSON-Import ohne Änderung der kalibrierten Prognose
 - Ergebnis für klassische Fahrräder sowie E-Bike mit einem und zwei Akkus
 - Ergebnis mit vollständigem und fehlendem/unvollständigem Höhenprofil
 - Ergebnis deterministische Wiederholung ohne veränderte Werte

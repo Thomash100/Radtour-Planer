@@ -237,15 +237,28 @@ E-Bike- und Ladeprofil auf Desktop, Tablet, Smartphone und Raspberry Pi prüfen:
 Deterministischen Energie- und Reichweiten-Rechenkern prüfen:
 
 - Dieselben Eingaben mehrfach berechnen; das vollständige Ergebnis bleibt identisch.
+- Mit 500 Wh nutzbarer Energie, 80 km Referenzreichweite und 0 % Reserve ergeben 80 flache Kilometer ungefähr 100 % Verbrauch und 0 % Rest.
+- Mit denselben Daten und 20 % Reserve ergeben 64 flache Kilometer ungefähr 80 % Verbrauch und 20 % Rest; die Reserve ist gerade eingehalten.
+- Mit denselben Daten ergeben 100 flache Kilometer ungefähr 125 % Verbrauch, Status `depleted` und eine nicht ausreichende Akkukapazität.
+- Persönliche Referenzreichweite, daraus abgeleitete Wh/km und sichere Reichweite bis zur Reserve werden angezeigt.
+- Physikalischen Rohverbrauch, kalibrierten Verbrauch und Kalibrierungsfaktor vergleichen.
+- Ein Faktor außerhalb `0,5..2` zeigt einen Prüfhinweis; eine Begrenzung auf `0,1..20` wird ausdrücklich ausgewiesen.
 - Flache Referenzstrecke, kurze steile Etappe und lange flache Etappe vergleichen.
+- Bei identischen 100-km-Strecken gilt für 100, 1.000 und 2.000 positive Höhenmeter zwingend: Verbrauch A < B < C.
+- Der Kalibrierungsfaktor wirkt nur auf den flachen Grundverbrauch; der physikalische Steigungszuschlag wird unskaliert addiert.
+- Höheres Gesamtgewicht und höhere Motorunterstützung erhöhen den Akkuanteil am Steigungszuschlag.
+- Gefälle reduziert den Bedarf höchstens bis null und erzeugt weder negative Akkuenergie noch Rekuperation.
+- Etappenansicht zeigt flachen Grundverbrauch, Steigungszuschlag, Gefälleentlastung, Gesamtverbrauch, positive Höhenmeter und Wh je 100 Hm getrennt.
 - Höheres Fahrer-/Fahrrad-/Gepäckgewicht erhöht bei gleicher Strecke den Energiebedarf.
 - Höhere Motorunterstützung erhöht den Akkuanteil und senkt den Fahreranteil.
 - Klassisches Fahrrad zeigt mechanischen Bedarf und persönliche Belastung, aber keine Akkuwerte.
-- E-Bike mit einem und zwei Akkus vergleichen; der Energiebedarf bleibt gleich, der prozentuale Verbrauch sinkt mit zwei Akkus.
+- Referenzreichweite gilt für die konfigurierte Gesamtakkuanzahl: Ein zweiter Akku verdoppelt die persönliche Reichweite nicht automatisch.
+- Nach Änderungen an Akkukapazität, Akkuanzahl oder nutzbarem Anteil weist das Profil sichtbar auf die Prüfung der Referenzreichweite hin.
 - Reserveunterschreitung und nicht ausreichende Akkukapazität erzeugen verständliche Warnungen.
 - Vollständiges echtes Höhenprofil ergibt hohe, geschätztes Profil höchstens mittlere und fehlendes/unvollständiges Profil niedrige Prognosequalität.
 - Etappenansicht zeigt Energiebedarf, Verbrauch, Restenergie, Restkapazität, persönliche Belastung, Restreichweite, Reserve und Qualität.
-- Fahrerleistung, Motorwirkungsgrad und Modellgeschwindigkeit werden als Annahmen sichtbar ausgewiesen.
+- Fahrerleistung, Motorwirkungsgrad, Modellgeschwindigkeit und nominaler Unterstützungs-Referenzpunkt werden als Annahmen sichtbar ausgewiesen.
+- Profil-JSON exportieren/importieren sowie Tour speichern/laden; die kalibrierte Prognose bleibt identisch.
 - Jede Etappe startet rechnerisch mit voller nutzbarer Kapazität; es gibt keine Lade- oder etappenübergreifende Akkufortschreibung.
 - Keine automatische Etappenverschiebung, Ladepunktplanung, alternative Route oder Wetter-/Windberechnung wird ausgelöst.
 - Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.

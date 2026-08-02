@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-07-30
+Stand: 2026-08-02
 
 ## Produktstand
 
@@ -24,7 +24,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Unterkunft abseits der Hauptroute als echten BRouter-Hin- und Rückweg separat routen und darstellen.
 - Karte über Schaltflächen, Touch, Mausrad und Tastatur ohne routenabhängige Zoomgrenzen bedienen.
 - Persönliches Fahrer-, Fahrrad-, E-Bike- und Ladeprofil zentral speichern sowie als JSON exportieren und importieren.
-- Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus Profil, Distanz und Höhenprofil prognostizieren.
+- Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus persönlicher Referenzreichweite, Profil, Distanz und Höhenprofil prognostizieren.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -42,7 +42,9 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Die Etappenbewertung ist eine MVP-Planungshilfe und keine Sicherheits-, Fitness-, Wetter- oder Gesundheitsbewertung.
 - Wetter, Wind, Oberfläche, Reifendruck und Temperatur werden in der Energieprognose noch nicht berücksichtigt.
 - Die Energieprognose ist eine deterministische Planungshilfe und keine Garantie für reale Reichweite oder Leistungsfähigkeit.
+- Die persönliche Referenzreichweite gilt für die gesamte konfigurierte Akkuanzahl bis 0 %; Änderungen der Akkukonfiguration erfordern eine Prüfung dieses Erfahrungswerts.
 - Jede Etappe startet in Paket 18 rechnerisch mit voller nutzbarer Akkukapazität; Nachladen und etappenübergreifende Akkufortschreibung fehlen noch.
+- Die Ladeplanung aus PR #69 bleibt bis zur Integration und erneuten Raspberry-Pi-Abnahme des kalibrierten Energie-Cores im Draft.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -62,8 +64,9 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 15: Trennung der Bedienstruktur für Routen- und Etappenplanung nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #65 in `private` gemergt.
 - Paket 16: Persönliches Fahrer- und Fahrradprofil nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #66 in `private` gemergt.
 - Paket 17: E-Bike- und Ladeprofil nach bestätigtem Prüflauf über PR #67 in `private` gemergt.
-- Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern auf Branch `codex/ebike-energy-calculation-core` in Arbeit; Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
-- Paket 19: kombinierte Etappenplanung nach Tagen, Schwierigkeit und Akkugrenze folgt erst nach Freigabe von Paket 18.
+- Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern über PR #68 in `private` gemergt; der Raspberry-Pi-Praxistest hat danach die fehlende Nutzung der Referenzreichweite aufgedeckt.
+- Nacharbeit Paket 18/19: Kalibrierung über Branch `codex/fix-ebike-reference-range-calibration`; separater Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
+- Paket 19: Intelligente Ladeplanung liegt in PR #69 vor, bleibt aber bis Merge der Kalibrierung, Rebase und vollständiger Wiederholungsprüfung im Draft.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
 Ausgangsbasis für Paket 18:
@@ -88,6 +91,17 @@ Enthalten:
 - persönliche Belastung und Reichweitenprognose
 - Reservewarnung und nachvollziehbare Prognosequalität
 - Ergebnisanzeige je Etappe
+
+Nach dem Raspberry-Pi-Praxistest ergänzt Modellversion `biketriphub-energy-v2`:
+
+- persönlichen Referenzverbrauch aus nutzbarer Gesamtenergie und flacher Referenzreichweite
+- Kalibrierung ausschließlich des flachen Grundverbrauchs bei weiterhin getrenntem physikalischem Rohverbrauch
+- unskalierter physikalischer Steigungszuschlag und auf null begrenzte Gefälleentlastung
+- monotone Höhenmeter-Regression für 100 km mit 100, 1.000 und 2.000 positiven Höhenmetern
+- sichere Reichweite bis zur separat bewerteten Reserve
+- transparente Faktoren, harte Grenzen und sichtbare Hinweise bei auffälliger Kalibrierung
+- eindeutige Semantik der Referenzreichweite für die gesamte konfigurierte Akkuanzahl
+- Regressionen für 80 km, 64 km bei 20 % Reserve und 100 km bei 80 km Referenzreichweite
 
 Nicht enthalten:
 

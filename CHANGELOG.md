@@ -1,5 +1,18 @@
 # Changelog
 
+## Nacharbeit Paket 18/19 - 2026-08-02
+
+- persönliche flache Referenzreichweite als verbindliche Verbrauchskalibrierung in `biketriphub-energy-v2` integriert
+- Referenzverbrauch, sichere Reichweite bis zur Reserve, physikalischen Rohverbrauch, kalibrierten Verbrauch und Kalibrierungsfaktor transparent ausgewiesen
+- Kalibrierungsfaktor begrenzt und auffällige beziehungsweise begrenzte Faktoren mit sichtbaren Prüfhinweisen versehen
+- Referenzreichweite eindeutig auf die aktuell konfigurierte Gesamtakkuanzahl bezogen und Profilhinweis bei geänderten Akkudaten ergänzt
+- Regression für 80 km, 64 km mit 20 % Reserve und 100 km bei 80 km Referenzreichweite ergänzt
+- Kalibrierungsfaktor auf den flachen Grundverbrauch begrenzt und physikalischen Steigungszuschlag separat addiert
+- Gefälleentlastung ohne negative Akkuenergie oder Rekuperation begrenzt
+- flachen Grundverbrauch, Steigungszuschlag, Gefälleentlastung, positive Höhenmeter und Wh je 100 Hm transparent ausgewiesen
+- monotone 100-km-Regression für 100, 1.000 und 2.000 positive Höhenmeter ergänzt
+- PR #69 bis zur Integration des korrigierten Energie-Cores ausdrücklich im Draft belassen
+
 ## Paket 18 - 2026-07-30
 
 - deterministischen, versionierten Energie- und Reichweiten-Rechenkern ergänzt
