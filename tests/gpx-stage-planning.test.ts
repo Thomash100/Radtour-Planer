@@ -181,16 +181,24 @@ function elevationComparisonProjection(
 
 const chargingTestProfile = {
   ...riderBikeProfile,
+  rider: {
+    ...riderBikeProfile.rider,
+    bodyWeightKg: 75
+  },
   bike: {
     ...riderBikeProfile.bike,
+    luggageWeightKg: 12,
     ebike: {
       ...riderBikeProfile.bike.ebike,
       batteryCapacityWh: 500,
       batteryCount: 1,
       usableBatteryCapacityPercent: 100,
+      motorAssistancePercent: 100,
+      referenceRangeKm: 80,
       desiredReservePercent: 20,
       chargerPowerW: 250,
-      chargingLossPercent: 10
+      chargingLossPercent: 10,
+      personalRidingStyle: "balanced" as const
     }
   }
 };
@@ -899,6 +907,92 @@ test("baut geordnete Energiesegmente ohne Änderung des Energie-Gesamtwerts", ()
   assert.ok(segments.length > 1);
   assert.equal(Number(segments.reduce((sum, segment) => sum + segment.energyWh, 0).toFixed(4)), projection.batteryEnergyWh);
   assert.ok(segments.every((segment, index) => index === 0 || segment.startKm === segments[index - 1].endKm));
+});
+
+test("plant für 100 flache Kilometer bei 80 Kilometern Referenzreichweite zwingend einen Ladehalt", () => {
+  const stage = {
+    id: "stage-reference-100",
+    dayNumber: 1,
+    routeStartKm: 0,
+    routeEndKm: 100,
+    distanceKm: 100,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(100),
+    elevationDataStatus: "measured" as const
+  };
+  const projection = calculateStageEnergyProjection({
+    profile: chargingTestProfile,
+    distanceKm: stage.distanceKm,
+    elevationUp: stage.elevationUp,
+    elevationDown: stage.elevationDown,
+    elevationProfile: stage.elevationProfile,
+    elevationDataStatus: stage.elevationDataStatus
+  });
+  const segments = buildTourChargingSegments(chargingTestProfile, [stage]);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments,
+    chargingPoints: [chargingPoint("reference-stop-64", 64, 500)]
+  });
+
+  assert.equal(projection.batteryEnergyWh, 625);
+  assert.equal(Number(segments.reduce((sum, segment) => sum + segment.energyWh, 0).toFixed(4)), 625);
+  assert.equal(plan.totalEnergyNeedWh, 625);
+  assert.equal(plan.status, "feasible");
+  assert.equal(plan.firstCriticalPoint?.routeKm, 64);
+  assert.equal(plan.stops.length, 1);
+  assert.equal(plan.stops[0].point.routeKm, 64);
+  assert.equal(plan.stops[0].arrivalEnergyWh, 100);
+  assert.ok(plan.stages[0].endCapacityPercent >= 20);
+});
+
+test("kennzeichnet den kalibrierten 100-km-Referenzfall ohne Ladepunkt als nicht durchführbar", () => {
+  const segments = buildTourChargingSegments(chargingTestProfile, [{
+    id: "stage-reference-no-stop",
+    dayNumber: 1,
+    routeStartKm: 0,
+    routeEndKm: 100,
+    distanceKm: 100,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(100),
+    elevationDataStatus: "measured"
+  }]);
+  const plan = calculateChargingPlan({ profile: chargingTestProfile, segments, chargingPoints: [] });
+
+  assert.equal(plan.totalEnergyNeedWh, 625);
+  assert.equal(plan.status, "infeasible");
+  assert.equal(plan.firstCriticalPoint?.routeKm, 64);
+  assert.ok(plan.warnings.some((warning) => warning.code === "reserve_below"));
+  assert.ok(plan.warnings.some((warning) => warning.code === "no_reachable_station"));
+});
+
+test("übernimmt monotone Höhenmeterverbräuche in die Ladeplanung", () => {
+  const chargingPoints = [
+    chargingPoint("elevation-25", 25, 500),
+    chargingPoint("elevation-50", 50, 500),
+    chargingPoint("elevation-75", 75, 500)
+  ];
+  const plans = [100, 1000, 2000].map((elevation) => {
+    const segments = buildTourChargingSegments(chargingTestProfile, [{
+      id: `stage-elevation-${elevation}`,
+      dayNumber: 1,
+      routeStartKm: 0,
+      routeEndKm: 100,
+      distanceKm: 100,
+      elevationUp: elevation,
+      elevationDown: elevation,
+      elevationProfile: [],
+      elevationDataStatus: "missing"
+    }]);
+    return calculateChargingPlan({ profile: chargingTestProfile, segments, chargingPoints });
+  });
+
+  assert.deepEqual(plans.map((plan) => plan.totalEnergyNeedWh), [635, 722, 819]);
+  assert.ok(plans[0].totalChargingEnergyWh < plans[1].totalChargingEnergyWh);
+  assert.ok(plans[1].totalChargingEnergyWh < plans[2].totalChargingEnergyWh);
+  assert.ok(plans.every((plan) => plan.stops.length >= 1));
 });
 
 test("serialisiert Ladepunkte und manuelle Ladehalte versioniert und stabil", () => {

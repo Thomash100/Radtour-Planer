@@ -268,6 +268,8 @@ Deterministischen Energie- und Reichweiten-Rechenkern prüfen:
 Deterministische E-Bike-Ladeplanung prüfen:
 
 - Kurze Tour mit ausreichender Kapazität zeigt keinen unnötigen Ladehalt.
+- 500 Wh nutzbare Energie, 80 km Referenzreichweite und 100 km flache Strecke ergeben 625 Wh; ohne Ladepunkt ist die Tour nicht durchführbar, mit Ladepunkt bei km 64 wird ein Ladehalt bei 20 % Ankunftsakku geplant.
+- Die korrigierten Höhenmeterfälle 635 Wh bei 100 Hm, 722 Wh bei 1.000 Hm und 819 Wh bei 2.000 Hm werden unverändert und monoton in die Ladeplanung übernommen.
 - Längere Tour kennzeichnet die erste kritische Stelle und fügt einen erreichbaren automatischen Ladehalt ein.
 - Tour mit mehreren Energiegrenzen erzeugt mehrere Ladehalte in stabiler Routenreihenfolge.
 - Ohne erreichbaren Ladepunkt erscheinen Reserve- und Erreichbarkeitswarnung.

@@ -265,6 +265,8 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 ### Paket 19 – Ladeplanung
 
 - E-Bike-Profil mit Kapazität, Reserve, Ladegerätleistung und Ladeverlusten speichern
+- Referenzfall 500 Wh / 80 km / 100 km flach prüfen: 625 Wh Fahrenergie, kritische Stelle bei km 64, ohne Ladepunkt nicht durchführbar und mit Ladepunkt bei km 64 zwingender Ladehalt bei 20 % Ankunftsakku
+- Höhenmeterfälle mit 100, 1.000 und 2.000 Hm prüfen: 635 Wh < 722 Wh < 819 Wh müssen auch in der Ladeplanung erhalten bleiben
 - Tour ohne Ladebedarf und Tour mit Reserveunterschreitung vergleichen
 - erste kritische Stelle und automatischen Ladehalt prüfen
 - eigenen Ladepunkt erfassen und mehrere manuelle Ladehalte hinzufügen
