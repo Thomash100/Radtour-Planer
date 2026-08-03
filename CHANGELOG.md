@@ -1,5 +1,16 @@
 # Changelog
 
+## BikeTripHub Intelligence INT-00 - 2026-08-03
+
+- PR #69 nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe mit Merge-Commit `41354ac` nach `private` integriert
+- verbindliches Fachkonzept für die Intelligence-Pakete 20 bis 32 erstellt
+- produktiven Energie-/Ladekern klar von experimentellen Unterstützungs-, Telemetrie-, Shadow-, Kalibrierungs- und Optimierungs-Cores getrennt
+- physikalische Annahmen, kontinuierliches Unterstützungsmodell, Referenzreichweite und Höhenmeterbehandlung dokumentiert
+- versionierte TypeScript-/JSON-Verträge für Szenario, Profilimport, Telemetrie, Shadow Mode, Kalibrierung, Feature Flags und Optimierung entworfen
+- Datenquellen-, Datenschutz-, Determinismus-, Qualitäts- und Modellfreigaberegeln festgelegt
+- Paket 30 als Erweiterung der vorhandenen Ladeplanung aus Paket 19 abgegrenzt
+- keine Produktivlogik, kein TourState-Schema und keine Benutzeroberfläche verändert
+
 ## Nacharbeit Paket 18/19 - 2026-08-02
 
 - persönliche flache Referenzreichweite als verbindliche Verbrauchskalibrierung in `biketriphub-energy-v2` integriert

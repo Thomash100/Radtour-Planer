@@ -280,6 +280,28 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - responsive Darstellung bei 390, 768 und 1280 px sowie fehlerfreie Browserkonsole prüfen
 - keine Live-Abfrage, Reservierung, Routen-/Etappenänderung oder Online-Abhängigkeit auslösen
 
+### BikeTripHub Intelligence INT-00 – Dokumentationsabnahme
+
+Dieser Konzeptabschnitt ändert keine App-, Datenbank-, Docker- oder Rechenlogik. Für die verbindliche Raspberry-Pi-Abnahme genügt nach dem Update des Konzept-Branches:
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/biketriphub-intelligence-concept
+git rev-parse --short HEAD
+curl -fsS http://localhost:3000/api/health
+```
+
+Danach prüfen und dokumentieren:
+
+- Container starten unverändert und der Healthcheck ist erfolgreich.
+- `/planer/route` und `/planer/etappen` sind erreichbar.
+- Eine vorhandene E-Bike-Energieprognose und Ladeplanung zeigt weiterhin die produktiven Modellversionen `biketriphub-energy-v2` und `biketriphub-charging-v1`.
+- Es erscheint keine neue Intelligence-Funktion und keine experimentelle Berechnung im Produktivpfad.
+- Die Browserkonsole bleibt fehlerfrei.
+- Fachkonzept, Vertragsentwurf und Roadmap wurden auf klare Modulgrenzen, Einheiten, Datenqualität und Stopppunkte geprüft.
+
+Ohne ausdrückliche Freigabe bleibt der Konzept-PR im Draft. Kein Tag und kein Release.
+
 ## 8. Updates einspielen
 
 Empfohlen:

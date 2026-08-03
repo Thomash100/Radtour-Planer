@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-08-02
+Stand: 2026-08-03
 
 ## Produktstand
 
@@ -45,7 +45,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Die Energieprognose ist eine deterministische Planungshilfe und keine Garantie für reale Reichweite oder Leistungsfähigkeit.
 - Die persönliche Referenzreichweite gilt für die gesamte konfigurierte Akkuanzahl bis 0 %; Änderungen der Akkukonfiguration erfordern eine Prüfung dieses Erfahrungswerts.
 - Die isolierte Energieprognose startet je Etappe mit voller nutzbarer Akkukapazität; die getrennte Ladeplanung schreibt den Akkustand etappenübergreifend fort.
-- Die Ladeplanung aus PR #69 verwendet nach dem Rebase ausschließlich den korrigierten kalibrierten Energiebedarf und bleibt bis zur erneuten Raspberry-Pi- und fachlichen Abnahme im Draft.
+- Die Ladeplanung verwendet ausschließlich den korrigierten kalibrierten Energiebedarf; Live-Verfügbarkeit und reale Ladeleistung bleiben unbelegte Planungsannahmen.
 - Live-Verfügbarkeit, Öffnungszeiten und Steckdosenkompatibilität von Ladepunkten werden nicht extern geprüft.
 - Ladezeiten verwenden eine konstante wirksame Leistung; reale Ladekurven und Wartezeiten bleiben unberücksichtigt.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
@@ -69,16 +69,36 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 17: E-Bike- und Ladeprofil nach bestätigtem Prüflauf über PR #67 in `private` gemergt.
 - Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern über PR #68 in `private` gemergt; der Raspberry-Pi-Praxistest hat danach die fehlende Nutzung der Referenzreichweite aufgedeckt.
 - Nacharbeit Paket 18/19: Referenzkalibrierung und separater Höhenmeterzuschlag wurden über PR #70 mit Merge-Commit `4fb67e8` in `private` integriert.
-- Paket 19: Intelligente Ladeplanung liegt in PR #69 vor, ist auf den korrigierten Energie-Core rebased und bleibt bis zur vollständigen Wiederholungsprüfung und ausdrücklichen Freigabe im Draft.
+- Paket 19: Intelligente Ladeplanung wurde nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe über PR #69 mit Merge-Commit `41354ac` in `private` integriert.
+- BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wird auf `codex/biketriphub-intelligence-concept` dokumentiert; es verändert keine Produktivlogik.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Aktuelle Integrationsbasis für Paket 19:
+Aktuelle Integrationsbasis nach Paket 19:
 
-- `private`: `4fb67e88bb0e71cbf564d762ef1525bc0c63f0e1` (Merge von PR #70)
+- `private`: `41354ac670c8d415cc459b5fe35761da02384f74` (Merge von PR #69)
 - deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
 - bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
 - Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
 - keine Live-Ladesäulen, Online-Dienste oder automatische Routen-/Etappenänderung
+
+## BikeTripHub Intelligence: Fachkonzept INT-00
+
+Der nächste Entwicklungsstrang erweitert den stabilen Tourenplaner schrittweise um unabhängige Intelligence-Module. Der Konzeptabschnitt legt vor der Implementierung fest:
+
+- mathematische und physikalische Annahmen,
+- eine gemeinsame versionierte Szenario- und Vertragsgrenze,
+- unabhängige Energie-, Unterstützungs-, Telemetrie-, Shadow-, Kalibrierungs- und Optimierungs-Cores,
+- Telemetrie-, Import-, Feature-Flag- und Kalibrierungsverfahren,
+- Qualitäts-, Determinismus- und Freigaberegeln,
+- Abhängigkeiten und Akzeptanzrahmen der Pakete 20 bis 32.
+
+Der produktive Energie-Core `biketriphub-energy-v2` und Lade-Core `biketriphub-charging-v1` bleiben unverändert. Experimentelle Ergebnisse sind zunächst rein informativ und dürfen TourState oder Profile nicht automatisch ändern.
+
+Grundlagen:
+
+- [Fachkonzept BikeTripHub Intelligence](BIKETRIPHUB_INTELLIGENCE.md)
+- [Vertrags- und Schemaentwurf](BIKETRIPHUB_INTELLIGENCE_CONTRACTS.md)
+- [Architekturentscheidungen ADR-010 bis ADR-012](ARCHITECTURE_DECISIONS.md)
 
 ## Paket 19: Intelligente Ladeplanung
 
