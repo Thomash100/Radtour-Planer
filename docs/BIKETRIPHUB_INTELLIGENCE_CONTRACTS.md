@@ -1,5 +1,7 @@
 # Vertrags- und Schemaentwurf BikeTripHub Intelligence
 
+Paket 21 konkretisiert den Optimierungsvertrag durch `biketriphub-riding-strategy-v1`. Der versionierte TourState speichert Modus, Etappen-Overrides, Eingabe-Fingerprint und einen nachvollziehbaren Ergebnissnapshot; die Fachberechnung bleibt im reinen Core `src/lib/ebike-riding-strategy.ts`.
+
 - Stand: 2026-08-03
 - Status: fachlicher Entwurf; Implementierung erfolgt paketweise
 - Grundlage: [BIKETRIPHUB_INTELLIGENCE.md](BIKETRIPHUB_INTELLIGENCE.md)
@@ -115,7 +117,7 @@ Validierung:
 
 ## 5. Fahrradprofil-Import
 
-Paket 21 erweitert das bestehende `RiderBikeProfile`, ersetzt es aber nicht still.
+Ein späteres, separat beauftragtes Fahrradprofil-Importpaket erweitert das bestehende `RiderBikeProfile`, ersetzt es aber nicht still. Paket 21 verwendet ausschließlich den vorhandenen validierten Profilsnapshot.
 
 ```ts
 type ImportedValue<T> = {

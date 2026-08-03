@@ -27,9 +27,10 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus persönlicher Referenzreichweite, Profil, Distanz und Höhenprofil prognostizieren.
 - E-Bike-Akkustand etappenübergreifend fortschreiben sowie automatische und manuelle Ladehalte mit Ladezeit planen.
 - Kontinuierliche Motorunterstützung je Höhenabschnitt als klar gekennzeichnete Simulation mit Zieltempo, Modus, Energie, Akkustand und Begründung empfehlen.
+- Adaptive Fahrstrategie tourweit aus Energie-, Lade- und Unterstützungsergebnissen ableiten; Modi, Ladehalte, Reserve und manuelle Etappenvorgaben werden deterministisch berücksichtigt.
 - Gesamte Tour speichern und erneut öffnen.
 
-Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
+Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
 
 ## Bekannte Einschränkungen
 
@@ -49,7 +50,8 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Die Ladeplanung verwendet ausschließlich den korrigierten kalibrierten Energiebedarf; Live-Verfügbarkeit und reale Ladeleistung bleiben unbelegte Planungsannahmen.
 - Live-Verfügbarkeit, Öffnungszeiten und Steckdosenkompatibilität von Ladepunkten werden nicht extern geprüft.
 - Ladezeiten verwenden eine konstante wirksame Leistung; reale Ladekurven und Wartezeiten bleiben unberücksichtigt.
-- Die Unterstützungssimulation verwendet bis zum versionierten Fahrradprofil aus Paket 21 generische Modusbereiche; Ladehalte, Telemetrie, Wind, Temperatur und Untergrund sind noch nicht gekoppelt.
+- Die Unterstützungssimulation verwendet ohne belegtes Fahrradmodusprofil generische Modusbereiche; Telemetrie, Wind, Temperatur und Untergrund sind noch nicht gekoppelt.
+- Die adaptive Fahrstrategie skaliert vorhandene Abschnittsenergie linear zur Unterstützung. Sie ist keine Fahrradsteuerung und keine Garantie für reale Reichweite.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -73,12 +75,13 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Nacharbeit Paket 18/19: Referenzkalibrierung und separater Höhenmeterzuschlag wurden über PR #70 mit Merge-Commit `4fb67e8` in `private` integriert.
 - Paket 19: Intelligente Ladeplanung wurde nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe über PR #69 mit Merge-Commit `41354ac` in `private` integriert.
 - BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wurde über PR #71 mit Merge-Commit `5d8d15f` in `private` integriert; es verändert keine Produktivlogik.
-- Paket 20: Kontinuierliches Unterstützungsmodell `biketriphub-assistance-v1` wird auf `codex/continuous-assistance-model` als experimentelle, begründete Etappensimulation umgesetzt.
+- Paket 20: Kontinuierliches Unterstützungsmodell `biketriphub-assistance-v1` wurde nach Freigabe über PR #73 mit Merge-Commit `731d8da` in `private` integriert.
+- Paket 21: Adaptive E-Bike-Fahrstrategie `biketriphub-riding-strategy-v1` wird auf `codex/adaptive-riding-strategy` als separater tourweiter Planungs-Core umgesetzt.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Aktuelle Integrationsbasis nach Paket 19:
+Aktuelle Integrationsbasis für Paket 21:
 
-- `private`: `5d8d15f7c89999cf805864727f8cb7fa420a5c9e` (Merge von PR #71; Basis für Paket 20)
+- `private`: `731d8da370851febe4d40f86d838b8e55ce8a0b3` (Merge von PR #73; Basis für Paket 21)
 - deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
 - bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
 - Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
@@ -117,9 +120,28 @@ Paket 20 ergänzt eine eigenständige Simulation je Etappe:
 - sichtbare Begründungen, Qualitätsangabe und Warnungen,
 - responsive, aufklappbare Anzeige ohne automatische Tour- oder Fahrradänderung.
 
-In der UI wird die vorhandene persönliche Fahrweise auf energiesparend, ausgewogen oder schnell abgebildet. Herstellerprofile, Telemetrie und adaptive Kalibrierung bleiben den Paketen 21 bis 28 vorbehalten.
+In der UI wird die vorhandene persönliche Fahrweise auf energiesparend, ausgewogen oder schnell abgebildet. Herstellerprofile, Telemetrie und adaptive Kalibrierung bleiben späteren, separat freizugebenden Paketen vorbehalten.
 
 Modell: [docs/E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
+
+## Paket 21: Adaptive E-Bike-Fahrstrategie
+
+Paket 21 verbindet die vorhandenen Energie-, Lade- und Unterstützungsergebnisse, ohne diese Fachkerne zu verändern:
+
+- reiner tourweiter Core `biketriphub-riding-strategy-v1`,
+- Modi Ausgewogen, Reichweite, Komfort und Manuell,
+- gemeinsames Energiebudget bis zum nächsten Ladehalt beziehungsweise Tourziel,
+- Priorisierung kommender langer oder steiler Anstiege,
+- Berücksichtigung automatischer und manueller Ladehalte,
+- korrekte gemeinsame Kapazität für einen oder zwei Akkus,
+- manuelle Etappen-Overrides mit sichtbarer Quelle und Reset,
+- Warnungen für fehlende Daten, Reservekonflikte, unzureichendes Laden und unsichere Vorgaben,
+- versionierter, rückwärtskompatibler TourState mit Eingabe-Fingerprint und Ergebnissnapshot,
+- responsive Tour- und Etappenanzeige.
+
+Nicht enthalten sind Telemetrie, Wetter, Wind, Live-Ladestationen, KI, Navigation oder automatische Fahrradsteuerung.
+
+Modell: [docs/E_BIKE_RIDING_STRATEGY_MODEL.md](E_BIKE_RIDING_STRATEGY_MODEL.md).
 
 ## Paket 19: Intelligente Ladeplanung
 

@@ -166,3 +166,7 @@ Ladezeit: rund 37 Minuten
 - keine automatische Änderung von Route oder Etappengrenzen
 - keine Bewertung von Steckdosenkompatibilität über die dokumentierten Steckertypen hinaus
 - alle Ergebnisse sind Planungshilfen, keine Garantie für reale Reichweite oder Verfügbarkeit
+
+## Abgrenzung zur adaptiven Fahrstrategie
+
+Paket 21 übernimmt geordnete Ladehalte, Nachladeenergie und Ladezeit aus `biketriphub-charging-v1`. Der Fahrstrategie-Core sucht, verschiebt oder verändert keine Ladehalte und schreibt keine Werte in dieses Modell zurück. Eine Warnung der Fahrstrategie ergänzt den Ladeplan, ersetzt dessen Status aber nicht.

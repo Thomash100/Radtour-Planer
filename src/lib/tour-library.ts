@@ -187,6 +187,27 @@ export function duplicateTourLibraryEntry(entries: TourLibraryEntry[], id: strin
             manualStops: source.state.chargingPlanning.manualStops.map((stop) => ({ ...stop }))
           }
         : undefined,
+      ridingStrategy: source.state.ridingStrategy
+        ? {
+            ...source.state.ridingStrategy,
+            stageOverrides: source.state.ridingStrategy.stageOverrides.map((override) => ({
+              ...override,
+              stageId: stageIdMap.get(override.stageId) ?? override.stageId
+            })),
+            lastCalculation: source.state.ridingStrategy.lastCalculation
+              ? {
+                  ...source.state.ridingStrategy.lastCalculation,
+                  automaticRecommendations: source.state.ridingStrategy.lastCalculation.automaticRecommendations.map(
+                    (recommendation) => ({
+                      ...recommendation,
+                      stageId: stageIdMap.get(recommendation.stageId) ?? recommendation.stageId
+                    })
+                  ),
+                  warningCodes: [...source.state.ridingStrategy.lastCalculation.warningCodes]
+                }
+              : undefined
+          }
+        : undefined,
       status: "Tour dupliziert.",
       updatedAt: now
     }
