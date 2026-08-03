@@ -26,6 +26,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Persönliches Fahrer-, Fahrrad-, E-Bike- und Ladeprofil zentral speichern sowie als JSON exportieren und importieren.
 - Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus persönlicher Referenzreichweite, Profil, Distanz und Höhenprofil prognostizieren.
 - E-Bike-Akkustand etappenübergreifend fortschreiben sowie automatische und manuelle Ladehalte mit Ladezeit planen.
+- Kontinuierliche Motorunterstützung je Höhenabschnitt als klar gekennzeichnete Simulation mit Zieltempo, Modus, Energie, Akkustand und Begründung empfehlen.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -48,6 +49,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Die Ladeplanung verwendet ausschließlich den korrigierten kalibrierten Energiebedarf; Live-Verfügbarkeit und reale Ladeleistung bleiben unbelegte Planungsannahmen.
 - Live-Verfügbarkeit, Öffnungszeiten und Steckdosenkompatibilität von Ladepunkten werden nicht extern geprüft.
 - Ladezeiten verwenden eine konstante wirksame Leistung; reale Ladekurven und Wartezeiten bleiben unberücksichtigt.
+- Die Unterstützungssimulation verwendet bis zum versionierten Fahrradprofil aus Paket 21 generische Modusbereiche; Ladehalte, Telemetrie, Wind, Temperatur und Untergrund sind noch nicht gekoppelt.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -70,12 +72,13 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern über PR #68 in `private` gemergt; der Raspberry-Pi-Praxistest hat danach die fehlende Nutzung der Referenzreichweite aufgedeckt.
 - Nacharbeit Paket 18/19: Referenzkalibrierung und separater Höhenmeterzuschlag wurden über PR #70 mit Merge-Commit `4fb67e8` in `private` integriert.
 - Paket 19: Intelligente Ladeplanung wurde nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe über PR #69 mit Merge-Commit `41354ac` in `private` integriert.
-- BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wird auf `codex/biketriphub-intelligence-concept` dokumentiert; es verändert keine Produktivlogik.
+- BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wurde über PR #71 mit Merge-Commit `5d8d15f` in `private` integriert; es verändert keine Produktivlogik.
+- Paket 20: Kontinuierliches Unterstützungsmodell `biketriphub-assistance-v1` wird auf `codex/continuous-assistance-model` als experimentelle, begründete Etappensimulation umgesetzt.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
 Aktuelle Integrationsbasis nach Paket 19:
 
-- `private`: `41354ac670c8d415cc459b5fe35761da02384f74` (Merge von PR #69)
+- `private`: `5d8d15f7c89999cf805864727f8cb7fa420a5c9e` (Merge von PR #71; Basis für Paket 20)
 - deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
 - bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
 - Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
@@ -99,6 +102,24 @@ Grundlagen:
 - [Fachkonzept BikeTripHub Intelligence](BIKETRIPHUB_INTELLIGENCE.md)
 - [Vertrags- und Schemaentwurf](BIKETRIPHUB_INTELLIGENCE_CONTRACTS.md)
 - [Architekturentscheidungen ADR-010 bis ADR-012](ARCHITECTURE_DECISIONS.md)
+
+## Paket 20: Kontinuierliches Unterstützungsmodell
+
+Paket 20 ergänzt eine eigenständige Simulation je Etappe:
+
+- kontinuierliche Berechnung ohne Sprünge an den sichtbaren Steigungsklassen,
+- kurze Rampen sowie mittlere und lange zusammenhängende Anstiege,
+- Fahrerleistung, Gesamtgewicht, Zieltempo, Motorgrenze und Reservebedarf,
+- Strategien energiesparend, ausgewogen, komfortabel, schnell und benutzerdefiniert im Core,
+- Motoranteil als Bereich und Moduszuordnung mit Quelle und Qualität,
+- erwartete Abschnittsenergie ausschließlich aus dem unveränderten Energie-Core,
+- Akkustand innerhalb der isolierten Etappe,
+- sichtbare Begründungen, Qualitätsangabe und Warnungen,
+- responsive, aufklappbare Anzeige ohne automatische Tour- oder Fahrradänderung.
+
+In der UI wird die vorhandene persönliche Fahrweise auf energiesparend, ausgewogen oder schnell abgebildet. Herstellerprofile, Telemetrie und adaptive Kalibrierung bleiben den Paketen 21 bis 28 vorbehalten.
+
+Modell: [docs/E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
 
 ## Paket 19: Intelligente Ladeplanung
 

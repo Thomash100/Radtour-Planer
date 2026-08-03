@@ -286,6 +286,40 @@ Deterministische E-Bike-Ladeplanung prüfen:
 - Keine Live-Abfrage, Reservierung, Wetterintegration, Routenänderung oder KI-Optimierung wird ausgelöst.
 - Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
 
+## Paket 20
+
+Kontinuierliches Unterstützungsmodell prüfen:
+
+- identische Eingaben erzeugen vollständig identische Ergebnisse und Modellversion `biketriphub-assistance-v1`,
+- Berechnung bleibt an 2, 4, 6, 8, 10, 12 und 15 % kontinuierlich; nur die sichtbare Klasse wechselt,
+- 2 % benötigen weniger Unterstützung als 6 %, 6 % weniger als 10 %,
+- höheres Gesamtgewicht erhöht bei identischem Abschnitt den benötigten Motoranteil,
+- kurze Rampe, mittlerer und langer zusammenhängender Anstieg werden unterschieden,
+- lange Anstiege berücksichtigen die Gesamtdauer über mehrere Analyseabschnitte,
+- energiesparende Strategie empfiehlt weniger Unterstützung als komfortabel,
+- gefährdete Reserve reduziert das Zieltempo nachvollziehbar,
+- Motorleistungsgrenze und überschrittene nachhaltige Fahrerleistung erzeugen Warnungen,
+- Steigungen ab 15 % werden als Grenzbereich gekennzeichnet,
+- generische Modi sind als `generic` und mittlere Qualität ausgewiesen,
+- belegte Hersteller-/Benutzermodi werden statt generischer Modi zugeordnet,
+- eine unvollständige benutzerdefinierte Strategie wird als `incomplete` abgewiesen,
+- fehlendes Höhenprofil erzeugt keine erfundenen Streckenabschnitte,
+- klassisches Fahrrad erzeugt keine Motor- oder Akkuempfehlung,
+- Akkuenergie stammt je Abschnitt aus dem unveränderten produktiven Energie-Core,
+- der Energie-Core liefert vor und nach einer Simulation exakt dasselbe Ergebnis,
+- Save/Load von Route und Profil führt nach Neuberechnung zu identischen Empfehlungen,
+- Etappenanzeige nennt von/bis km, Länge, Ø-/Maximalsteigung, Dauer, Motorbereich, Modus, Zieltempo, Energie, Endakku, Begründung und Warnungen,
+- die Anzeige ist klar als `Simulation` gekennzeichnet und enthält keine Fahrradsteuerung,
+- bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
+
+Nicht ausgelöst werden dürfen:
+
+- Änderung von Energie- oder Lade-Core,
+- automatische Tour- oder Etappenänderung,
+- Telemetrieimport oder Kalibrierung,
+- Wind-, Wetter-, Temperatur- oder Untergrundkorrektur,
+- automatische Motorsteuerung.
+
 ## BikeTripHub Intelligence INT-00
 
 Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüfen:

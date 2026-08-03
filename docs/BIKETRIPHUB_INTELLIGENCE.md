@@ -374,11 +374,15 @@ Die Nummern sind Entwicklungs-Paketnummern. GitHub-Issue-Nummern werden separat 
 
 Branch: `codex/continuous-assistance-model`
 
+Umsetzungsstand: `biketriphub-assistance-v1` rechnet als klar gekennzeichnete Etappensimulation. Der produktive Energie- und Ladepfad bleibt unveraendert.
+
 - reiner Assistance-Core ohne produktive Aktivierung,
 - kontinuierliche Steigung, Dauer, Fahrerleistung, Motoranteil, Gewicht, Zielgeschwindigkeit und Reserve,
 - generisches, quellengestuetztes Hersteller-Modus-Mapping,
 - deterministische Vergleichs- und Grenztests,
 - keine Telemetrie, Kalibrierung oder Lernlogik.
+
+Verbindliche Modelldokumentation: [E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
 
 #### Paket 21 – Fahrradprofil Import/Export
 

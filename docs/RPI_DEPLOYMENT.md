@@ -280,6 +280,37 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - responsive Darstellung bei 390, 768 und 1280 px sowie fehlerfreie Browserkonsole prüfen
 - keine Live-Abfrage, Reservierung, Routen-/Etappenänderung oder Online-Abhängigkeit auslösen
 
+### Paket 20 – Kontinuierliche Unterstützungsstrategie
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/continuous-assistance-model
+git rev-parse --short HEAD
+curl -fsS http://localhost:3000/api/health
+```
+
+Verbindlich prüfen:
+
+- E-Bike-Profil mit realistischen Gewichten, Motor, Akku, Referenzreichweite und persönlicher Fahrweise laden.
+- Tour mit echtem Höhenprofil und mindestens einer flachen, einer mittleren und einer steilen Etappe öffnen.
+- In der Etappenansicht erscheint `Unterstützungsstrategie` mit Badge `Simulation`.
+- Aufgeklappte Abschnitte zeigen km von/bis, Länge, Ø-/Maximalsteigung, Abschnitts- und Anstiegsdauer, Zieltempo, Motorbereich, Modus, Wh sowie Start-/Endakku.
+- Flach < mittlere Steigung < starke Steigung ergibt einen nachvollziehbar steigenden Motorbedarf, sofern keine Grenze erreicht ist.
+- Ein langer Anstieg wird anders begründet als eine kurze Rampe.
+- Persönliche Fahrweise `Reichweitenorientiert`, `Ausgewogen` und `Sportlich` führt zu den dokumentierten Strategien.
+- Bei gefährdeter Reserve sinkt das Zieltempo und eine verständliche Warnung erscheint.
+- Ab 15 % erscheint der Grenzbereichshinweis.
+- Generische Modi werden nicht als belegte Herstellermodi dargestellt.
+- Fehlendes Höhenprofil zeigt einen unvollständigen Zustand statt erfundener Abschnitte.
+- Klassisches Fahrrad zeigt keine Unterstützungsstrategie.
+- Bestehende Energie- und Ladewerte bleiben unverändert und verwenden weiterhin `biketriphub-energy-v2` sowie `biketriphub-charging-v1`.
+- Tour speichern, neu laden und identische Unterstützungswerte vergleichen.
+- Keine Route, Etappe, Ladeplanung oder Unterkunft wird automatisch verändert.
+- Desktop 1280 px, Tablet 768 px und Smartphone 390 px ohne horizontalen Overflow prüfen.
+- Browserkonsole bleibt fehlerfrei.
+
+Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release.
+
 ### BikeTripHub Intelligence INT-00 – Dokumentationsabnahme
 
 Dieser Konzeptabschnitt ändert keine App-, Datenbank-, Docker- oder Rechenlogik. Für die verbindliche Raspberry-Pi-Abnahme genügt nach dem Update des Konzept-Branches:

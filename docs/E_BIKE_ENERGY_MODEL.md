@@ -1,5 +1,11 @@
 # Deterministischer Energie- und Reichweiten-Rechenkern
 
+## Abgrenzung zu Paket 20
+
+Das kontinuierliche Unterstützungsmodell `biketriphub-assistance-v1` verändert diesen produktiven Energie-Core nicht. Es erzeugt eine klar gekennzeichnete Simulation und ruft `calculateStageEnergyProjection()` je Analyseabschnitt mit einer unveränderlichen Profilkopie auf. Die hier dokumentierte Referenzreichweiten-Kalibrierung, der separate Höhenmeterzuschlag und alle Reservewerte bleiben verbindlich.
+
+Modell und Annahmen: [E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
+
 Die Modellversion `biketriphub-energy-v2` kalibriert den segmentweisen physikalischen Rechenkern mit der persönlichen
 flachen Referenzreichweite. Der Rechenkern liegt in `src/lib/ebike-energy.ts` und ist eine reine Funktion ohne Netzwerk-,
 Zeit- oder Zufallsabhängigkeit.
