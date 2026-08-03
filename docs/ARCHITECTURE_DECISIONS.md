@@ -132,3 +132,54 @@ Konsequenz:
 - Die fünf sichtbaren Routingprofile müssen unterschiedliche Providerprofile oder dokumentierte `profile:*`-Parameter verwenden.
 - Öffentliche BRouter-Dienste sind nur für MVP/Test vorgesehen; Produktion braucht eine gesonderte Betriebsentscheidung.
 - Die Übertragung von Routenkoordinaten und die OSM-Attribution sind in Datenschutz- und Betriebsprüfung einzubeziehen.
+
+## ADR-010: Intelligence als unabhängige deterministische Rechenkerne
+
+Entscheidung: Neue Intelligence-Funktionen werden als versionierte, reine Rechenkerne innerhalb des modularen Monolithen implementiert. Der produktive Energie-Core `biketriphub-energy-v2` und der Lade-Core `biketriphub-charging-v1` bleiben bis zu einer gesonderten Freigabe die Referenz.
+
+Begründung:
+
+- Unterstützungs-, Telemetrie-, Kalibrierungs- und Optimierungslogik haben unterschiedliche Änderungs- und Validierungszyklen.
+- Unabhängige Kerne lassen sich mit identischen Eingaben reproduzierbar testen und einzeln deaktivieren.
+- Eine schrittweise Erweiterung schützt den geprüften Tourenplaner vor experimentellen Seiteneffekten.
+
+Konsequenz:
+
+- Core-Module haben keine Abhängigkeit von UI, Browser-Speicher, Datenbank, Netzwerk, Systemzeit oder Zufall.
+- Ein versioniertes, normalisiertes Szenario ist die gemeinsame Eingabegrenze.
+- Ergebnisse enthalten Modellversion, Eingabe-Hash, Qualität und Annahmen.
+- Die Orchestrierung verbindet Module, dupliziert aber keine Fachformeln.
+
+## ADR-011: Experimentelle Ergebnisse nur über Shadow Mode und explizite Freigabe
+
+Entscheidung: Ein experimentelles Modell darf produktive Ergebnisse nur vergleichen, nicht automatisch ersetzen. Sichtbare Aktivierungen werden standardmäßig deaktiviert und über versionierte Feature Flags gesteuert.
+
+Begründung:
+
+- Reale Reichweiten- und Belastungsmodelle benötigen längere Validierung gegen unterschiedliche Fahrten und Profile.
+- Ein guter Durchschnittswert kann kritische Reservefehler verdecken.
+- Benutzerprofile und TourState dürfen sich nicht durch eine Simulation selbst verändern.
+
+Konsequenz:
+
+- Shadow Mode verwendet für Produktiv- und Experimentmodell dasselbe normalisierte Szenario.
+- Kalibrierung erzeugt nur bestätigungspflichtige Kandidaten.
+- Ein Produktivwechsel benötigt Regressionstests, einen eigenen ADR, Raspberry-Pi- und fachliche Abnahme sowie ausdrückliche Merge-Freigabe.
+- Unbekannte, fehlende oder ungültige Flags gelten als deaktiviert.
+
+## ADR-012: Quellen- und Qualitätsnachweis für Intelligence-Daten
+
+Entscheidung: Importierte, gemessene und abgeleitete Intelligence-Werte führen Quelle und Datenqualität mit. Fehlende Werte bleiben unbekannt und werden nicht geschätzt, sofern das konkrete Modell keine sichtbar dokumentierte Schätzung vorsieht.
+
+Begründung:
+
+- Herstellerdaten, App-Exporte, Bilder und Telemetrie besitzen unterschiedliche Belastbarkeit.
+- Erklärbare Empfehlungen benötigen die Trennung von Messwert, Benutzereingabe und Ableitung.
+- Standort- und Leistungsdaten erfordern transparente lokale Verarbeitung und Zweckbindung.
+
+Konsequenz:
+
+- OCR aus Bildern erzeugt nur bestätigungspflichtige Importkandidaten.
+- Rohtelemetrie bleibt unverändert; Normalisierung und Glättung sind versionierte Transformationen.
+- Geringe oder unvollständige Qualität senkt die Prognosequalität statt Genauigkeit vorzutäuschen.
+- Externe Übertragung oder Serverpersistenz benötigt eine gesonderte Datenschutz- und Betriebsentscheidung.

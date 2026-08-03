@@ -286,6 +286,26 @@ Deterministische E-Bike-Ladeplanung prüfen:
 - Keine Live-Abfrage, Reservierung, Wetterintegration, Routenänderung oder KI-Optimierung wird ausgelöst.
 - Bei 390, 768 und 1280 px entsteht kein horizontaler Overflow; Browserkonsole bleibt fehlerfrei.
 
+## BikeTripHub Intelligence INT-00
+
+Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüfen:
+
+- [Fachkonzept](BIKETRIPHUB_INTELLIGENCE.md) und [Vertragsentwurf](BIKETRIPHUB_INTELLIGENCE_CONTRACTS.md) sind intern verlinkt und widerspruchsfrei.
+- Produktive Modelle `biketriphub-energy-v2` und `biketriphub-charging-v1` bleiben unverändert.
+- Kontinuierliche Unterstützung ist als experimenteller, reiner Core abgegrenzt.
+- Referenzreichweite kalibriert nur den flachen Grundverbrauch; positive Höhenmeter bleiben ein separater Zuschlag.
+- Ohne Rekuperationsnachweis entsteht keine negative Akkuenergie.
+- Telemetrie unterscheidet unveränderte Rohdaten und versionierte Normalform.
+- Kalibrierung erzeugt nur bestätigungspflichtige Kandidaten.
+- Shadow Mode verändert weder TourState noch Profile oder Ladehalte.
+- Unbekannte oder fehlende Feature Flags gelten als deaktiviert.
+- Paket 30 erweitert die Ladeplanung aus Paket 19 und dupliziert sie nicht.
+- Paketnummern 20 bis 32 werden nicht mit GitHub-Issue-Nummern gleichgesetzt.
+- Jedes Folgepaket enthält automatischen Prüflauf, Draft-PR, Raspberry-Pi- und fachliche Abnahme sowie ausdrückliche Merge-Freigabe.
+- `git diff --check`, Tests, Typecheck, Lint, Produktions-Build und private Artefaktprüfung bleiben erfolgreich.
+
+Da keine Laufzeitdatei geändert wird, ist kein neuer UI-Smoke-Funktionsumfang zu testen. Die Raspberry-Pi-Abnahme bestätigt den unveränderten Produktivstand und die fachliche Verständlichkeit des Konzepts.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:
