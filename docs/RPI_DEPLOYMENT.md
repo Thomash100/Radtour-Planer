@@ -262,6 +262,24 @@ Im PR-Kommentar oder Issue folgende Daten erfassen:
 - Ergebnis responsive Darstellung bei 390 und 768 px
 - Entscheidung: Merge empfohlen oder Nacharbeit erforderlich
 
+### Paket 19 – Ladeplanung
+
+- E-Bike-Profil mit Kapazität, Reserve, Ladegerätleistung und Ladeverlusten speichern
+- Referenzfall 500 Wh / 80 km / 100 km flach prüfen: 625 Wh Fahrenergie, kritische Stelle bei km 64, ohne Ladepunkt nicht durchführbar und mit Ladepunkt bei km 64 zwingender Ladehalt bei 20 % Ankunftsakku
+- Höhenmeterfälle mit 100, 1.000 und 2.000 Hm prüfen: 635 Wh < 722 Wh < 819 Wh müssen auch in der Ladeplanung erhalten bleiben
+- Tour ohne Ladebedarf und Tour mit Reserveunterschreitung vergleichen
+- erste kritische Stelle und automatischen Ladehalt prüfen
+- eigenen Ladepunkt erfassen und mehrere manuelle Ladehalte hinzufügen
+- Ziel-Ladung 80/90/100 %, Entfernen und Reihenfolgeänderung prüfen
+- Ankunftsakku, Abfahrtsakku, Restreichweite, Nachladeenergie und Ladezeit prüfen
+- Tourübersicht mit Gesamtfahrzeit einschließlich Laden prüfen
+- Warnungen für fehlenden Ladepunkt, Reserve, unzureichende Ziel-Ladung, unbekannte Leistung und Nichtverfügbarkeit prüfen
+- Save/Load und Tour-JSON-Export/-Import prüfen
+- nach Reload identische Ergebnisse prüfen
+- klassische Fahrradkonfiguration ohne Ladeplanung prüfen
+- responsive Darstellung bei 390, 768 und 1280 px sowie fehlerfreie Browserkonsole prüfen
+- keine Live-Abfrage, Reservierung, Routen-/Etappenänderung oder Online-Abhängigkeit auslösen
+
 ## 8. Updates einspielen
 
 Empfohlen:

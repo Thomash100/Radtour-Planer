@@ -31,6 +31,11 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
+import {
+  ChargingTourOverview,
+  StageChargingPanel,
+  type ChargingPointDraft
+} from "@/components/ChargingPlanningPanel";
 import { PlannerWorkflowNavigation } from "@/components/PlannerWorkflowNavigation";
 import { categoryIcon, RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +63,14 @@ import {
 import { replaceRouteAfterSuccessfulCalculation } from "@/lib/direct-route-replacement";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
 import { calculateStageEnergyProjection } from "@/lib/ebike-energy";
+import {
+  CHARGING_PLANNING_STATE_VERSION,
+  EMPTY_CHARGING_PLANNING_STATE,
+  buildTourChargingSegments,
+  calculateChargingPlan,
+  type ChargingPlanningState,
+  type ChargingPoint
+} from "@/lib/ebike-charging";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
 import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
@@ -66,6 +79,7 @@ import {
   createElevationProfile,
   createTrimmedRouteFromOriginal,
   elevationMetricsForRange,
+  pointAtDistance,
   projectLocationToRoute,
   rebuildContiguousStageSlices,
   routeBoundsForStage,
@@ -378,6 +392,39 @@ function formatSavedTime(value?: string | null) {
   return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 }
 
+function chargingTagNumber(tags: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = Number(tags[key]);
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+}
+
+function chargingConnectorTypes(tags: Record<string, unknown>) {
+  const explicit = tags.connectorTypes;
+  if (Array.isArray(explicit)) {
+    return explicit.map((value) => String(value).trim()).filter(Boolean);
+  }
+  if (typeof explicit === "string") {
+    return explicit.split(/[;,]/).map((value) => value.trim()).filter(Boolean);
+  }
+  const sockets = Object.entries(tags)
+    .filter(([key, value]) => key.startsWith("socket:") && value !== false && value !== "no" && Number(value) !== 0)
+    .map(([key]) => key.slice("socket:".length));
+  return sockets.length > 0 ? sockets : [];
+}
+
+function isChargingPoi(poi: Poi) {
+  return (
+    poi.category === "EBIKE_CHARGING" ||
+    poi.tagsJson.ebikeCharging === true ||
+    poi.tagsJson.charging_station === true ||
+    poi.tagsJson["service:bicycle:charging"] === true ||
+    poi.tagsJson["service:bicycle:charging"] === "yes" ||
+    poi.tagsJson["service:bicycle:charging"] === "customers"
+  );
+}
+
 function accommodationStatusLabel(status: AccommodationStatus) {
   if (status === "overnight") return "Übernachtung";
   if (status === "bookmarked") return "vorgemerkt";
@@ -446,6 +493,7 @@ export function PlannerClient({
     "CAFE",
     "SUPERMARKET",
     "DRINKING_WATER",
+    "EBIKE_CHARGING",
     "SIGHT"
   ]);
   const [partnerOnly, setPartnerOnly] = useState(false);
@@ -480,6 +528,11 @@ export function PlannerClient({
   const [currentLibraryTourId, setCurrentLibraryTourId] = useState<string | null>(initialTourId ?? null);
   const [tourKind, setTourKind] = useState<"demo" | "user">(normalizedInitialMode === "demo" ? "demo" : "user");
   const [riderBikeProfile, setRiderBikeProfile] = useState<RiderBikeProfile>(DEFAULT_RIDER_BIKE_PROFILE);
+  const [chargingPlanning, setChargingPlanning] = useState<ChargingPlanningState>({
+    ...EMPTY_CHARGING_PLANNING_STATE,
+    customPoints: [],
+    manualStops: []
+  });
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -730,6 +783,116 @@ export function PlannerClient({
         .filter((geometry): geometry is LineStringGeoJson => Boolean(geometry)),
     [stageAccommodations]
   );
+  const stageBoundsById = useMemo(() => {
+    if (!route) return {} as Record<string, { startKm: number; endKm: number }>;
+    return Object.fromEntries(
+      stages.map((stage) => [
+        stage.id,
+        typeof stage.routeStartKm === "number" && typeof stage.routeEndKm === "number"
+          ? { startKm: stage.routeStartKm, endKm: stage.routeEndKm }
+          : routeBoundsForStage(route.geometryGeoJson, stage.geometryGeoJson)
+      ])
+    );
+  }, [route, stages]);
+  const chargingPoints = useMemo<ChargingPoint[]>(() => {
+    if (!route) return chargingPlanning.customPoints;
+    const stageIdAt = (routeKm: number) =>
+      stages.find((stage) => {
+        const bounds = stageBoundsById[stage.id];
+        return bounds && routeKm >= bounds.startKm - 0.001 && routeKm <= bounds.endKm + 0.001;
+      })?.id;
+    const poiPoints = pois.filter(isChargingPoi).map((poi) => {
+      const projected = projectLocationToRoute(poi.name, [poi.lon, poi.lat], route.geometryGeoJson);
+      const availability =
+        poi.tagsJson.availability === "unavailable" || poi.tagsJson.access === "no"
+          ? "unavailable" as const
+          : poi.tagsJson.availability === "available" || poi.tagsJson.access === "yes"
+            ? "available" as const
+            : "unknown" as const;
+      return {
+        id: `poi-${poi.id}`,
+        name: poi.name,
+        coordinate: [poi.lon, poi.lat] as Position,
+        routeKm: projected.workDistanceKm,
+        stageId: stageIdAt(projected.workDistanceKm),
+        connectorTypes: chargingConnectorTypes(poi.tagsJson),
+        powerW: chargingTagNumber(poi.tagsJson, ["chargingPowerW", "powerW", "socketPowerW"]),
+        operator: typeof poi.tagsJson.operator === "string" ? poi.tagsJson.operator : null,
+        openingHours: typeof poi.tagsJson.opening_hours === "string" ? poi.tagsJson.opening_hours : null,
+        costInfo: typeof poi.tagsJson.fee === "string" ? poi.tagsJson.fee : null,
+        availability,
+        source: "poi" as const
+      };
+    });
+    const accommodationPoints = Object.values(stageAccommodations)
+      .filter((accommodation) => accommodation.features.ebikeCharging)
+      .map((accommodation) => {
+        const projected = projectLocationToRoute(
+          accommodation.name,
+          accommodation.coordinate,
+          route.geometryGeoJson
+        );
+        return {
+          id: `accommodation-${accommodation.id}`,
+          name: `${accommodation.name} · E-Bike-Laden`,
+          coordinate: accommodation.coordinate,
+          routeKm: projected.workDistanceKm,
+          stageId: accommodation.stageId || stageIdAt(projected.workDistanceKm),
+          connectorTypes: [],
+          powerW: null,
+          operator: null,
+          openingHours: null,
+          costInfo: null,
+          availability: "unknown" as const,
+          source: "accommodation" as const
+        };
+      });
+    const byId = new globalThis.Map<string, ChargingPoint>();
+    [...poiPoints, ...accommodationPoints, ...chargingPlanning.customPoints].forEach((point) => {
+      byId.set(point.id, {
+        ...point,
+        stageId: stageIdAt(point.routeKm) ?? point.stageId
+      });
+    });
+    return Array.from(byId.values()).sort((left, right) => left.routeKm - right.routeKm || left.id.localeCompare(right.id));
+  }, [chargingPlanning.customPoints, pois, route, stageAccommodations, stageBoundsById, stages]);
+  const chargingSegments = useMemo(() => {
+    if (!route) return [];
+    return buildTourChargingSegments(
+      riderBikeProfile,
+      stages.map((stage) => {
+        const bounds = stageBoundsById[stage.id] ?? { startKm: 0, endKm: stage.distanceKm };
+        const elevationProfile = sliceElevationProfile(route.elevationProfile, bounds.startKm, bounds.endKm);
+        return {
+          id: stage.id,
+          dayNumber: stage.dayNumber,
+          routeStartKm: bounds.startKm,
+          routeEndKm: bounds.endKm,
+          distanceKm: stage.distanceKm,
+          elevationUp: stage.elevationUp,
+          elevationDown: stage.elevationDown,
+          elevationProfile,
+          durationHours: stage.distanceKm / 17,
+          elevationDataStatus:
+            route.elevationSource === "estimated" || route.routingProvider === "mock"
+              ? "estimated" as const
+              : elevationProfile.length >= 2
+                ? "measured" as const
+                : "missing" as const
+        };
+      })
+    );
+  }, [riderBikeProfile, route, stageBoundsById, stages]);
+  const chargingPlan = useMemo(
+    () =>
+      calculateChargingPlan({
+        profile: riderBikeProfile,
+        segments: chargingSegments,
+        chargingPoints,
+        manualStops: chargingPlanning.manualStops
+      }),
+    [chargingPlanning.manualStops, chargingPoints, chargingSegments, riderBikeProfile]
+  );
 
   const buildStoredTourState = useCallback(
     ({
@@ -770,6 +933,7 @@ export function PlannerClient({
           distanceKm: Number(breakpoint.distanceKm)
         })),
         stageAccommodations,
+        chargingPlanning,
         status: statusValue,
         lastSavedAt: lastSavedAtValue,
         updatedAt: new Date().toISOString()
@@ -786,6 +950,7 @@ export function PlannerClient({
       selectedPoi?.id,
       selectedStageId,
       stageAccommodations,
+      chargingPlanning,
       stageBreakpoints,
       stageGenerationMode,
       stages,
@@ -928,6 +1093,11 @@ export function PlannerClient({
         window.localStorage.setItem(RIDER_BIKE_PROFILE_STORAGE_KEY, JSON.stringify(stored.riderBikeProfile));
       }
       setStageAccommodations(stored.stageAccommodations ?? {});
+      setChargingPlanning(stored.chargingPlanning ?? {
+        ...EMPTY_CHARGING_PLANNING_STATE,
+        customPoints: [],
+        manualStops: []
+      });
       setLastTourSavedAt(stored.lastSavedAt ?? null);
       setPlannerStep(
         resolvePlannerStep({
@@ -2001,6 +2171,122 @@ export function PlannerClient({
 
   function updateStage(stageId: string, patch: Partial<Pick<Stage, "startName" | "endName" | "distanceKm" | "elevationUp" | "elevationDown">>) {
     setStages((current) => current.map((stage) => (stage.id === stageId ? { ...stage, ...patch } : stage)));
+  }
+
+  function createChargingPoint(draft: ChargingPointDraft) {
+    if (!route || routeTotalKm <= 0) return;
+    const safeKm = Math.min(Math.max(draft.routeKm, 0), routeTotalKm);
+    const coordinate = pointAtDistance(route.geometryGeoJson.coordinates, safeKm);
+    if (!coordinate) return;
+    const stageId = stages.find((stage) => {
+      const bounds = stageBoundsById[stage.id];
+      return bounds && safeKm >= bounds.startKm - 0.001 && safeKm <= bounds.endKm + 0.001;
+    })?.id;
+    const slug = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36) || "ladepunkt";
+    const idBase = `manual-charge-${safeKm.toFixed(1).replace(".", "-")}-${slug}`;
+    setChargingPlanning((current) => {
+      let id = idBase;
+      let suffix = 2;
+      while (current.customPoints.some((point) => point.id === id)) {
+        id = `${idBase}-${suffix}`;
+        suffix += 1;
+      }
+      const point: ChargingPoint = {
+        id,
+        name: draft.name,
+        coordinate,
+        routeKm: Number(safeKm.toFixed(3)),
+        stageId,
+        connectorTypes: Array.from(new Set(draft.connectorTypes)).sort((left, right) => left.localeCompare(right, "de")),
+        powerW: draft.powerW,
+        operator: draft.operator ?? null,
+        openingHours: draft.openingHours ?? null,
+        costInfo: draft.costInfo ?? null,
+        availability: draft.availability,
+        source: "manual"
+      };
+      return {
+        schemaVersion: CHARGING_PLANNING_STATE_VERSION,
+        customPoints: [...current.customPoints, point].sort((left, right) => left.routeKm - right.routeKm || left.id.localeCompare(right.id)),
+        manualStops: current.manualStops
+      };
+    });
+    setStatus(`Ladepunkt ${draft.name} bei km ${safeKm.toFixed(1)} hinzugefügt. Ladeplan neu berechnet.`);
+  }
+
+  function removeChargingPoint(pointId: string) {
+    setChargingPlanning((current) => ({
+      schemaVersion: CHARGING_PLANNING_STATE_VERSION,
+      customPoints: current.customPoints.filter((point) => point.id !== pointId),
+      manualStops: current.manualStops
+        .filter((stop) => stop.chargingPointId !== pointId)
+        .map((stop, index) => ({ ...stop, order: index + 1 }))
+    }));
+    setStatus("Ladepunkt entfernt. Ladeplan neu berechnet.");
+  }
+
+  function addManualChargingStop(pointId: string, targetChargePercent: number) {
+    const point = chargingPoints.find((candidate) => candidate.id === pointId);
+    if (!point) return;
+    setChargingPlanning((current) => {
+      if (current.manualStops.some((stop) => stop.chargingPointId === pointId)) return current;
+      const baseId = `manual-stop-${pointId}`;
+      let id = baseId;
+      let suffix = 2;
+      while (current.manualStops.some((stop) => stop.id === id)) {
+        id = `${baseId}-${suffix}`;
+        suffix += 1;
+      }
+      return {
+        ...current,
+        manualStops: [
+          ...current.manualStops,
+          {
+            id,
+            chargingPointId: pointId,
+            order: current.manualStops.length + 1,
+            targetChargePercent
+          }
+        ]
+      };
+    });
+    setStatus(`${point.name} als manueller Ladehalt hinzugefügt. Ladeplan neu berechnet.`);
+  }
+
+  function removeManualChargingStop(stopId: string) {
+    setChargingPlanning((current) => ({
+      ...current,
+      manualStops: current.manualStops
+        .filter((stop) => stop.id !== stopId)
+        .sort((left, right) => left.order - right.order)
+        .map((stop, index) => ({ ...stop, order: index + 1 }))
+    }));
+    setStatus("Manueller Ladehalt entfernt. Ladeplan neu berechnet.");
+  }
+
+  function moveManualChargingStop(stopId: string, direction: -1 | 1) {
+    setChargingPlanning((current) => {
+      const stops = current.manualStops.slice().sort((left, right) => left.order - right.order);
+      const index = stops.findIndex((stop) => stop.id === stopId);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= stops.length) return current;
+      [stops[index], stops[targetIndex]] = [stops[targetIndex], stops[index]];
+      return {
+        ...current,
+        manualStops: stops.map((stop, nextIndex) => ({ ...stop, order: nextIndex + 1 }))
+      };
+    });
+    setStatus("Reihenfolge der Ladehalte geändert. Ladeplan neu berechnet.");
+  }
+
+  function changeManualChargingTarget(stopId: string, targetChargePercent: number) {
+    setChargingPlanning((current) => ({
+      ...current,
+      manualStops: current.manualStops.map((stop) =>
+        stop.id === stopId ? { ...stop, targetChargePercent } : stop
+      )
+    }));
+    setStatus(`Ziel-Ladung auf ${targetChargePercent} % geändert. Ladeplan neu berechnet.`);
   }
 
   function stageKilometers(stage: Stage) {
@@ -3663,6 +3949,12 @@ export function PlannerClient({
                           ? "measured"
                           : "missing"
                   });
+                  const stageChargingPlan = chargingPlan.stages.find((item) => item.stageId === stage.id);
+                  const stageChargingCandidates = chargingPoints.filter((point) => point.stageId === stage.id);
+                  const stageChargingPointIds = new Set(stageChargingCandidates.map((point) => point.id));
+                  const stageManualChargingStops = chargingPlanning.manualStops.filter((stop) =>
+                    stageChargingPointIds.has(stop.chargingPointId)
+                  );
 
                   return (
                     <div
@@ -3904,6 +4196,18 @@ export function PlannerClient({
                               : "Für ein klassisches Fahrrad werden keine Akkuwerte abgeleitet."}
                           </p>
                         </div>
+                        {riderBikeProfile.bike.type === "ebike" && (
+                          <StageChargingPanel
+                            allPoints={chargingPoints}
+                            candidates={stageChargingCandidates}
+                            manualStops={stageManualChargingStops}
+                            stagePlan={stageChargingPlan}
+                            onAddStop={addManualChargingStop}
+                            onChangeTarget={changeManualChargingTarget}
+                            onMoveStop={moveManualChargingStop}
+                            onRemoveStop={removeManualChargingStop}
+                          />
+                        )}
                         <div className="grid min-w-0 gap-3 rounded-md border bg-slate-50 p-3">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
@@ -4085,6 +4389,21 @@ export function PlannerClient({
         </section>
 
         {workflowView === "stages" && <aside className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Ladeplanung</CardTitle>
+              <CardDescription>Automatische und manuelle Ladehalte für die gesamte Tour.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ChargingTourOverview
+                plan={chargingPlan}
+                planningState={chargingPlanning}
+                routeTotalKm={routeTotalKm}
+                onCreatePoint={createChargingPoint}
+                onRemovePoint={removeChargingPoint}
+              />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>POI und Angebote</CardTitle>

@@ -25,9 +25,10 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Karte über Schaltflächen, Touch, Mausrad und Tastatur ohne routenabhängige Zoomgrenzen bedienen.
 - Persönliches Fahrer-, Fahrrad-, E-Bike- und Ladeprofil zentral speichern sowie als JSON exportieren und importieren.
 - Energiebedarf und E-Bike-Reichweite je Etappe deterministisch aus persönlicher Referenzreichweite, Profil, Distanz und Höhenprofil prognostizieren.
+- E-Bike-Akkustand etappenübergreifend fortschreiben sowie automatische und manuelle Ladehalte mit Ladezeit planen.
 - Gesamte Tour speichern und erneut öffnen.
 
-Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
+Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
 
 ## Bekannte Einschränkungen
 
@@ -43,8 +44,10 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Wetter, Wind, Oberfläche, Reifendruck und Temperatur werden in der Energieprognose noch nicht berücksichtigt.
 - Die Energieprognose ist eine deterministische Planungshilfe und keine Garantie für reale Reichweite oder Leistungsfähigkeit.
 - Die persönliche Referenzreichweite gilt für die gesamte konfigurierte Akkuanzahl bis 0 %; Änderungen der Akkukonfiguration erfordern eine Prüfung dieses Erfahrungswerts.
-- Jede Etappe startet in Paket 18 rechnerisch mit voller nutzbarer Akkukapazität; Nachladen und etappenübergreifende Akkufortschreibung fehlen noch.
-- Die Ladeplanung aus PR #69 bleibt bis zur Integration und erneuten Raspberry-Pi-Abnahme des kalibrierten Energie-Cores im Draft.
+- Die isolierte Energieprognose startet je Etappe mit voller nutzbarer Akkukapazität; die getrennte Ladeplanung schreibt den Akkustand etappenübergreifend fort.
+- Die Ladeplanung aus PR #69 verwendet nach dem Rebase ausschließlich den korrigierten kalibrierten Energiebedarf und bleibt bis zur erneuten Raspberry-Pi- und fachlichen Abnahme im Draft.
+- Live-Verfügbarkeit, Öffnungszeiten und Steckdosenkompatibilität von Ladepunkten werden nicht extern geprüft.
+- Ladezeiten verwenden eine konstante wirksame Leistung; reale Ladekurven und Wartezeiten bleiben unberücksichtigt.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -65,17 +68,43 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 16: Persönliches Fahrer- und Fahrradprofil nach automatischer, fachlicher und Raspberry-Pi-Abnahme über PR #66 in `private` gemergt.
 - Paket 17: E-Bike- und Ladeprofil nach bestätigtem Prüflauf über PR #67 in `private` gemergt.
 - Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern über PR #68 in `private` gemergt; der Raspberry-Pi-Praxistest hat danach die fehlende Nutzung der Referenzreichweite aufgedeckt.
-- Nacharbeit Paket 18/19: Kalibrierung über Branch `codex/fix-ebike-reference-range-calibration`; separater Draft-PR und Raspberry-Pi-Abnahme sind der manuelle Stopppunkt.
-- Paket 19: Intelligente Ladeplanung liegt in PR #69 vor, bleibt aber bis Merge der Kalibrierung, Rebase und vollständiger Wiederholungsprüfung im Draft.
+- Nacharbeit Paket 18/19: Referenzkalibrierung und separater Höhenmeterzuschlag wurden über PR #70 mit Merge-Commit `4fb67e8` in `private` integriert.
+- Paket 19: Intelligente Ladeplanung liegt in PR #69 vor, ist auf den korrigierten Energie-Core rebased und bleibt bis zur vollständigen Wiederholungsprüfung und ausdrücklichen Freigabe im Draft.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Ausgangsbasis für Paket 18:
+Aktuelle Integrationsbasis für Paket 19:
 
-- `private`: `c2bb59b0fdcc7c470095b555a2ef0e48fd994fb6` (Merge von PR #67)
-- E-Bike- und Ladeprofil aus Paket 17 bestätigt
-- bestehender TourState enthält alle Eingaben für den Rechenkern
-- keine Änderung an Routing, Etappenerzeugung oder Unterkunftslogik
-- keine automatische Etappenänderung oder Ladepunktplanung
+- `private`: `4fb67e88bb0e71cbf564d762ef1525bc0c63f0e1` (Merge von PR #70)
+- deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
+- bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
+- Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
+- keine Live-Ladesäulen, Online-Dienste oder automatische Routen-/Etappenänderung
+
+## Paket 19: Intelligente Ladeplanung
+
+Paket 19 führt den Akkustand über die gesamte Tour fort und ergänzt automatische sowie manuelle Ladehalte.
+
+Enthalten:
+
+- reine, versionierte Ladeplanungsfunktion ohne Netzwerk-, Zeit- oder Zufallsabhängigkeit
+- Energiebedarf je Segment und Etappe aus dem korrigierten kalibrierten Paket-18-Core
+- erste kritische Stelle bei Reserveunterschreitung
+- Ladepunkte aus vorhandenen belegten POI-/Unterkunftsdaten und eigener Erfassung
+- automatische Priorisierung erreichbarer Ladepunkte
+- benötigte Nachladeenergie, Ladeverluste, Ladezeit sowie Ankunfts- und Abfahrtsakku
+- mehrere manuelle Ladehalte mit Ziel-Ladung, Entfernen und Reihenfolge
+- Tourzeit aus Fahr- und Ladezeit sowie Warnungen bei unzureichender Planung
+- versionierter, rückwärtskompatibler TourState einschließlich Tour-Export/-Import
+- Ladehalte in Etappenansicht und Tourübersicht
+
+Nicht enthalten:
+
+- Live-Abfrage, Reservierung oder produktive Online-Dienste
+- Wetter-, Wind- oder Verkehrsdaten
+- automatische Routen- oder Etappenänderung
+- KI-Optimierung
+
+Modell, Priorisierung, Formeln und Grenzen: [docs/E_BIKE_CHARGING_MODEL.md](E_BIKE_CHARGING_MODEL.md).
 
 ## Paket 18: Deterministischer Energie- und Reichweiten-Rechenkern
 

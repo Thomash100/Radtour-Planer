@@ -13,6 +13,17 @@
 - monotone 100-km-Regression für 100, 1.000 und 2.000 positive Höhenmeter ergänzt
 - PR #69 bis zur Integration des korrigierten Energie-Cores ausdrücklich im Draft belassen
 
+## Paket 19 - 2026-08-01
+
+- separate, deterministische Ladeplanung auf Basis des korrigierten, kalibrierten Paket-18-Energie-Cores ergänzt
+- Akkustand, Reserve und erste kritische Stelle über alle Segmente und Etappen fortgeschrieben
+- Ladepunkte aus belegten POI-/Unterkunftsdaten sowie manuell erfassbare Ladepunkte unterstützt
+- automatische Ladehalte, benötigte Nachladung, Ladeverluste und Ladezeit berechnet
+- manuelle Ladehalte mit Ziel-Ladung, Entfernen und Reihenfolgeänderung ergänzt
+- Tour- und Etappenansicht um Ankunfts-/Abfahrtsakku, Restreichweite, Ladezeit und Warnungen erweitert
+- Ladeplanungszustand versioniert, rückwärtskompatibel und Tour-JSON-fähig gespeichert
+- keine Live-Ladesäulen, Online-Dienste, Wetterdaten oder automatische Routen-/Etappenänderung ergänzt
+
 ## Paket 18 - 2026-07-30
 
 - deterministischen, versionierten Energie- und Reichweiten-Rechenkern ergänzt

@@ -25,6 +25,14 @@ import {
   type StageEnergyProjectionInput
 } from "../src/lib/ebike-energy";
 import {
+  buildTourChargingSegments,
+  calculateChargingPlan,
+  normalizeChargingPlanningState,
+  serializeChargingPlanningState,
+  type ChargingEnergySegment,
+  type ChargingPoint
+} from "../src/lib/ebike-charging";
+import {
   createValidatedStageSliceFromBounds,
   distancePointToLineKm,
   elevationMetricsForRange,
@@ -169,6 +177,59 @@ function elevationComparisonProjection(
     elevationProfile: [],
     elevationDataStatus: "missing"
   });
+}
+
+const chargingTestProfile = {
+  ...riderBikeProfile,
+  rider: {
+    ...riderBikeProfile.rider,
+    bodyWeightKg: 75
+  },
+  bike: {
+    ...riderBikeProfile.bike,
+    luggageWeightKg: 12,
+    ebike: {
+      ...riderBikeProfile.bike.ebike,
+      batteryCapacityWh: 500,
+      batteryCount: 1,
+      usableBatteryCapacityPercent: 100,
+      motorAssistancePercent: 100,
+      referenceRangeKm: 80,
+      desiredReservePercent: 20,
+      chargerPowerW: 250,
+      chargingLossPercent: 10,
+      personalRidingStyle: "balanced" as const
+    }
+  }
+};
+
+function chargingSegment(id: string, startKm: number, endKm: number, energyWh: number, stageId = "stage-1"): ChargingEnergySegment {
+  return {
+    id,
+    stageId,
+    stageDayNumber: stageId === "stage-1" ? 1 : 2,
+    startKm,
+    endKm,
+    energyWh,
+    durationHours: (endKm - startKm) / 20
+  };
+}
+
+function chargingPoint(id: string, routeKm: number, powerW: number | null = 500): ChargingPoint {
+  return {
+    id,
+    name: `Ladepunkt ${id}`,
+    coordinate: [13 + routeKm / 1000, 51],
+    routeKm,
+    stageId: routeKm <= 50 ? "stage-1" : "stage-2",
+    connectorTypes: ["Schuko"],
+    powerW,
+    operator: null,
+    openingHours: null,
+    costInfo: null,
+    availability: "available",
+    source: "manual"
+  };
 }
 
 test("validiert das zentrale Fahrer- und Fahrradprofil", () => {
@@ -659,6 +720,329 @@ test("kennzeichnet fehlende oder unvollständige Höhendaten mit niedriger Quali
   assert.equal(incomplete.quality, "low");
   assert.ok(missing.qualityReasons.length > 0);
   assert.ok(incomplete.qualityReasons.length > 0);
+});
+
+test("plant bei ausreichender Kapazität keinen Ladehalt und bleibt deterministisch", () => {
+  const input = {
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 25, 100),
+      chargingSegment("segment-2", 25, 50, 100)
+    ],
+    chargingPoints: [chargingPoint("point-1", 25)]
+  };
+  const first = calculateChargingPlan(input);
+  const second = calculateChargingPlan(input);
+
+  assert.deepEqual(first, second);
+  assert.equal(first.modelVersion, "biketriphub-charging-v1");
+  assert.equal(first.status, "feasible");
+  assert.equal(first.stops.length, 0);
+  assert.equal(first.firstCriticalPoint, null);
+  assert.equal(first.totalTravelDurationHours, first.totalDrivingDurationHours);
+});
+
+test("kennzeichnet die erste kritische Stelle und plant einen minimalen automatischen Ladehalt", () => {
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 30, 180),
+      chargingSegment("segment-2", 30, 60, 180, "stage-2"),
+      chargingSegment("segment-3", 60, 90, 180, "stage-2")
+    ],
+    chargingPoints: [chargingPoint("point-60", 60)]
+  });
+
+  assert.equal(plan.status, "feasible");
+  assert.equal(plan.stops.length, 1);
+  assert.equal(plan.stops[0].mode, "automatic");
+  assert.equal(plan.stops[0].point.id, "point-60");
+  assert.equal(plan.stops[0].arrivalEnergyWh, 140);
+  assert.equal(plan.stops[0].departureEnergyWh, 280);
+  assert.equal(plan.stops[0].addedBatteryEnergyWh, 140);
+  assert.equal(plan.firstCriticalPoint?.routeKm, 66.67);
+  assert.ok(plan.totalTravelDurationHours > plan.totalDrivingDurationHours);
+});
+
+test("plant mehrere Ladehalte in stabiler Routenreihenfolge", () => {
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 25, 300),
+      chargingSegment("segment-2", 25, 50, 300),
+      chargingSegment("segment-3", 50, 75, 300, "stage-2"),
+      chargingSegment("segment-4", 75, 100, 300, "stage-2")
+    ],
+    chargingPoints: [chargingPoint("point-25", 25), chargingPoint("point-50", 50), chargingPoint("point-75", 75)]
+  });
+
+  assert.equal(plan.status, "feasible");
+  assert.deepEqual(plan.stops.map((stop) => stop.point.routeKm), [25, 50, 75]);
+  assert.ok(plan.stops.every((stop) => stop.mode === "automatic"));
+  assert.equal(plan.stages.length, 2);
+  assert.equal(plan.stages.reduce((sum, stage) => sum + stage.energyNeedWh, 0), 1200);
+});
+
+test("warnt deterministisch wenn vor der Reserve kein Ladepunkt erreichbar ist", () => {
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [chargingSegment("segment-1", 0, 100, 700)],
+    chargingPoints: []
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "no_reachable_station"));
+  assert.ok(plan.warnings.some((warning) => warning.code === "reserve_below"));
+  assert.equal(plan.firstCriticalPoint?.routeKm, 57.14);
+});
+
+test("berechnet manuellen Ladehalt, Ziel-Ladung, Verluste und Ladezeit", () => {
+  const point = chargingPoint("manual-point", 50, 500);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 50, 300),
+      chargingSegment("segment-2", 50, 100, 300, "stage-2")
+    ],
+    chargingPoints: [point],
+    manualStops: [{ id: "manual-stop-1", chargingPointId: point.id, order: 1, targetChargePercent: 80 }]
+  });
+
+  assert.equal(plan.status, "feasible");
+  assert.equal(plan.stops[0].mode, "manual");
+  assert.equal(plan.stops[0].manualStopId, "manual-stop-1");
+  assert.equal(plan.stops[0].arrivalCapacityPercent, 40);
+  assert.equal(plan.stops[0].departureCapacityPercent, 80);
+  assert.equal(plan.stops[0].addedBatteryEnergyWh, 200);
+  assert.equal(plan.stops[0].chargingLossWh, 20);
+  assert.equal(plan.stops[0].chargingDurationMinutes, 53);
+});
+
+test("weist unbekannte Ladeleistung aus und verwendet reproduzierbar die Ladegerätleistung", () => {
+  const point = chargingPoint("unknown-power", 50, null);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 50, 300),
+      chargingSegment("segment-2", 50, 100, 300, "stage-2")
+    ],
+    chargingPoints: [point],
+    manualStops: [{ id: "manual-stop-unknown", chargingPointId: point.id, order: 1, targetChargePercent: 100 }]
+  });
+
+  assert.equal(plan.stops[0].effectivePowerW, chargingTestProfile.bike.ebike.chargerPowerW);
+  assert.ok(plan.warnings.some((warning) => warning.code === "unknown_power"));
+});
+
+test("warnt bei nicht verfügbarem manuellem Ladepunkt", () => {
+  const point = { ...chargingPoint("unavailable", 50), availability: "unavailable" as const };
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [chargingSegment("segment-1", 0, 100, 600)],
+    chargingPoints: [point],
+    manualStops: [{ id: "manual-stop-unavailable", chargingPointId: point.id, order: 1, targetChargePercent: 100 }]
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "unavailable_point"));
+});
+
+test("warnt wenn eine manuelle Ziel-Ladung bis zum nächsten Ziel nicht ausreicht", () => {
+  const point = chargingPoint("manual-low-target", 40);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [
+      chargingSegment("segment-1", 0, 40, 200),
+      chargingSegment("segment-2", 40, 100, 500, "stage-2")
+    ],
+    chargingPoints: [point],
+    manualStops: [{ id: "manual-stop-low", chargingPointId: point.id, order: 1, targetChargePercent: 80 }]
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "insufficient_charge"));
+  assert.ok(plan.warnings.some((warning) => warning.code === "no_reachable_station"));
+});
+
+test("weist eine manuelle Reihenfolge entgegen dem Routenverlauf zurück", () => {
+  const early = chargingPoint("early", 30);
+  const late = chargingPoint("late", 70);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments: [chargingSegment("segment-1", 0, 100, 300)],
+    chargingPoints: [early, late],
+    manualStops: [
+      { id: "stop-late", chargingPointId: late.id, order: 1, targetChargePercent: 90 },
+      { id: "stop-early", chargingPointId: early.id, order: 2, targetChargePercent: 90 }
+    ]
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "invalid_stop_order"));
+});
+
+test("baut geordnete Energiesegmente ohne Änderung des Energie-Gesamtwerts", () => {
+  const segments = buildTourChargingSegments(chargingTestProfile, [
+    {
+      id: "stage-1",
+      dayNumber: 1,
+      routeStartKm: 0,
+      routeEndKm: 20,
+      distanceKm: 20,
+      elevationUp: 0,
+      elevationDown: 0,
+      elevationProfile: measuredFlatProfile(20),
+      elevationDataStatus: "measured"
+    }
+  ]);
+  const projection = calculateStageEnergyProjection({
+    profile: chargingTestProfile,
+    distanceKm: 20,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(20),
+    elevationDataStatus: "measured"
+  });
+
+  assert.ok(segments.length > 1);
+  assert.equal(Number(segments.reduce((sum, segment) => sum + segment.energyWh, 0).toFixed(4)), projection.batteryEnergyWh);
+  assert.ok(segments.every((segment, index) => index === 0 || segment.startKm === segments[index - 1].endKm));
+});
+
+test("plant für 100 flache Kilometer bei 80 Kilometern Referenzreichweite zwingend einen Ladehalt", () => {
+  const stage = {
+    id: "stage-reference-100",
+    dayNumber: 1,
+    routeStartKm: 0,
+    routeEndKm: 100,
+    distanceKm: 100,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(100),
+    elevationDataStatus: "measured" as const
+  };
+  const projection = calculateStageEnergyProjection({
+    profile: chargingTestProfile,
+    distanceKm: stage.distanceKm,
+    elevationUp: stage.elevationUp,
+    elevationDown: stage.elevationDown,
+    elevationProfile: stage.elevationProfile,
+    elevationDataStatus: stage.elevationDataStatus
+  });
+  const segments = buildTourChargingSegments(chargingTestProfile, [stage]);
+  const plan = calculateChargingPlan({
+    profile: chargingTestProfile,
+    segments,
+    chargingPoints: [chargingPoint("reference-stop-64", 64, 500)]
+  });
+
+  assert.equal(projection.batteryEnergyWh, 625);
+  assert.equal(Number(segments.reduce((sum, segment) => sum + segment.energyWh, 0).toFixed(4)), 625);
+  assert.equal(plan.totalEnergyNeedWh, 625);
+  assert.equal(plan.status, "feasible");
+  assert.equal(plan.firstCriticalPoint?.routeKm, 64);
+  assert.equal(plan.stops.length, 1);
+  assert.equal(plan.stops[0].point.routeKm, 64);
+  assert.equal(plan.stops[0].arrivalEnergyWh, 100);
+  assert.ok(plan.stages[0].endCapacityPercent >= 20);
+});
+
+test("kennzeichnet den kalibrierten 100-km-Referenzfall ohne Ladepunkt als nicht durchführbar", () => {
+  const segments = buildTourChargingSegments(chargingTestProfile, [{
+    id: "stage-reference-no-stop",
+    dayNumber: 1,
+    routeStartKm: 0,
+    routeEndKm: 100,
+    distanceKm: 100,
+    elevationUp: 0,
+    elevationDown: 0,
+    elevationProfile: measuredFlatProfile(100),
+    elevationDataStatus: "measured"
+  }]);
+  const plan = calculateChargingPlan({ profile: chargingTestProfile, segments, chargingPoints: [] });
+
+  assert.equal(plan.totalEnergyNeedWh, 625);
+  assert.equal(plan.status, "infeasible");
+  assert.equal(plan.firstCriticalPoint?.routeKm, 64);
+  assert.ok(plan.warnings.some((warning) => warning.code === "reserve_below"));
+  assert.ok(plan.warnings.some((warning) => warning.code === "no_reachable_station"));
+});
+
+test("übernimmt monotone Höhenmeterverbräuche in die Ladeplanung", () => {
+  const chargingPoints = [
+    chargingPoint("elevation-25", 25, 500),
+    chargingPoint("elevation-50", 50, 500),
+    chargingPoint("elevation-75", 75, 500)
+  ];
+  const plans = [100, 1000, 2000].map((elevation) => {
+    const segments = buildTourChargingSegments(chargingTestProfile, [{
+      id: `stage-elevation-${elevation}`,
+      dayNumber: 1,
+      routeStartKm: 0,
+      routeEndKm: 100,
+      distanceKm: 100,
+      elevationUp: elevation,
+      elevationDown: elevation,
+      elevationProfile: [],
+      elevationDataStatus: "missing"
+    }]);
+    return calculateChargingPlan({ profile: chargingTestProfile, segments, chargingPoints });
+  });
+
+  assert.deepEqual(plans.map((plan) => plan.totalEnergyNeedWh), [635, 722, 819]);
+  assert.ok(plans[0].totalChargingEnergyWh < plans[1].totalChargingEnergyWh);
+  assert.ok(plans[1].totalChargingEnergyWh < plans[2].totalChargingEnergyWh);
+  assert.ok(plans.every((plan) => plan.stops.length >= 1));
+});
+
+test("serialisiert Ladepunkte und manuelle Ladehalte versioniert und stabil", () => {
+  const state = normalizeChargingPlanningState({
+    schemaVersion: 99,
+    customPoints: [chargingPoint("manual-b", 70), chargingPoint("manual-a", 30)],
+    manualStops: [
+      { id: "stop-b", chargingPointId: "manual-b", order: 2, targetChargePercent: 100 },
+      { id: "stop-a", chargingPointId: "manual-a", order: 1, targetChargePercent: 80 }
+    ]
+  });
+  const serialized = serializeChargingPlanningState(state);
+  const repeated = serializeChargingPlanningState(normalizeChargingPlanningState(JSON.parse(serialized)));
+
+  assert.equal(state.schemaVersion, 1);
+  assert.deepEqual(state.customPoints.map((point) => point.id), ["manual-a", "manual-b"]);
+  assert.equal(serialized, repeated);
+  assert.deepEqual(state.manualStops.map((stop) => stop.order), [1, 2]);
+});
+
+test("bewahrt Ladeplanung im TourState und lädt ältere Touren mit leerem Modell", () => {
+  const baseState = {
+    route: { geometryGeoJson: { type: "LineString", coordinates: [[13, 51], [13.1, 51.1]] } },
+    stages: [],
+    pois: [],
+    inputMode: "direct",
+    riderBikeProfile,
+    updatedAt: "2026-08-01T12:00:00.000Z"
+  };
+  const legacy = parseStoredTourState(JSON.stringify(baseState));
+  const current = parseStoredTourState(JSON.stringify({
+    ...baseState,
+    chargingPlanning: {
+      schemaVersion: 1,
+      customPoints: [chargingPoint("manual-point", 20)],
+      manualStops: [{ id: "manual-stop", chargingPointId: "manual-point", order: 1, targetChargePercent: 90 }]
+    }
+  }));
+
+  assert.deepEqual(legacy?.chargingPlanning, { schemaVersion: 1, customPoints: [], manualStops: [] });
+  assert.equal(current?.chargingPlanning?.customPoints[0].name, "Ladepunkt manual-point");
+  assert.equal(current?.chargingPlanning?.manualStops[0].targetChargePercent, 90);
+  assert.ok(current);
+  const exported = createTourExport(
+    createTourLibraryEntry(current, { id: "tour-charging-test", name: "Ladeplantest", now: "2026-08-01T12:00:00.000Z" }),
+    "2026-08-01T12:05:00.000Z"
+  );
+  const imported = parseTourExport(JSON.stringify(exported));
+  assert.equal(imported?.state.chargingPlanning?.customPoints[0].id, "manual-point");
+  assert.equal(imported?.state.chargingPlanning?.manualStops[0].id, "manual-stop");
 });
 
 test("exportiert und importiert ein validiertes BikeTripHub-Profil", () => {

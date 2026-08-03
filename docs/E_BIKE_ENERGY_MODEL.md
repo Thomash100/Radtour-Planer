@@ -144,3 +144,14 @@ Die Prognosequalität bewertet die Höhenbasis:
 Kalibrierungswarnungen werden davon getrennt dargestellt. Wetter, Wind, Straßenbelag, Reifendruck, Temperatur,
 Stop-and-go, Alterung des Akkus und Rekuperation werden weiterhin nicht modelliert. Die Prognose bleibt eine transparente
 Planungshilfe und keine Reichweitengarantie.
+
+## Abgrenzung
+
+Nicht Bestandteil von Paket 18:
+
+- automatische Etappenverschiebung
+- Ladepunkt- oder Nachladeplanung
+- alternative Routen
+- automatische Unterstützungssteuerung
+- Wetter- oder Winddaten
+- Ladeplanung oder etappenübergreifende Akkufortschreibung innerhalb dieses Energie-Modells; dafür verwendet Paket 19 das getrennte Ladeplanungsmodell

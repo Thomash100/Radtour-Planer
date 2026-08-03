@@ -177,6 +177,16 @@ export function duplicateTourLibraryEntry(entries: TourLibraryEntry[], id: strin
       stages: duplicatedStages,
       selectedStageId: source.state.selectedStageId ? (stageIdMap.get(source.state.selectedStageId) ?? null) : null,
       stageAccommodations: duplicatedAccommodations,
+      chargingPlanning: source.state.chargingPlanning
+        ? {
+            ...source.state.chargingPlanning,
+            customPoints: source.state.chargingPlanning.customPoints.map((point) => ({
+              ...point,
+              stageId: point.stageId ? (stageIdMap.get(point.stageId) ?? point.stageId) : undefined
+            })),
+            manualStops: source.state.chargingPlanning.manualStops.map((stop) => ({ ...stop }))
+          }
+        : undefined,
       status: "Tour dupliziert.",
       updatedAt: now
     }
