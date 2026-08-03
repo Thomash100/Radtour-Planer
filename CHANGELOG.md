@@ -1,5 +1,17 @@
 # Changelog
 
+## Paket 21 - 2026-08-03
+
+- PR #73 nach ausdrücklicher Freigabe mit Merge-Commit `731d8da` nach `private` integriert
+- deterministischen tourweiten Fahrstrategie-Core `biketriphub-riding-strategy-v1` ergänzt
+- Strategiemodi Ausgewogen, Reichweite, Komfort und Manuell eingeführt
+- kommende Steigungen, Reserve, Akkuanzahl sowie automatische und manuelle Ladehalte gemeinsam berücksichtigt
+- manuelle Etappenvorgaben mit sichtbarer Quelle, unmittelbarer Neuberechnung und Reset ergänzt
+- Warnungen für nicht erreichbare Touren, Reserveunterschreitung, unzureichende Ladung, unsichere Vorgaben und geringe Prognosequalität ergänzt
+- TourState rückwärtskompatibel um Modus, Overrides, Eingabe-Fingerprint und Ergebnissnapshot erweitert
+- responsive Tour- und Etappenanzeige für Fahrstrategie ergänzt
+- keine Änderungen an Energie-, Lade- oder Assistance-Core, keine KI, Telemetrie oder Fahrradsteuerung eingeführt
+
 ## Paket 20 - 2026-08-03
 
 - deterministischen Assistance-Core `biketriphub-assistance-v1` als separates Modul ergänzt

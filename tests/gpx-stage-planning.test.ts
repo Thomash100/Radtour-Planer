@@ -41,6 +41,15 @@ import {
   type ChargingPoint
 } from "../src/lib/ebike-charging";
 import {
+  EBIKE_RIDING_STRATEGY_MODEL_VERSION,
+  calculateRidingStrategy,
+  normalizeRidingStrategyState,
+  ridingStrategyPlanSnapshot,
+  serializeRidingStrategyState,
+  type RidingStrategyInput,
+  type RidingStrategySegmentInput
+} from "../src/lib/ebike-riding-strategy";
+import {
   createValidatedStageSliceFromBounds,
   distancePointToLineKm,
   elevationMetricsForRange,
@@ -2261,4 +2270,301 @@ test("integriert die Unterstützung nur als klar gekennzeichnete responsive Simu
   assert.match(source, /lg:grid-cols-2/);
   assert.match(source, /ohne Fahrradsteuerung/);
   assert.match(source, /unveränderten produktiven/);
+});
+
+const ridingStrategyProfile: RiderBikeProfile = {
+  ...riderBikeProfile,
+  bike: {
+    ...riderBikeProfile.bike,
+    type: "ebike",
+    ebike: {
+      ...riderBikeProfile.bike.ebike,
+      batteryCapacityWh: 500,
+      batteryCount: 1,
+      usableBatteryCapacityPercent: 100,
+      desiredReservePercent: 20
+    }
+  }
+};
+
+function ridingStrategySegments(
+  grades: number[] = [1, 3, 6, 2],
+  energyWh = 120,
+  minimumAssistanceRatio = 0.4
+): RidingStrategySegmentInput[] {
+  return grades.map((grade, index) => ({
+    id: `strategy-segment-${index + 1}`,
+    stageId: index < 2 ? "strategy-stage-1" : "strategy-stage-2",
+    stageDayNumber: index < 2 ? 1 : 2,
+    startKm: index * 10,
+    endKm: (index + 1) * 10,
+    distanceKm: 10,
+    averageGradePercent: grade,
+    maximumGradePercent: grade + 1,
+    continuousClimbDurationMinutes: grade >= 4 ? 18 : 4,
+    baseAssistanceRatio: 1,
+    minimumAssistanceRatio,
+    maximumAssistanceRatio: 1.6,
+    baseExpectedBatteryEnergyWh: energyWh,
+    quality: "high"
+  }));
+}
+
+function ridingStrategy(overrides: Partial<RidingStrategyInput> = {}) {
+  return calculateRidingStrategy({
+    profile: ridingStrategyProfile,
+    mode: "balanced",
+    segments: ridingStrategySegments(),
+    chargingStops: [],
+    stageOverrides: [],
+    startingBatteryCapacityPercent: 100,
+    ...overrides
+  });
+}
+
+test("berechnet die adaptive Fahrstrategie tourweit und deterministisch", () => {
+  const first = ridingStrategy();
+  const second = ridingStrategy();
+
+  assert.deepEqual(first, second);
+  assert.equal(first.modelVersion, EBIKE_RIDING_STRATEGY_MODEL_VERSION);
+  assert.equal(first.bicycleMode, "ebike");
+  assert.equal(first.stages.length, 2);
+  assert.equal(first.assumptions.deterministic, true);
+  assert.equal(first.assumptions.offline, true);
+  assert.equal(first.assumptions.existingCoresUnchanged, true);
+});
+
+test("kennzeichnet klassische Fahrräder ohne erfundene Akkustrategie", () => {
+  const classicProfile: RiderBikeProfile = {
+    ...ridingStrategyProfile,
+    bike: { ...ridingStrategyProfile.bike, type: "touring" }
+  };
+  const plan = ridingStrategy({ profile: classicProfile });
+
+  assert.equal(plan.status, "not_applicable");
+  assert.equal(plan.segments.length, 0);
+  assert.equal(plan.usableBatteryEnergyWh, null);
+});
+
+test("weist fehlende Segmente und niedrige Prognosequalität transparent aus", () => {
+  const missing = ridingStrategy({ segments: [] });
+  const lowQuality = ridingStrategy({
+    segments: ridingStrategySegments().map((segment) => ({ ...segment, quality: "low" as const }))
+  });
+
+  assert.equal(missing.status, "incomplete");
+  assert.ok(missing.warnings.some((warning) => warning.code === "invalid_input"));
+  assert.equal(lowQuality.status, "warning");
+  assert.ok(lowQuality.warnings.some((warning) => warning.code === "low_quality"));
+  assert.ok(lowQuality.segments.every((segment) => segment.safetyStatus === "caution"));
+});
+
+test("berücksichtigt einen und zwei Akkus als gemeinsame Kapazität", () => {
+  const oneBattery = ridingStrategy();
+  const twoBatteryProfile: RiderBikeProfile = {
+    ...ridingStrategyProfile,
+    bike: {
+      ...ridingStrategyProfile.bike,
+      ebike: { ...ridingStrategyProfile.bike.ebike, batteryCount: 2 }
+    }
+  };
+  const twoBatteries = ridingStrategy({ profile: twoBatteryProfile });
+
+  assert.equal(oneBattery.usableBatteryEnergyWh, 500);
+  assert.equal(twoBatteries.usableBatteryEnergyWh, 1000);
+  assert.ok((twoBatteries.endingBatteryCapacityPercent ?? 0) > (oneBattery.endingBatteryCapacityPercent ?? 0));
+});
+
+test("unterscheidet Reichweite, Ausgewogen und Komfort nachvollziehbar", () => {
+  const range = ridingStrategy({ mode: "range" });
+  const balanced = ridingStrategy({ mode: "balanced" });
+  const comfort = ridingStrategy({ mode: "comfort" });
+
+  assert.ok(range.totalExpectedBatteryEnergyWh < balanced.totalExpectedBatteryEnergyWh);
+  assert.ok(balanced.totalExpectedBatteryEnergyWh <= comfort.totalExpectedBatteryEnergyWh);
+  assert.ok((range.strategyReservePercent ?? 0) > (balanced.strategyReservePercent ?? 0));
+  assert.ok((comfort.strategyReservePercent ?? 0) < (balanced.strategyReservePercent ?? 0));
+});
+
+test("hält auf einer kurzen Tour eine hohe Reichweitenreserve ein", () => {
+  const plan = ridingStrategy({
+    mode: "range",
+    segments: ridingStrategySegments([1], 45, 0.2)
+  });
+
+  assert.equal(plan.status, "complete");
+  assert.ok((plan.endingBatteryCapacityPercent ?? 0) >= (plan.strategyReservePercent ?? 0));
+});
+
+test("bezieht automatische und manuelle Ladehalte in den Tourakku ein", () => {
+  const withoutStop = ridingStrategy();
+  const automatic = ridingStrategy({
+    chargingStops: [{
+      id: "strategy-auto-stop",
+      stageId: "strategy-stage-1",
+      routeKm: 20,
+      addedBatteryEnergyWh: 200,
+      chargingDurationMinutes: 48,
+      mode: "automatic"
+    }]
+  });
+  const manual = ridingStrategy({
+    chargingStops: [{
+      id: "strategy-manual-stop",
+      stageId: "strategy-stage-1",
+      routeKm: 20,
+      addedBatteryEnergyWh: 200,
+      chargingDurationMinutes: 48,
+      mode: "manual"
+    }]
+  });
+
+  assert.equal(automatic.chargingStops[0].mode, "automatic");
+  assert.equal(manual.chargingStops[0].mode, "manual");
+  assert.ok((automatic.endingBatteryCapacityPercent ?? 0) > (withoutStop.endingBatteryCapacityPercent ?? 0));
+  assert.ok((manual.endingBatteryCapacityPercent ?? 0) > (withoutStop.endingBatteryCapacityPercent ?? 0));
+});
+
+test("bewahrt Energie für starke spätere Steigungen auf", () => {
+  const plan = ridingStrategy({
+    segments: ridingStrategySegments([1, 1, 10, 12], 190, 0.25),
+    startingBatteryCapacityPercent: 70
+  });
+  const flatRecommendation = plan.segments.find((segment) => segment.id === "strategy-segment-1");
+  const lateClimbRecommendation = plan.segments.find((segment) => segment.id === "strategy-segment-4");
+
+  assert.ok(flatRecommendation);
+  assert.ok(lateClimbRecommendation);
+  assert.ok(lateClimbRecommendation.recommendedAssistancePercent > flatRecommendation.recommendedAssistancePercent);
+  assert.ok(flatRecommendation.rationale.some((reason) => reason.includes("spätere Abschnitte")));
+});
+
+test("gewichtet starke Steigungen am Anfang ebenfalls höher als flache Folgeabschnitte", () => {
+  const plan = ridingStrategy({
+    segments: ridingStrategySegments([12, 10, 1, 1], 190, 0.25),
+    startingBatteryCapacityPercent: 70
+  });
+
+  assert.ok(plan.segments[0].recommendedAssistancePercent > plan.segments[3].recommendedAssistancePercent);
+});
+
+test("übernimmt und kennzeichnet manuelle Etappenvorgaben ohne Überschreibung", () => {
+  const plan = ridingStrategy({
+    mode: "balanced",
+    stageOverrides: [{ stageId: "strategy-stage-1", assistancePercent: 135 }]
+  });
+  const overridden = plan.segments.filter((segment) => segment.stageId === "strategy-stage-1");
+
+  assert.ok(overridden.every((segment) => segment.recommendedAssistancePercent === 135));
+  assert.ok(overridden.every((segment) => segment.source === "manual"));
+  assert.equal(plan.stages[0].source, "manual");
+});
+
+test("lässt im manuellen Modus bestehende kontinuierliche Werte unverändert", () => {
+  const plan = ridingStrategy({ mode: "manual" });
+
+  assert.ok(plan.segments.every((segment) => segment.recommendedAssistancePercent === 100));
+  assert.ok(plan.segments.every((segment) => segment.source === "baseline"));
+});
+
+test("erkennt eine nicht erreichbare Mindeststrategie", () => {
+  const plan = ridingStrategy({
+    segments: ridingStrategySegments([4, 5, 6, 7], 400, 0.8)
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "minimum_strategy_infeasible"));
+});
+
+test("warnt wenn ein geplanter Ladehalt für die Folgeetappe nicht ausreicht", () => {
+  const plan = ridingStrategy({
+    segments: ridingStrategySegments([4, 5, 6, 7], 320, 0.8),
+    chargingStops: [{
+      id: "weak-charge",
+      stageId: "strategy-stage-1",
+      routeKm: 20,
+      addedBatteryEnergyWh: 10,
+      chargingDurationMinutes: 5,
+      mode: "manual"
+    }]
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "insufficient_charge"));
+});
+
+test("erkennt eine unsichere manuelle Vorgabe", () => {
+  const plan = ridingStrategy({
+    mode: "manual",
+    stageOverrides: [{ stageId: "strategy-stage-1", assistancePercent: 400 }]
+  });
+
+  assert.equal(plan.status, "infeasible");
+  assert.ok(plan.warnings.some((warning) => warning.code === "manual_override_unsafe"));
+});
+
+test("speichert Fahrstrategie versioniert und ergänzt ältere TourStates", () => {
+  const plan = ridingStrategy({ stageOverrides: [{ stageId: "strategy-stage-1", assistancePercent: 85 }] });
+  const state = normalizeRidingStrategyState({
+    schemaVersion: 99,
+    mode: "range",
+    stageOverrides: [
+      { stageId: "strategy-stage-2", assistancePercent: 90 },
+      { stageId: "strategy-stage-1", assistancePercent: 85 }
+    ],
+    lastCalculation: ridingStrategyPlanSnapshot(plan)
+  });
+  const serialized = serializeRidingStrategyState(state);
+  const repeated = serializeRidingStrategyState(normalizeRidingStrategyState(JSON.parse(serialized)));
+  const legacyTour = parseStoredTourState(JSON.stringify({
+    route: { geometryGeoJson: routeGeometry },
+    stages: [],
+    pois: [],
+    inputMode: "gpx",
+    updatedAt: "2026-08-03T12:00:00.000Z"
+  }));
+
+  assert.equal(state.schemaVersion, 1);
+  assert.deepEqual(state.stageOverrides.map((override) => override.stageId), ["strategy-stage-1", "strategy-stage-2"]);
+  assert.equal(repeated, serialized);
+  assert.deepEqual(legacyTour?.ridingStrategy, { schemaVersion: 1, mode: "balanced", stageOverrides: [] });
+});
+
+test("liefert nach JSON-Reload dieselbe Fahrstrategie und Berechnungsgrundlage", () => {
+  const input: RidingStrategyInput = {
+    profile: ridingStrategyProfile,
+    mode: "comfort",
+    segments: ridingStrategySegments(),
+    chargingStops: [{
+      id: "reload-charge",
+      stageId: "strategy-stage-1",
+      routeKm: 20,
+      addedBatteryEnergyWh: 180,
+      chargingDurationMinutes: 45,
+      mode: "automatic"
+    }],
+    stageOverrides: [{ stageId: "strategy-stage-2", assistancePercent: 110 }],
+    startingBatteryCapacityPercent: 100
+  };
+  const first = calculateRidingStrategy(input);
+  const afterReload = calculateRidingStrategy(JSON.parse(JSON.stringify(input)) as RidingStrategyInput);
+
+  assert.deepEqual(afterReload, first);
+  assert.equal(afterReload.inputFingerprint, first.inputFingerprint);
+});
+
+test("integriert die Fahrstrategie responsiv und kennzeichnet automatisch sowie manuell", () => {
+  const source = readFileSync("src/components/RidingStrategyPanel.tsx", "utf8");
+  const planner = readFileSync("src/components/PlannerClient.tsx", "utf8");
+
+  assert.match(source, /data-riding-strategy-tour/);
+  assert.match(source, /data-stage-riding-strategy/);
+  assert.match(source, /min-w-0/);
+  assert.match(source, /sm:grid-cols-2/);
+  assert.match(source, /automatisch/);
+  assert.match(source, /manuell/);
+  assert.match(source, /Neu berechnen/);
+  assert.match(planner, /ridingStrategyPlanSnapshot/);
+  assert.match(planner, /StageRidingStrategyPanel/);
 });

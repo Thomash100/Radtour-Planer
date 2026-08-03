@@ -320,6 +320,42 @@ Nicht ausgelöst werden dürfen:
 - Wind-, Wetter-, Temperatur- oder Untergrundkorrektur,
 - automatische Motorsteuerung.
 
+## Paket 21
+
+Adaptive E-Bike-Fahrstrategie prüfen:
+
+- identische Eingaben erzeugen vollständig identische Ergebnisse und denselben Eingabe-Fingerprint,
+- klassisches Fahrrad erzeugt keine Akku-Fahrstrategie,
+- ein und zwei Akkus verwenden jeweils die korrekt konfigurierte gemeinsame nutzbare Kapazität,
+- Modus `Reichweite` verbraucht weniger Strategieenergie und schützt mehr Reserve als `Ausgewogen`,
+- Modus `Komfort` nutzt innerhalb der Abschnittsgrenzen mehr Unterstützung und geplante Ladeenergie,
+- Modus `Manuell` überschreibt bestehende Werte nicht automatisch,
+- automatische und manuelle Ladehalte werden in stabiler Routenreihenfolge einbezogen,
+- knappe Energie wird vorrangig für kommende lange oder steile Anstiege erhalten,
+- starke Steigungen am Anfang und am Ende erhalten mehr Unterstützung als vergleichbare flache Abschnitte,
+- manuelle Etappenvorgabe wird für alle Abschnitte der Etappe als `manual` ausgewiesen,
+- Zurücksetzen einer Vorgabe stellt die automatische beziehungsweise bestehende Empfehlung wieder her,
+- Mindeststrategie ohne ausreichende Energie erzeugt `minimum_strategy_infeasible`,
+- unzureichende Nachladung erzeugt `insufficient_charge`,
+- unsichere manuelle Vorgabe erzeugt `manual_override_unsafe`,
+- Reserveunterschreitung und reduzierte Reserve werden getrennt ausgewiesen,
+- niedrige Eingabequalität senkt den Sicherheitsstatus und erzeugt einen Qualitätshinweis,
+- TourState speichert Modus, Overrides, Ergebnissnapshot, Warncodes, Modellversion und Fingerprint,
+- ältere TourStates erhalten `balanced` mit leerer Override-Liste,
+- JSON-Reload verändert weder Ergebnis noch Fingerprint,
+- Tourübersicht zeigt Modus, Fahrenergie, Start-/Restakku, Reserve, Ladehalte und Warnungen,
+- Etappenansicht zeigt Unterstützung, Quelle, Start-/Restakku, Reserveabstand, Strategieenergie und Ladehalte,
+- automatische und manuelle Werte sind sichtbar unterscheidbar,
+- bei 390, 768 und 1280 px entsteht kein horizontaler Overflow,
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+
+Nicht ausgelöst werden dürfen:
+
+- Änderung von Energie-, Lade- oder Assistance-Core,
+- automatische Route-, Etappen-, Ladehalt- oder Profiländerung,
+- Wetter-, Wind-, Verkehrs- oder Live-Ladestationsabfrage,
+- Telemetrie, KI oder Fahrradsteuerung.
+
 ## BikeTripHub Intelligence INT-00
 
 Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüfen:

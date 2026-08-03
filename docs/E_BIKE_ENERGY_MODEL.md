@@ -161,3 +161,5 @@ Nicht Bestandteil von Paket 18:
 - automatische Unterstützungssteuerung
 - Wetter- oder Winddaten
 - Ladeplanung oder etappenübergreifende Akkufortschreibung innerhalb dieses Energie-Modells; dafür verwendet Paket 19 das getrennte Ladeplanungsmodell
+
+Paket 21 nutzt die vorhandenen Energieergebnisse nur als versionierte Eingabe für `biketriphub-riding-strategy-v1`. Die adaptive Fahrstrategie verändert weder Formeln noch Kalibrierung oder Ausgabe dieses Energie-Cores.

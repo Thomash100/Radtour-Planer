@@ -173,7 +173,7 @@ Der ausgegebene Mittelpunkt wird auf den höchsten verfügbaren Modusbereich und
 
 ## Moduszuordnung
 
-Bis Paket 21 ein herstellerbezogenes Profil liefert, gelten sichtbar als `generic` und Qualität `medium` gekennzeichnete Bereiche:
+Bis ein separat beauftragtes Fahrradprofil-Importpaket ein herstellerbezogenes Profil liefert, gelten sichtbar als `generic` und Qualität `medium` gekennzeichnete Bereiche:
 
 | Modus | Motor-/Fahrer-Verhältnis |
 | --- | ---: |

@@ -313,7 +313,7 @@ Zulaessige Quellen sind:
 - lokale Telemetriedateien,
 - spaeter gesondert freigegebene Provider.
 
-Ein Bild oder Screenshot ist keine direkt vertrauenswuerdige strukturierte Quelle. OCR darf in Paket 21 nur Importkandidaten erzeugen; jeder Wert muss vor Speicherung bestaetigt und mit Quelle sowie Qualitaet gekennzeichnet werden.
+Ein Bild oder Screenshot ist keine direkt vertrauenswuerdige strukturierte Quelle. OCR darf in einem spaeteren, separat beauftragten Importpaket nur Importkandidaten erzeugen; jeder Wert muss vor Speicherung bestaetigt und mit Quelle sowie Qualitaet gekennzeichnet werden.
 
 Telemetrie kann Standort-, Leistungs- und Gesundheitsnaehe besitzen. Deshalb gelten mindestens:
 
@@ -384,15 +384,20 @@ Umsetzungsstand: `biketriphub-assistance-v1` rechnet als klar gekennzeichnete Et
 
 Verbindliche Modelldokumentation: [E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
 
-#### Paket 21 – Fahrradprofil Import/Export
+#### Paket 21 – Adaptive E-Bike-Fahrstrategie
 
-Branch: `codex/bike-profile-import`
+Branch: `codex/adaptive-riding-strategy`
 
-- versioniertes JSON-Profil fuer Fahrrad, Akku, Motor, Ladegeraet und Unterstuetzungsprofile,
-- Quellen- und Qualitaetskennzeichnung je uebernommenem Wert,
-- App-/Herstellerdaten ueber Adapter,
-- Bilder nur als bestaetigungspflichtige Importkandidaten,
-- keine stillen Profilueberschreibungen.
+Umsetzungsstand: `biketriphub-riding-strategy-v1` verbindet Energie-, Lade- und Assistance-Ergebnisse als separater tourweiter Planungs-Core.
+
+- Modi Ausgewogen, Reichweite, Komfort und Manuell,
+- Reserve- und Ladehaltbetrachtung ueber die gesamte Tour,
+- priorisierte Energieverteilung fuer kommende Steigungen,
+- manuelle Etappen-Overrides ohne stille Korrektur,
+- versionierter TourState mit Ergebnis-Fingerprint,
+- keine Telemetrie, KI, Live-Dienste oder Fahrradsteuerung.
+
+Verbindliche Modelldokumentation: [E_BIKE_RIDING_STRATEGY_MODEL.md](E_BIKE_RIDING_STRATEGY_MODEL.md).
 
 #### Paket 22 – Telemetrie-Datenmodell
 
@@ -515,7 +520,7 @@ Paket 25 darf technisch vorgezogen werden, falls ein vorheriges Paket erstmals e
 Vor den jeweils genannten Paketen muessen folgende Punkte konkretisiert werden:
 
 - Paket 20: Referenzdauer fuer kurzzeitige und dauerhafte Fahrerleistung sowie zulaessiger Unterstuetzungsbereich.
-- Paket 21: unterstuetzte Hersteller-/App-Exportformate und Lizenzbedingungen.
+- spaeteres Fahrradprofil-Importpaket: unterstuetzte Hersteller-/App-Exportformate und Lizenzbedingungen.
 - Paket 22: konkrete Telemetrieformate und Datenschutz-/Loeschkonzept fuer Serverpersistenz.
 - Paket 26: Mindestanzahl Fahrten, Ausreisserregel und Freigabeschwellen.
 - Paket 27: Gewichtung von Reserve, Belastung und Fahrzeit; harte Grenzen haben Vorrang vor Gewichten.

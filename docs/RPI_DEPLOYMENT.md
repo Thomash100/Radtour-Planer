@@ -311,6 +311,36 @@ Verbindlich prüfen:
 
 Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release.
 
+### Paket 21 – Adaptive E-Bike-Fahrstrategie
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/adaptive-riding-strategy
+git rev-parse --short HEAD
+curl -fsS http://localhost:3000/api/health
+```
+
+Verbindlich prüfen:
+
+- E-Bike-Tour mit mindestens zwei Etappen und echtem Höhenprofil laden.
+- Tourweite Fahrstrategie erscheint oberhalb der Ladeplanung.
+- Modi `Ausgewogen`, `Reichweite`, `Komfort` und `Manuell` wechseln; Werte werden unmittelbar neu berechnet.
+- `Reichweite` schützt mehr Reserve und benötigt weniger Strategieenergie als `Komfort`.
+- Automatischen und manuellen Ladehalt prüfen; beide werden in der Fahrstrategie berücksichtigt.
+- Etappe mit später starker Steigung zeigt nachvollziehbar geschützte Unterstützung gegenüber flachen Abschnitten.
+- Manuelle Unterstützung einer Etappe setzen; Badge wechselt auf `manuell`.
+- Manuelle Vorgabe zurücksetzen; automatische Empfehlung wird wiederhergestellt.
+- Nicht erreichbare Tour, Reserveunterschreitung und unzureichende Nachladung erzeugen verständliche Warnungen.
+- Tour speichern, neu laden und Modus, Overrides, Empfehlungen sowie Fingerprint vergleichen.
+- Ältere gespeicherte Tour ohne Fahrstrategiefeld laden; Standard `Ausgewogen` erscheint fehlerfrei.
+- Klassisches Fahrrad zeigt keine Akku-Fahrstrategie.
+- Energie-, Lade- und Assistance-Werte bleiben fachlich unverändert.
+- Desktop 1280 px, Tablet 768 px und Smartphone 390 px ohne horizontalen Overflow prüfen.
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+- Keine Route, Etappe, Ladehaltreihenfolge oder Profilangabe wird automatisch verändert.
+
+Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release. Paket 22 wird nicht begonnen.
+
 ### BikeTripHub Intelligence INT-00 – Dokumentationsabnahme
 
 Dieser Konzeptabschnitt ändert keine App-, Datenbank-, Docker- oder Rechenlogik. Für die verbindliche Raspberry-Pi-Abnahme genügt nach dem Update des Konzept-Branches:

@@ -32,6 +32,7 @@ import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
 import { AssistanceStrategyPanel } from "@/components/AssistanceStrategyPanel";
+import { RidingStrategyTourPanel, StageRidingStrategyPanel } from "@/components/RidingStrategyPanel";
 import {
   ChargingTourOverview,
   StageChargingPanel,
@@ -77,6 +78,14 @@ import {
   type ChargingPlanningState,
   type ChargingPoint
 } from "@/lib/ebike-charging";
+import {
+  EMPTY_RIDING_STRATEGY_STATE,
+  calculateRidingStrategy,
+  normalizeRidingStrategyState,
+  ridingStrategyPlanSnapshot,
+  type RidingStrategyMode,
+  type RidingStrategyState
+} from "@/lib/ebike-riding-strategy";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
 import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
@@ -539,6 +548,10 @@ export function PlannerClient({
     customPoints: [],
     manualStops: []
   });
+  const [ridingStrategyPlanning, setRidingStrategyPlanning] = useState<RidingStrategyState>({
+    ...EMPTY_RIDING_STRATEGY_STATE,
+    stageOverrides: []
+  });
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -926,6 +939,51 @@ export function PlannerClient({
       })
     ) as Record<string, StageAssistancePlan>;
   }, [riderBikeProfile, route, stageBoundsById, stages]);
+  const ridingStrategyPlan = useMemo(() => {
+    const strategySegments = stages.flatMap((stage) => {
+      const bounds = stageBoundsById[stage.id] ?? { startKm: 0, endKm: stage.distanceKm };
+      const assistancePlan = assistancePlansByStageId[stage.id];
+      return (assistancePlan?.sections ?? []).map((section) => ({
+        id: `${stage.id}-${section.id}`,
+        stageId: stage.id,
+        stageDayNumber: stage.dayNumber,
+        startKm: bounds.startKm + section.startKm,
+        endKm: bounds.startKm + section.endKm,
+        distanceKm: section.distanceKm,
+        averageGradePercent: section.averageGradePercent,
+        maximumGradePercent: section.maximumGradePercent,
+        continuousClimbDurationMinutes: section.continuousClimbDurationMinutes,
+        baseAssistanceRatio: section.recommendedMotorRatio,
+        minimumAssistanceRatio: section.recommendedMotorAssistancePercent.minimum / 100,
+        maximumAssistanceRatio: section.recommendedMotorAssistancePercent.maximum / 100,
+        baseExpectedBatteryEnergyWh: section.expectedBatteryEnergyWh,
+        quality: assistancePlan.quality
+      }));
+    });
+    return calculateRidingStrategy({
+      profile: riderBikeProfile,
+      mode: ridingStrategyPlanning.mode,
+      segments: strategySegments,
+      chargingStops: chargingPlan.stops.map((stop) => ({
+        id: stop.id,
+        stageId: stop.stageId,
+        routeKm: stop.point.routeKm,
+        addedBatteryEnergyWh: stop.addedBatteryEnergyWh,
+        chargingDurationMinutes: stop.chargingDurationMinutes,
+        mode: stop.mode
+      })),
+      stageOverrides: ridingStrategyPlanning.stageOverrides,
+      startingBatteryCapacityPercent: 100
+    });
+  }, [
+    assistancePlansByStageId,
+    chargingPlan.stops,
+    riderBikeProfile,
+    ridingStrategyPlanning.mode,
+    ridingStrategyPlanning.stageOverrides,
+    stageBoundsById,
+    stages
+  ]);
 
   const buildStoredTourState = useCallback(
     ({
@@ -967,6 +1025,10 @@ export function PlannerClient({
         })),
         stageAccommodations,
         chargingPlanning,
+        ridingStrategy: normalizeRidingStrategyState({
+          ...ridingStrategyPlanning,
+          lastCalculation: ridingStrategyPlanSnapshot(ridingStrategyPlan)
+        }),
         status: statusValue,
         lastSavedAt: lastSavedAtValue,
         updatedAt: new Date().toISOString()
@@ -984,6 +1046,8 @@ export function PlannerClient({
       selectedStageId,
       stageAccommodations,
       chargingPlanning,
+      ridingStrategyPlan,
+      ridingStrategyPlanning,
       stageBreakpoints,
       stageGenerationMode,
       stages,
@@ -1130,6 +1194,10 @@ export function PlannerClient({
         ...EMPTY_CHARGING_PLANNING_STATE,
         customPoints: [],
         manualStops: []
+      });
+      setRidingStrategyPlanning(stored.ridingStrategy ?? {
+        ...EMPTY_RIDING_STRATEGY_STATE,
+        stageOverrides: []
       });
       setLastTourSavedAt(stored.lastSavedAt ?? null);
       setPlannerStep(
@@ -2320,6 +2388,44 @@ export function PlannerClient({
       )
     }));
     setStatus(`Ziel-Ladung auf ${targetChargePercent} % geändert. Ladeplan neu berechnet.`);
+  }
+
+  function changeRidingStrategyMode(mode: RidingStrategyMode) {
+    setRidingStrategyPlanning((current) => ({
+      ...current,
+      mode,
+      lastCalculation: undefined
+    }));
+    setStatus(`Fahrstrategie ${mode === "balanced" ? "Ausgewogen" : mode === "range" ? "Reichweite" : mode === "comfort" ? "Komfort" : "Manuell"} wird deterministisch neu berechnet.`);
+  }
+
+  function setRidingStrategyOverride(stageId: string, assistancePercent: number) {
+    setRidingStrategyPlanning((current) => ({
+      ...current,
+      stageOverrides: [
+        ...current.stageOverrides.filter((override) => override.stageId !== stageId),
+        { stageId, assistancePercent: Math.min(400, Math.max(0, Number(assistancePercent.toFixed(1)))) }
+      ].sort((left, right) => left.stageId.localeCompare(right.stageId)),
+      lastCalculation: undefined
+    }));
+    setStatus("Manuelle Etappenvorgabe übernommen. Die gesamte Fahrstrategie wurde neu berechnet.");
+  }
+
+  function resetRidingStrategyOverride(stageId: string) {
+    setRidingStrategyPlanning((current) => ({
+      ...current,
+      stageOverrides: current.stageOverrides.filter((override) => override.stageId !== stageId),
+      lastCalculation: undefined
+    }));
+    setStatus("Manuelle Etappenvorgabe entfernt. Die automatische Fahrstrategie wurde wiederhergestellt.");
+  }
+
+  function recalculateRidingStrategy() {
+    setRidingStrategyPlanning((current) => ({
+      ...current,
+      lastCalculation: ridingStrategyPlanSnapshot(ridingStrategyPlan)
+    }));
+    setStatus(`Fahrstrategie ${ridingStrategyPlan.inputFingerprint} wurde ohne Zufall neu berechnet.`);
   }
 
   function stageKilometers(stage: Stage) {
@@ -3983,6 +4089,10 @@ export function PlannerClient({
                           : "missing"
                   });
                   const stageAssistancePlan = assistancePlansByStageId[stage.id];
+                  const stageRidingStrategy = ridingStrategyPlan.stages.find((item) => item.stageId === stage.id);
+                  const stageRidingStrategyOverride = ridingStrategyPlanning.stageOverrides.find(
+                    (override) => override.stageId === stage.id
+                  );
                   const stageChargingPlan = chargingPlan.stages.find((item) => item.stageId === stage.id);
                   const stageChargingCandidates = chargingPoints.filter((point) => point.stageId === stage.id);
                   const stageChargingPointIds = new Set(stageChargingCandidates.map((point) => point.id));
@@ -4230,6 +4340,14 @@ export function PlannerClient({
                               : "Für ein klassisches Fahrrad werden keine Akkuwerte abgeleitet."}
                           </p>
                         </div>
+                        {stageRidingStrategy && (
+                          <StageRidingStrategyPanel
+                            override={stageRidingStrategyOverride}
+                            stage={stageRidingStrategy}
+                            onResetOverride={resetRidingStrategyOverride}
+                            onSetOverride={setRidingStrategyOverride}
+                          />
+                        )}
                         {stageAssistancePlan && <AssistanceStrategyPanel plan={stageAssistancePlan} />}
                         {riderBikeProfile.bike.type === "ebike" && (
                           <StageChargingPanel
@@ -4424,6 +4542,20 @@ export function PlannerClient({
         </section>
 
         {workflowView === "stages" && <aside className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Fahrstrategie</CardTitle>
+              <CardDescription>Tourweite Empfehlung aus Energie, Unterstützung, Reserve und Ladehalten.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RidingStrategyTourPanel
+                plan={ridingStrategyPlan}
+                planningState={ridingStrategyPlanning}
+                onModeChange={changeRidingStrategyMode}
+                onRecalculate={recalculateRidingStrategy}
+              />
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle>Ladeplanung</CardTitle>

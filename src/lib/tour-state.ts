@@ -9,6 +9,10 @@ import {
   normalizeChargingPlanningState,
   type ChargingPlanningState
 } from "@/lib/ebike-charging";
+import {
+  normalizeRidingStrategyState,
+  type RidingStrategyState
+} from "@/lib/ebike-riding-strategy";
 import type { CycleRouteCoverage } from "@/lib/mock-routing";
 import { parseRiderBikeProfileValue, type RiderBikeProfile } from "@/lib/rider-bike-profile";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
@@ -101,6 +105,7 @@ export type StoredTourState = {
   stageBreakpoints?: StoredStageBreakpoint[];
   stageAccommodations?: Record<string, StageAccommodation>;
   chargingPlanning?: ChargingPlanningState;
+  ridingStrategy?: RidingStrategyState;
   status?: string;
   lastSavedAt?: string | null;
   updatedAt: string;
@@ -180,11 +185,13 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
     );
     const riderBikeProfile = parseRiderBikeProfileValue(parsed.riderBikeProfile);
     const chargingPlanning = normalizeChargingPlanningState(parsed.chargingPlanning);
+    const ridingStrategy = normalizeRidingStrategyState(parsed.ridingStrategy);
     return {
       ...parsed,
       ...(riderBikeProfile ? { riderBikeProfile } : { riderBikeProfile: undefined }),
       stageAccommodations,
-      chargingPlanning
+      chargingPlanning,
+      ridingStrategy
     };
   } catch {
     return null;
