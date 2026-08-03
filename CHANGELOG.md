@@ -1,5 +1,16 @@
 # Changelog
 
+## Paket 22 - 2026-08-03
+
+- PR #74 nach ausdrücklicher Freigabe mit Merge-Commit `0724b3e` nach `private` integriert
+- reinen, deterministischen Höhenprofil- und Streckenbeschaffenheits-Core `biketriphub-route-condition-v1` ergänzt
+- Höhenwerte geglättet ausgewertet, Rohdaten erhalten und Steigungs-, Höhenmeter- sowie Plausibilitätswerte je Segment ergänzt
+- BRouter-`WayTags` ohne neuen Live-Dienst in versionierte Oberflächen- und Wegtypsegmente übernommen
+- zentrale Oberflächen-, Wegtyp-, Fahrwiderstands-, Qualitäts- und Warnungsmodelle ergänzt
+- responsive Tour-, Etappen-, Höhenprofil- und Segmentdetailanzeigen ergänzt
+- TourState rückwärtskompatibel um Quellsegmente und reproduzierbaren Analysesnapshot erweitert
+- bestehende Energie-, Lade-, Unterstützungs-, Fahrstrategie- und Zeitberechnungen bewusst unverändert gelassen
+
 ## Paket 21 - 2026-08-03
 
 - PR #73 nach ausdrücklicher Freigabe mit Merge-Commit `731d8da` nach `private` integriert

@@ -10,6 +10,10 @@ import {
   type Position
 } from "@/lib/geo";
 import {
+  parseBRouterConditionSegments,
+  type RouteConditionSourceSegment
+} from "@/lib/route-elevation-surface";
+import {
   resolveRouteControlPoints,
   type CycleRouteCoverage,
   type CycleRouteNetwork,
@@ -133,6 +137,7 @@ export type RoutedSegment = {
   elevationDown: number;
   durationSeconds: number;
   cycleRouteCoverage: CycleRouteCoverage;
+  routeConditionSourceSegments: RouteConditionSourceSegment[];
 };
 
 export type BRouterCoordinateRoute = Pick<
@@ -332,6 +337,7 @@ function parseBRouterPayload(payload: unknown, profile: RoutingProfile): RoutedS
   const durationSeconds =
     numericProperty(feature.properties["total-time"]) ?? (distanceKm / fallbackSpeedKmh[profile]) * 60 * 60;
   const cycleRouteCoverage = analyzeBRouterCycleCoverage(feature.properties.messages, distanceKm);
+  const routeConditionSourceSegments = parseBRouterConditionSegments(feature.properties.messages, distanceKm);
 
   return {
     coordinates,
@@ -339,7 +345,8 @@ function parseBRouterPayload(payload: unknown, profile: RoutingProfile): RoutedS
     elevationUp,
     elevationDown,
     durationSeconds,
-    cycleRouteCoverage
+    cycleRouteCoverage,
+    routeConditionSourceSegments
   };
 }
 
@@ -601,6 +608,18 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
   const distanceKm = Number(segments.reduce((sum, segment) => sum + segment.distanceKm, 0).toFixed(1));
   const cycleRouteCoverage = combineCycleRouteCoverage(segments, distanceKm);
   const routedElevation = createRoutedElevationProfile(coordinates);
+  let conditionOffsetKm = 0;
+  const routeConditionSourceSegments = segments.flatMap((segment, segmentIndex) => {
+    const offset = conditionOffsetKm;
+    conditionOffsetKm += segment.distanceKm;
+    return segment.routeConditionSourceSegments.map((source, sourceIndex) => ({
+      ...source,
+      id: `brouter-section-${segmentIndex + 1}-${sourceIndex + 1}`,
+      startKm: Number((offset + source.startKm).toFixed(4)),
+      endKm: Number((offset + source.endKm).toFixed(4)),
+      tags: { ...(source.tags ?? {}) }
+    }));
+  });
 
   return {
     name: `${input.start.trim()} nach ${input.end.trim()}`,
@@ -625,6 +644,7 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
     routingProfileName: brouterProfile.displayName,
     routingAttribution: "BRouter / OpenStreetMap-Mitwirkende",
     routingDataNotice: `Reale Fahrradroute auf Basis von OpenStreetMap. ${brouterProfile.notice}`,
-    cycleRouteCoverage
+    cycleRouteCoverage,
+    routeConditionSourceSegments
   };
 }

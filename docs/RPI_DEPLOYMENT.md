@@ -341,6 +341,33 @@ Verbindlich prüfen:
 
 Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release. Paket 22 wird nicht begonnen.
 
+### Paket 22 – Höhenprofil und Streckenbeschaffenheit
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/route-elevation-surface-model
+git rev-parse --short HEAD
+curl -fsS http://localhost:3000/api/health
+```
+
+Verbindlich prüfen:
+
+- GPX mit Höhenwerten laden; Tourübersicht zeigt geglättetes Profil, positive/negative Höhenmeter, maximale Steigung, Qualität und Warnstatus.
+- GPX ohne Höhenwerte laden; keine scheinpräzise Steigung erscheint und `Höhendaten fehlen` wird verständlich angezeigt.
+- Direkt geplante BRouter-Route laden; vorhandene `WayTags` erscheinen als Oberflächen- und Wegtypanteile, fehlende Tags bleiben unbekannt.
+- Etappenansicht öffnen; jede Etappe zeigt eigenes Profil, Höhenwerte, Oberflächenverteilung und auffällige Segmente.
+- Segmentdetails öffnen; Länge, Höhe, Steigung, Oberfläche, Wegtyp, Faktoren, Quelle, Qualitätsgrund und Warnungen prüfen.
+- Gemischte Oberfläche sowie unbekannte Daten unterscheiden.
+- Treppe oder Schiebestrecke in einem belegten Testszenario als kritisch erkennen.
+- Tour speichern und neu laden; Modellversion, Fingerprint, Roh-/Glättungsprofil, Quellsegmente und Ergebnisse bleiben identisch.
+- Ältere Tour ohne Paket-22-Feld laden; Ansicht bleibt fehlerfrei und unbekannte Merkmale werden nicht geschätzt.
+- Energie-, Lade-, Assistance-, Fahrstrategie- und Fahrzeitwerte vor und nach dem Update vergleichen; sie bleiben unverändert.
+- Desktop 1280 px, Tablet 768 px und Smartphone 390 px ohne horizontalen Overflow prüfen.
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+- Keine neue Live-Abfrage, automatische Routenänderung oder Rekuperation wird ausgelöst.
+
+Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release. Paket 23 wird nicht begonnen.
+
 ### BikeTripHub Intelligence INT-00 – Dokumentationsabnahme
 
 Dieser Konzeptabschnitt ändert keine App-, Datenbank-, Docker- oder Rechenlogik. Für die verbindliche Raspberry-Pi-Abnahme genügt nach dem Update des Konzept-Branches:

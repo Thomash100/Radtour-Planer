@@ -15,6 +15,12 @@ import {
 } from "@/lib/ebike-riding-strategy";
 import type { CycleRouteCoverage } from "@/lib/mock-routing";
 import { parseRiderBikeProfileValue, type RiderBikeProfile } from "@/lib/rider-bike-profile";
+import {
+  normalizeRouteConditionSourceSegments,
+  normalizeRouteConditionStoredState,
+  type RouteConditionSourceSegment,
+  type RouteConditionStoredState
+} from "@/lib/route-elevation-surface";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
@@ -52,6 +58,8 @@ export type StoredRoute = {
   routingAttribution?: string;
   routingDataNotice?: string;
   cycleRouteCoverage?: CycleRouteCoverage;
+  routeConditionSourceSegments?: RouteConditionSourceSegment[];
+  originalRouteConditionSourceSegments?: RouteConditionSourceSegment[];
 };
 
 export type StoredStage = {
@@ -106,6 +114,7 @@ export type StoredTourState = {
   stageAccommodations?: Record<string, StageAccommodation>;
   chargingPlanning?: ChargingPlanningState;
   ridingStrategy?: RidingStrategyState;
+  routeCondition?: RouteConditionStoredState;
   status?: string;
   lastSavedAt?: string | null;
   updatedAt: string;
@@ -186,12 +195,28 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
     const riderBikeProfile = parseRiderBikeProfileValue(parsed.riderBikeProfile);
     const chargingPlanning = normalizeChargingPlanningState(parsed.chargingPlanning);
     const ridingStrategy = normalizeRidingStrategyState(parsed.ridingStrategy);
+    const routeCondition = normalizeRouteConditionStoredState(parsed.routeCondition);
+    const routeConditionSourceSegments = normalizeRouteConditionSourceSegments(
+      parsed.route.routeConditionSourceSegments ?? routeCondition.sourceSegments
+    );
+    const originalRouteConditionSourceSegments = normalizeRouteConditionSourceSegments(
+      parsed.route.originalRouteConditionSourceSegments ?? routeConditionSourceSegments
+    );
     return {
       ...parsed,
+      route: {
+        ...parsed.route,
+        routeConditionSourceSegments,
+        originalRouteConditionSourceSegments
+      },
       ...(riderBikeProfile ? { riderBikeProfile } : { riderBikeProfile: undefined }),
       stageAccommodations,
       chargingPlanning,
-      ridingStrategy
+      ridingStrategy,
+      routeCondition: {
+        ...routeCondition,
+        sourceSegments: routeConditionSourceSegments
+      }
     };
   } catch {
     return null;

@@ -356,6 +356,36 @@ Nicht ausgelöst werden dürfen:
 - Wetter-, Wind-, Verkehrs- oder Live-Ladestationsabfrage,
 - Telemetrie, KI oder Fahrradsteuerung.
 
+## Paket 22
+
+Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell prüfen:
+
+- ebene Strecke liefert 0 Hm und Steigungsklasse `nearly_flat`,
+- gleichmäßige Steigung und gleichmäßiges Gefälle werden getrennt summiert,
+- wechselndes Profil liefert positive und negative Höhenmeter,
+- sehr kurze Segmente erzeugen `segment_too_short`,
+- fehlende Höhe erzeugt `elevation_missing` ohne erfundene Steigung,
+- teilweise Abdeckung erzeugt `elevation_incomplete` und `interpolated_data`,
+- Median-3 reduziert einzelne Ausreißer nur im geglätteten Profil; Rohwerte bleiben erhalten,
+- unplausible Sprünge erzeugen einen kritischen Hinweis,
+- Asphalt, gemischte Oberfläche, Schotter, Waldweg und unbekannte Oberfläche werden getrennt klassifiziert,
+- Treppen oder `bicycle=dismount` erzeugen `pushing_or_steps`,
+- BRouter-`WayTags` werden geordnet und auf die Routenlänge skaliert übernommen,
+- Etappenschnitt rebasiert Höhe und Oberflächensegmente gemeinsam,
+- TourState speichert Modellversion, Quellsegmente, Roh-/Glättungsprofil, Qualität und Warnungen,
+- alter TourState ohne Paket-22-Feld lädt mit leerer Quellenliste,
+- identische Eingaben und JSON-Reload liefern identische Ergebnisse sowie denselben Fingerprint,
+- Tour-, Etappen- und Segmentanzeige sind bei 390, 768 und 1280 px ohne horizontalen Overflow,
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+
+Nicht ausgelöst werden dürfen:
+
+- Änderung von `biketriphub-energy-v2`, `biketriphub-charging-v1`, `biketriphub-assistance-v1` oder `biketriphub-riding-strategy-v1`,
+- Verwendung der neuen Fahrwiderstandsfaktoren in produktiven Energie- oder Zeitwerten,
+- neue Live-Abfrage oder produktive Overpass-/Nominatim-Abhängigkeit,
+- automatische Route-, Etappen- oder Profiländerung,
+- Rekuperation, Wetter, Bodenfeuchte oder Verkehrsmodellierung.
+
 ## BikeTripHub Intelligence INT-00
 
 Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüfen:

@@ -1,4 +1,5 @@
 import { createElevationProfile, haversineKm, routeDistanceKm, type LineStringGeoJson, type Position } from "@/lib/geo";
+import type { RouteConditionSourceSegment } from "@/lib/route-elevation-surface";
 
 export type RoutingProfile = "balanced" | "cycleways" | "low_elevation" | "touristic" | "sportive";
 
@@ -44,6 +45,7 @@ export type RouteCalculation = {
   routingAttribution: string;
   routingDataNotice: string;
   cycleRouteCoverage?: CycleRouteCoverage;
+  routeConditionSourceSegments?: RouteConditionSourceSegment[];
 };
 
 const knownPlaces: Record<string, Position> = {

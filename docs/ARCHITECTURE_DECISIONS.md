@@ -183,3 +183,20 @@ Konsequenz:
 - Rohtelemetrie bleibt unverändert; Normalisierung und Glättung sind versionierte Transformationen.
 - Geringe oder unvollständige Qualität senkt die Prognosequalität statt Genauigkeit vorzutäuschen.
 - Externe Übertragung oder Serverpersistenz benötigt eine gesonderte Datenschutz- und Betriebsentscheidung.
+
+## ADR-013: Streckenbeschaffenheit zunächst additiv analysieren
+
+Entscheidung: Das versionierte Modell `biketriphub-route-condition-v1` wertet Höhenprofil, Oberfläche, Wegtyp, Qualität und Warnungen als separaten reinen Core aus. Seine Fahrwiderstandsfaktoren verändern in Paket 22 keine bestehende Energie-, Lade-, Unterstützungs-, Fahrstrategie- oder Zeitberechnung.
+
+Begründung:
+
+- GPX, BRouter-Höhenwerte und BRouter-`WayTags` besitzen unterschiedliche Abdeckung und Qualität.
+- Eine sofortige produktive Kopplung würde bestehende Ergebnisse unbemerkt verändern.
+- Ein additiver Snapshot ermöglicht Alt/Neu-Vergleiche und eine eigenständige fachliche Abnahme.
+
+Konsequenz:
+
+- Unbekannte Oberfläche und fehlende Höhe bleiben unbekannt; es werden keine scheinpräzisen Werte erfunden.
+- Rohhöhe und geglättete Auswertung werden getrennt gespeichert.
+- Neue produktive Faktoren benötigen eine neue Modellversion, Vergleichstests, eigenen Auftrag und ausdrückliche Freigabe.
+- BRouter-`WayTags` werden nur aus dem vorhandenen Routing-Ergebnis übernommen; Paket 22 führt keine neue Live-Abfrage ein.

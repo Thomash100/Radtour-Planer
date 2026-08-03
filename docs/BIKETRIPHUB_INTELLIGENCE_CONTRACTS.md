@@ -1,5 +1,7 @@
 # Vertrags- und Schemaentwurf BikeTripHub Intelligence
 
+Paket 22 ergänzt den gemeinsamen Routenvertrag durch `biketriphub-route-condition-v1`. Höhenprofil, Oberfläche, Wegtyp, Qualität und Warnungen werden als additive Analyse bereitgestellt; produktive Energie-, Lade-, Unterstützungs-, Fahrstrategie- und Zeitmodelle bleiben unverändert. Details: [ROUTE_ELEVATION_SURFACE_MODEL.md](ROUTE_ELEVATION_SURFACE_MODEL.md).
+
 Paket 21 konkretisiert den Optimierungsvertrag durch `biketriphub-riding-strategy-v1`. Der versionierte TourState speichert Modus, Etappen-Overrides, Eingabe-Fingerprint und einen nachvollziehbaren Ergebnissnapshot; die Fachberechnung bleibt im reinen Core `src/lib/ebike-riding-strategy.ts`.
 
 - Stand: 2026-08-03
@@ -382,7 +384,8 @@ Harte Grenzen werden nie durch einen guten gewichteten Score ueberstimmt. `selec
 | `StageEnergyProjection` / `biketriphub-energy-v2` | Produktivreferenz und Segmentenergie | Ergebnis unveraendert uebernehmen |
 | `ChargingPlan` / `biketriphub-charging-v1` | produktive Ladebasis | Paket 30 erweitert durch Varianten, ersetzt v1 nicht still |
 | `StoredTourState` | Szenarioquelle und spaetere bestaetigte Ergebnisse | Schema-Migration erforderlich, sobald neue Daten persistiert werden |
-| `ElevationPoint[]` | Segmenthoehen | Normalisierungsverfahren versionieren |
+| `ElevationPoint[]` | Segmenthöhen | `biketriphub-route-condition-v1` bewahrt Rohwerte und weist geglättete Werte separat aus |
+| `RouteConditionAnalysis` | additive Oberfläche, Wegtyp, Qualität und Warnungen | keine produktive Faktorübernahme ohne neue Modellversion und Freigabe |
 
 Adapter muessen Fehler explizit liefern. Ein fehlgeschlagener Adapter darf weder leere Telemetrie noch Nullverbrauch als scheinbar gueltiges Ergebnis erzeugen.
 
