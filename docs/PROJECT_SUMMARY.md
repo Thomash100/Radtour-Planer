@@ -28,6 +28,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - E-Bike-Akkustand etappenübergreifend fortschreiben sowie automatische und manuelle Ladehalte mit Ladezeit planen.
 - Kontinuierliche Motorunterstützung je Höhenabschnitt als klar gekennzeichnete Simulation mit Zieltempo, Modus, Energie, Akkustand und Begründung empfehlen.
 - Adaptive Fahrstrategie tourweit aus Energie-, Lade- und Unterstützungsergebnissen ableiten; Modi, Ladehalte, Reserve und manuelle Etappenvorgaben werden deterministisch berücksichtigt.
+- Höhenprofil und vorhandene Streckenbeschaffenheit deterministisch analysieren; Roh-/Glättungsprofil, Steigungen, Oberflächen, Wegtypen, Qualität und Warnungen werden für Tour, Etappe und Segment angezeigt.
 - Gesamte Tour speichern und erneut öffnen.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -52,6 +53,8 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Ladezeiten verwenden eine konstante wirksame Leistung; reale Ladekurven und Wartezeiten bleiben unberücksichtigt.
 - Die Unterstützungssimulation verwendet ohne belegtes Fahrradmodusprofil generische Modusbereiche; Telemetrie, Wind, Temperatur und Untergrund sind noch nicht gekoppelt.
 - Die adaptive Fahrstrategie skaliert vorhandene Abschnittsenergie linear zur Unterstützung. Sie ist keine Fahrradsteuerung und keine Garantie für reale Reichweite.
+- Oberflächen- und Wegtypwerte sind nur verfügbar, wenn die vorhandene Quelle sie liefert; GPX-Dateien besitzen üblicherweise keine solchen Merkmale.
+- Die neuen Fahrwiderstandsfaktoren werden in Paket 22 ausschließlich angezeigt und verändern Energie-, Lade-, Unterstützungs-, Fahrstrategie- oder Zeitberechnungen noch nicht.
 - GPX-Export enthält aktuell die bearbeitete Routengeometrie; vollständige Etappen- und Unterkunftsmetadaten bleiben im gespeicherten TourState.
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
@@ -76,12 +79,13 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 19: Intelligente Ladeplanung wurde nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe über PR #69 mit Merge-Commit `41354ac` in `private` integriert.
 - BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wurde über PR #71 mit Merge-Commit `5d8d15f` in `private` integriert; es verändert keine Produktivlogik.
 - Paket 20: Kontinuierliches Unterstützungsmodell `biketriphub-assistance-v1` wurde nach Freigabe über PR #73 mit Merge-Commit `731d8da` in `private` integriert.
-- Paket 21: Adaptive E-Bike-Fahrstrategie `biketriphub-riding-strategy-v1` wird auf `codex/adaptive-riding-strategy` als separater tourweiter Planungs-Core umgesetzt.
+- Paket 21: Adaptive E-Bike-Fahrstrategie `biketriphub-riding-strategy-v1` wurde nach Freigabe über PR #74 mit Merge-Commit `0724b3e` in `private` integriert.
+- Paket 22: Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell `biketriphub-route-condition-v1` wird auf `codex/route-elevation-surface-model` additiv umgesetzt.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Aktuelle Integrationsbasis für Paket 21:
+Aktuelle Integrationsbasis für Paket 22:
 
-- `private`: `731d8da370851febe4d40f86d838b8e55ce8a0b3` (Merge von PR #73; Basis für Paket 21)
+- `private`: `0724b3e989161d89d3575d4c8826a43650063399` (Merge von PR #74; Basis für Paket 22)
 - deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
 - bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
 - Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
@@ -142,6 +146,24 @@ Paket 21 verbindet die vorhandenen Energie-, Lade- und Unterstützungsergebnisse
 Nicht enthalten sind Telemetrie, Wetter, Wind, Live-Ladestationen, KI, Navigation oder automatische Fahrradsteuerung.
 
 Modell: [docs/E_BIKE_RIDING_STRATEGY_MODEL.md](E_BIKE_RIDING_STRATEGY_MODEL.md).
+
+## Paket 22: Höhenprofil und Streckenbeschaffenheit
+
+Paket 22 ergänzt die gemeinsame Routengrundlage als additive, reproduzierbare Analyse:
+
+- reiner Core `biketriphub-route-condition-v1`,
+- Rohhöhe und deterministisch geglättete Höhe getrennt,
+- positive und negative Höhenmeter, mittlere/maximale Steigung sowie zentrale Steigungsklassen,
+- vorhandene BRouter-`WayTags` als belegte Oberfläche und Wegtyp,
+- zentrale, versionierbare Komfort-, Geschwindigkeits- und Energiebedarfsfaktoren,
+- Datenqualität aus Quelle, Abdeckung, Punktdichte, Plausibilität, Interpolation und unbekannten Anteilen,
+- Warnungen für fehlende Höhe, Messsprünge, kurze Segmente, unbekannte Oberflächen, ungeeignete Abschnitte, Treppen und Schiebestrecken,
+- rückwärtskompatibler TourState mit Quellsegmenten, Modellversion, Fingerprint und Ergebnissnapshot,
+- responsive Tour-, Etappen-, Höhenprofil- und Segmentdetailanzeige.
+
+Energie-, Lade-, Assistance-, Fahrstrategie- und Zeitmodelle bleiben unverändert. Es gibt keine neue Live-Abfrage und keine automatische Routenänderung.
+
+Modell: [docs/ROUTE_ELEVATION_SURFACE_MODEL.md](ROUTE_ELEVATION_SURFACE_MODEL.md).
 
 ## Paket 19: Intelligente Ladeplanung
 

@@ -31,6 +31,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
+import { RouteConditionOverview, StageRouteConditionPanel } from "@/components/RouteConditionPanel";
 import { AssistanceStrategyPanel } from "@/components/AssistanceStrategyPanel";
 import { RidingStrategyTourPanel, StageRidingStrategyPanel } from "@/components/RidingStrategyPanel";
 import {
@@ -87,6 +88,13 @@ import {
   type RidingStrategyState
 } from "@/lib/ebike-riding-strategy";
 import type { CycleRouteCoverage, CycleRouteNetwork } from "@/lib/mock-routing";
+import {
+  analyzeRouteCondition,
+  analyzeRouteConditionSlice,
+  routeConditionStateSnapshot,
+  sliceRouteConditionSourceSegments,
+  type RouteConditionSourceSegment
+} from "@/lib/route-elevation-surface";
 import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import { difficultyPlanningTargets, planStagesByDifficulty, type DifficultyPlanningTarget } from "@/lib/stage-planning";
@@ -164,6 +172,8 @@ type RouteCalculation = {
   routingAttribution?: string;
   routingDataNotice?: string;
   cycleRouteCoverage?: CycleRouteCoverage;
+  routeConditionSourceSegments?: RouteConditionSourceSegment[];
+  originalRouteConditionSourceSegments?: RouteConditionSourceSegment[];
 };
 
 type SavedRoute = RouteCalculation & {
@@ -378,6 +388,8 @@ function routeWithOriginalGeometry<T extends RouteCalculation>(routeData: T): T 
     originalElevationDown: routeData.originalElevationDown ?? routeData.elevationDown,
     originalDurationHours: routeData.originalDurationHours ?? routeData.durationHours,
     originalElevationProfile: routeData.originalElevationProfile ?? routeData.elevationProfile,
+    originalRouteConditionSourceSegments:
+      routeData.originalRouteConditionSourceSegments ?? routeData.routeConditionSourceSegments ?? [],
     trimStartKmOriginal: routeData.trimStartKmOriginal ?? 0,
     trimEndKmOriginal: routeData.trimEndKmOriginal ?? originalDistanceKm
   };
@@ -591,6 +603,18 @@ export function PlannerClient({
   });
 
   const route = savedRoute ?? calculation;
+  const routeConditionAnalysis = useMemo(
+    () =>
+      route
+        ? analyzeRouteCondition({
+            geometry: route.geometryGeoJson,
+            elevationPoints: route.elevationProfile,
+            elevationSource: route.elevationSource ?? "unknown",
+            sourceSegments: route.routeConditionSourceSegments ?? []
+          })
+        : null,
+    [route]
+  );
   const waypointLimitReached = waypoints.length >= MAX_ROUTE_WAYPOINTS;
   const routeTotalKm = useMemo(() => (route ? routeDistanceKm(route.geometryGeoJson.coordinates) : 0), [route]);
   const originalRouteGeometry = route?.originalGeometryGeoJson ?? route?.geometryGeoJson ?? null;
@@ -813,6 +837,27 @@ export function PlannerClient({
       ])
     );
   }, [route, stages]);
+  const routeConditionByStageId = useMemo<Record<string, ReturnType<typeof analyzeRouteCondition>>>(() => {
+    if (!route) return {};
+    return Object.fromEntries(
+      stages.map((stage) => {
+        const bounds = stageBoundsById[stage.id] ?? { startKm: 0, endKm: stage.distanceKm };
+        return [
+          stage.id,
+          analyzeRouteConditionSlice(
+            {
+              geometry: route.geometryGeoJson,
+              elevationPoints: route.elevationProfile,
+              elevationSource: route.elevationSource ?? "unknown",
+              sourceSegments: route.routeConditionSourceSegments ?? []
+            },
+            bounds.startKm,
+            bounds.endKm
+          )
+        ];
+      })
+    );
+  }, [route, stageBoundsById, stages]);
   const chargingPoints = useMemo<ChargingPoint[]>(() => {
     if (!route) return chargingPlanning.customPoints;
     const stageIdAt = (routeKm: number) =>
@@ -1029,6 +1074,9 @@ export function PlannerClient({
           ...ridingStrategyPlanning,
           lastCalculation: ridingStrategyPlanSnapshot(ridingStrategyPlan)
         }),
+        routeCondition: routeConditionAnalysis
+          ? routeConditionStateSnapshot(routeValue.routeConditionSourceSegments ?? [], routeConditionAnalysis)
+          : undefined,
         status: statusValue,
         lastSavedAt: lastSavedAtValue,
         updatedAt: new Date().toISOString()
@@ -1041,6 +1089,7 @@ export function PlannerClient({
       lastTourSavedAt,
       pois,
       riderBikeProfile,
+      routeConditionAnalysis,
       route,
       selectedPoi?.id,
       selectedStageId,
@@ -1830,6 +1879,7 @@ export function PlannerClient({
       const geometryGeoJson = trim.geometryGeoJson;
       const distanceKm = trim.distanceKm;
       const sourceElevationProfile = route.originalElevationProfile ?? route.elevationProfile;
+      const sourceRouteConditions = route.originalRouteConditionSourceSegments ?? route.routeConditionSourceSegments ?? [];
       const actualElevation = elevationMetricsForRange(sourceElevationProfile, trim.startKm, trim.endKm);
       const slicedElevationProfile = sliceElevationProfile(sourceElevationProfile, trim.startKm, trim.endKm);
       const elevationProfile =
@@ -1868,6 +1918,8 @@ export function PlannerClient({
         originalElevationDown: route.originalElevationDown ?? route.elevationDown,
         originalDurationHours: route.originalDurationHours ?? route.durationHours,
         originalElevationProfile: route.originalElevationProfile ?? route.elevationProfile,
+        originalRouteConditionSourceSegments: sourceRouteConditions,
+        routeConditionSourceSegments: sliceRouteConditionSourceSegments(sourceRouteConditions, trim.startKm, trim.endKm),
         trimStartKmOriginal: trim.startKm,
         trimEndKmOriginal: trim.endKm,
         startLocationName: undefined,
@@ -1891,6 +1943,8 @@ export function PlannerClient({
               originalElevationDown: updatedRoute.originalElevationDown,
               originalDurationHours: updatedRoute.originalDurationHours,
               originalElevationProfile: updatedRoute.originalElevationProfile,
+              originalRouteConditionSourceSegments: updatedRoute.originalRouteConditionSourceSegments,
+              routeConditionSourceSegments: updatedRoute.routeConditionSourceSegments,
               trimStartKmOriginal: trim.startKm,
               trimEndKmOriginal: trim.endKm,
               startLocationName: undefined,
@@ -1928,6 +1982,7 @@ export function PlannerClient({
     const elevationDown = route.originalElevationDown ?? Math.round(distanceKm * 4.8);
     const durationHours = route.originalDurationHours ?? Number((distanceKm / 17).toFixed(2));
     const elevationProfile = route.originalElevationProfile ?? createElevationProfile(originalRouteGeometry.coordinates);
+    const routeConditionSourceSegments = route.originalRouteConditionSourceSegments ?? route.routeConditionSourceSegments ?? [];
     const baseDescription = descriptionWithoutTrimNotice(route.description);
     const description = baseDescription || null;
 
@@ -1961,6 +2016,8 @@ export function PlannerClient({
         originalElevationDown: elevationDown,
         originalDurationHours: durationHours,
         originalElevationProfile: elevationProfile,
+        originalRouteConditionSourceSegments: routeConditionSourceSegments,
+        routeConditionSourceSegments,
         trimStartKmOriginal: 0,
         trimEndKmOriginal: originalRouteTotalKm,
         startLocationName: undefined,
@@ -1985,6 +2042,8 @@ export function PlannerClient({
               originalElevationDown: elevationDown,
               originalDurationHours: durationHours,
               originalElevationProfile: elevationProfile,
+              originalRouteConditionSourceSegments: routeConditionSourceSegments,
+              routeConditionSourceSegments,
               trimStartKmOriginal: 0,
               trimEndKmOriginal: originalRouteTotalKm,
               startLocationName: undefined,
@@ -3238,6 +3297,7 @@ export function PlannerClient({
               stages={[]}
               waypoints={route.waypoints}
             />
+            {routeConditionAnalysis && <RouteConditionOverview analysis={routeConditionAnalysis} />}
           </div>
           <Card>
             <CardHeader>
@@ -3552,10 +3612,11 @@ export function PlannerClient({
                 onRoutePointSelect={captureRoutePointSelection}
               />
             ) : (
-              <ElevationProfile points={route?.elevationProfile ?? []} />
+              <ElevationProfile analysis={routeConditionAnalysis ?? undefined} points={route?.elevationProfile ?? []} />
             )}
             {routePointSelectionCard}
           </div>
+          {routeConditionAnalysis && <RouteConditionOverview analysis={routeConditionAnalysis} />}
           {route && (
             <div className="grid gap-2 rounded-lg border bg-white p-3 shadow-sm">
               <div className="flex flex-wrap gap-2">
@@ -4094,6 +4155,7 @@ export function PlannerClient({
                     (override) => override.stageId === stage.id
                   );
                   const stageChargingPlan = chargingPlan.stages.find((item) => item.stageId === stage.id);
+                  const stageRouteCondition = routeConditionByStageId[stage.id];
                   const stageChargingCandidates = chargingPoints.filter((point) => point.stageId === stage.id);
                   const stageChargingPointIds = new Set(stageChargingCandidates.map((point) => point.id));
                   const stageManualChargingStops = chargingPlanning.manualStops.filter((stop) =>
@@ -4340,6 +4402,9 @@ export function PlannerClient({
                               : "Für ein klassisches Fahrrad werden keine Akkuwerte abgeleitet."}
                           </p>
                         </div>
+                        {stageRouteCondition && (
+                          <StageRouteConditionPanel analysis={stageRouteCondition} dayNumber={stage.dayNumber} />
+                        )}
                         {stageRidingStrategy && (
                           <StageRidingStrategyPanel
                             override={stageRidingStrategyOverride}

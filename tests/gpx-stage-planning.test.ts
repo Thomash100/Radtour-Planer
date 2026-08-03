@@ -58,6 +58,7 @@ import {
   type ElevationPoint,
   type LineStringGeoJson
 } from "../src/lib/geo";
+import { parseGpx } from "../src/lib/gpx";
 import { calculateMockRoute, resolveMockPlace } from "../src/lib/mock-routing";
 import {
   analyzeBRouterCycleCoverage,
@@ -97,6 +98,20 @@ import {
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
 import { parseStoredTourState } from "../src/lib/tour-state";
+import {
+  ROUTE_CONDITION_MODEL_VERSION,
+  analyzeRouteCondition,
+  analyzeRouteConditionSlice,
+  classifySlope,
+  classifySurface,
+  classifyWayType,
+  normalizeRouteConditionStoredState,
+  parseBRouterConditionSegments,
+  routeConditionStateSnapshot,
+  serializeRouteConditionStoredState,
+  smoothElevationProfile,
+  type RouteConditionSourceSegment
+} from "../src/lib/route-elevation-surface";
 import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
 
 const riderBikeProfile = {
@@ -1697,8 +1712,8 @@ test("combines routed BRouter segments without replacing them by straight lines"
         "total-time": "3600",
         messages: [
           ["Distance", "WayTags"],
-          [10000, "highway=cycleway route_bicycle_rcn=yes"],
-          [8500, "highway=residential cycleway=no"]
+          [10000, "highway=cycleway surface=asphalt route_bicycle_rcn=yes"],
+          [8500, "highway=residential surface=paving_stones cycleway=no"]
         ]
       }
     ),
@@ -1714,8 +1729,8 @@ test("combines routed BRouter segments without replacing them by straight lines"
         "total-time": "72000",
         messages: [
           ["Distance", "WayTags"],
-          [205000, "highway=path bicycle=yes route_bicycle_ncn=yes"],
-          [205000, "highway=secondary cycleway=no"]
+          [205000, "highway=path surface=fine_gravel bicycle=yes route_bicycle_ncn=yes"],
+          [205000, "highway=secondary surface=asphalt cycleway=no"]
         ]
       }
     )
@@ -1747,6 +1762,10 @@ test("combines routed BRouter segments without replacing them by straight lines"
   assert.equal(route.cycleRouteCoverage?.bicycleInfrastructureDistanceKm, 10);
   assert.equal(route.cycleRouteCoverage?.signedCycleRouteDistanceKm, 215);
   assert.equal(route.cycleRouteCoverage?.networkDistanceKm.ncn, 205);
+  assert.equal(route.routeConditionSourceSegments?.length, 4);
+  assert.equal(route.routeConditionSourceSegments?.[0].surface, "asphalt");
+  assert.equal(route.routeConditionSourceSegments?.[2].surface, "fine_gravel");
+  assert.ok((route.routeConditionSourceSegments?.[3].endKm ?? 0) > 428);
 });
 
 test("marks BRouter elevation as estimated when route coordinates have no height values", async () => {
@@ -2567,4 +2586,351 @@ test("integriert die Fahrstrategie responsiv und kennzeichnet automatisch sowie 
   assert.match(source, /Neu berechnen/);
   assert.match(planner, /ridingStrategyPlanSnapshot/);
   assert.match(planner, /StageRidingStrategyPanel/);
+});
+
+const routeConditionGeometry: LineStringGeoJson = {
+  type: "LineString",
+  coordinates: [[13, 52], [13.1, 52], [13.2, 52]]
+};
+const routeConditionDistanceKm = routeDistanceKm(routeConditionGeometry.coordinates);
+
+function conditionProfile(elevations: number[]) {
+  return elevations.map((elevationM, index) => ({
+    distanceKm: (routeConditionDistanceKm / Math.max(1, elevations.length - 1)) * index,
+    elevationM
+  }));
+}
+
+function conditionSources(
+  entries: Array<{ from: number; to: number; surface?: string; highway?: string; tags?: Record<string, string> }>
+): RouteConditionSourceSegment[] {
+  return entries.map((entry, index) => ({
+    id: `condition-source-${index + 1}`,
+    startKm: routeConditionDistanceKm * entry.from,
+    endKm: routeConditionDistanceKm * entry.to,
+    surface: entry.surface,
+    wayType: entry.highway,
+    tags: { ...(entry.tags ?? {}), ...(entry.surface ? { surface: entry.surface } : {}), ...(entry.highway ? { highway: entry.highway } : {}) },
+    dataSource: "brouter"
+  }));
+}
+
+test("analysiert eine vollständig ebene Strecke deterministisch", () => {
+  const input = {
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 100, 100]),
+    elevationSource: "gpx" as const,
+    sourceSegments: conditionSources([{ from: 0, to: 1, surface: "asphalt", highway: "cycleway" }])
+  };
+  const first = analyzeRouteCondition(input);
+  const second = analyzeRouteCondition(input);
+
+  assert.deepEqual(second, first);
+  assert.equal(first.modelVersion, ROUTE_CONDITION_MODEL_VERSION);
+  assert.equal(first.elevationUpM, 0);
+  assert.equal(first.elevationDownM, 0);
+  assert.equal(first.maximumGradePercent, 0);
+  assert.ok(first.segments.every((segment) => segment.slopeClass === "nearly_flat"));
+  assert.equal(first.existingCalculationsChanged, false);
+});
+
+test("unterscheidet gleichmäßige Steigung und gleichmäßiges Gefälle", () => {
+  const climb = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 300, 500]),
+    elevationSource: "provider"
+  });
+  const descent = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([500, 300, 100]),
+    elevationSource: "provider"
+  });
+
+  assert.equal(climb.elevationUpM, 400);
+  assert.equal(climb.elevationDownM, 0);
+  assert.equal(descent.elevationUpM, 0);
+  assert.equal(descent.elevationDownM, 400);
+  assert.ok(climb.segments.every((segment) => (segment.averageGradePercent ?? 0) > 0));
+  assert.ok(descent.segments.every((segment) => (segment.averageGradePercent ?? 0) < 0));
+});
+
+test("summiert ein wechselndes Höhenprofil getrennt bergauf und bergab", () => {
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 250, 150, 350, 200]),
+    elevationSource: "gpx"
+  });
+
+  assert.ok(analysis.elevationUpM > 0);
+  assert.ok(analysis.elevationDownM > 0);
+  assert.ok(analysis.segments.some((segment) => (segment.averageGradePercent ?? 0) > 0));
+  assert.ok(analysis.segments.some((segment) => (segment.averageGradePercent ?? 0) < 0));
+});
+
+test("kennzeichnet sehr kurze Segmente ohne scheinbare Sicherheit", () => {
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 100]),
+    elevationSource: "gpx",
+    sourceSegments: [
+      { id: "tiny", startKm: 0, endKm: 0.01, surface: "asphalt", wayType: "cycleway", dataSource: "manual" },
+      { id: "rest", startKm: 0.01, endKm: routeConditionDistanceKm, surface: "asphalt", wayType: "cycleway", dataSource: "manual" }
+    ]
+  });
+
+  assert.ok(analysis.warnings.some((warning) => warning.code === "segment_too_short"));
+});
+
+test("weist fehlende und teilweise fehlende Höhendaten transparent aus", () => {
+  const missing = analyzeRouteCondition({ geometry: routeConditionGeometry, elevationPoints: [], elevationSource: "unknown" });
+  const partial = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: [
+      { distanceKm: 1, elevationM: 100 },
+      { distanceKm: routeConditionDistanceKm - 1, elevationM: 160 }
+    ],
+    elevationSource: "gpx"
+  });
+
+  assert.equal(missing.maximumGradePercent, null);
+  assert.ok(missing.warnings.some((warning) => warning.code === "elevation_missing" && warning.severity === "critical"));
+  assert.ok(partial.warnings.some((warning) => warning.code === "elevation_incomplete"));
+  assert.equal(partial.quality.metrics.interpolationRequired, true);
+  assert.equal(partial.segments[0].startElevationM, null);
+});
+
+test("glättet einen einzelnen Messfehler deterministisch und bewahrt Rohdaten", () => {
+  const raw = [
+    { distanceKm: 0, elevationM: 100 },
+    { distanceKm: 0.5, elevationM: 700 },
+    { distanceKm: 1, elevationM: 100 }
+  ];
+  const smoothed = smoothElevationProfile(raw);
+  const analysis = analyzeRouteCondition({ geometry: routeConditionGeometry, elevationPoints: raw, elevationSource: "gpx" });
+
+  assert.equal(raw[1].elevationM, 700);
+  assert.equal(smoothed[1].elevationM, 100);
+  assert.equal(analysis.rawElevationPoints[1].elevationM, 700);
+  assert.equal(analysis.smoothedElevationPoints[1].elevationM, 100);
+  assert.ok(analysis.warnings.some((warning) => warning.code === "noisy_elevation_profile"));
+});
+
+test("erkennt einen unplausiblen Höhensprung", () => {
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: [
+      { distanceKm: 0, elevationM: 100 },
+      { distanceKm: 0.01, elevationM: 600 }
+    ],
+    elevationSource: "gpx"
+  });
+
+  assert.ok(analysis.warnings.some((warning) => warning.code === "implausible_elevation_jump" && warning.severity === "critical"));
+});
+
+test("klassifiziert Asphalt, gemischte Oberflächen und unbekannte Daten", () => {
+  const asphalt = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 100]),
+    elevationSource: "provider",
+    sourceSegments: conditionSources([{ from: 0, to: 1, surface: "asphalt", highway: "cycleway" }])
+  });
+  const mixed = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 100]),
+    elevationSource: "provider",
+    sourceSegments: conditionSources([
+      { from: 0, to: 0.5, surface: "asphalt", highway: "cycleway" },
+      { from: 0.5, to: 1, surface: "gravel", highway: "track" }
+    ])
+  });
+  const unknown = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 100]),
+    elevationSource: "gpx"
+  });
+
+  assert.equal(asphalt.pavedPercent, 100);
+  assert.equal(asphalt.unknownSurfacePercent, 0);
+  assert.ok(mixed.pavedPercent > 40 && mixed.unpavedPercent > 40);
+  assert.equal(unknown.unknownSurfacePercent, 100);
+  assert.ok(unknown.warnings.some((warning) => warning.code === "surface_unknown"));
+});
+
+test("bewertet Schotter, Waldweg, Treppen und Schiebestrecke", () => {
+  assert.equal(classifySurface("gravel"), "coarse_gravel");
+  assert.equal(classifySurface("woodchips"), "forest");
+  assert.equal(classifyWayType("track", { highway: "track", landuse: "forest" }), "forest");
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 120, 140]),
+    elevationSource: "provider",
+    sourceSegments: conditionSources([
+      { from: 0, to: 0.5, surface: "gravel", highway: "track" },
+      { from: 0.5, to: 0.75, surface: "woodchips", highway: "track", tags: { landuse: "forest" } },
+      { from: 0.75, to: 1, surface: "paving_stones", highway: "steps", tags: { bicycle: "dismount" } }
+    ])
+  });
+
+  assert.ok(analysis.warnings.some((warning) => warning.code === "possibly_unsuitable"));
+  assert.ok(analysis.warnings.some((warning) => warning.code === "pushing_or_steps" && warning.severity === "critical"));
+  assert.ok(analysis.segments.some((segment) => segment.resistance.energyDemandFactor > 1.2));
+});
+
+test("verwendet zentral dokumentierte monotone Steigungsklassen", () => {
+  const grades = [-12, -3, 0, 2, 5, 9, 14];
+  assert.deepEqual(grades.map(classifySlope), [
+    "strong_descent",
+    "light_descent",
+    "nearly_flat",
+    "light_climb",
+    "medium_climb",
+    "strong_climb",
+    "very_strong_climb"
+  ]);
+});
+
+test("liest GPX-Höhenwerte und verweigert erfundene Werte ohne GPX-Höhe", () => {
+  const withElevation = parseGpx(`<?xml version="1.0"?><gpx><trk><trkseg>
+    <trkpt lat="52" lon="13"><ele>100</ele></trkpt>
+    <trkpt lat="52" lon="13.1"><ele>150</ele></trkpt>
+  </trkseg></trk></gpx>`);
+  const withoutElevation = parseGpx(`<?xml version="1.0"?><gpx><trk><trkseg>
+    <trkpt lat="52" lon="13"/><trkpt lat="52" lon="13.1"/>
+  </trkseg></trk></gpx>`);
+  const measured = analyzeRouteCondition({
+    geometry: { type: "LineString", coordinates: withElevation.coordinates },
+    elevationPoints: withElevation.elevationProfile,
+    elevationSource: "gpx"
+  });
+  const missing = analyzeRouteCondition({
+    geometry: { type: "LineString", coordinates: withoutElevation.coordinates },
+    elevationPoints: withoutElevation.elevationProfile,
+    elevationSource: "unknown"
+  });
+
+  assert.equal(withElevation.hasElevation, true);
+  assert.equal(measured.elevationUpM, 50);
+  assert.equal(withoutElevation.hasElevation, false);
+  assert.equal(missing.elevationUpM, 0);
+  assert.ok(missing.warnings.some((warning) => warning.code === "elevation_missing"));
+});
+
+test("übernimmt BRouter-WayTags als geordnete Streckenquellen", () => {
+  const sources = parseBRouterConditionSegments(
+    [
+      ["Distance", "WayTags"],
+      [4000, "highway=cycleway surface=asphalt bicycle=designated"],
+      [6000, "highway=track surface=gravel"]
+    ],
+    10
+  );
+
+  assert.equal(sources.length, 2);
+  assert.deepEqual(sources.map((source) => [source.startKm, source.endKm]), [[0, 4], [4, 10]]);
+  assert.equal(sources[0].surface, "asphalt");
+  assert.equal(sources[1].wayType, "track");
+});
+
+test("schneidet Etappenanalyse, Oberfläche und Höhenwerte gemeinsam", () => {
+  const sources = conditionSources([
+    { from: 0, to: 0.5, surface: "asphalt", highway: "cycleway" },
+    { from: 0.5, to: 1, surface: "gravel", highway: "track" }
+  ]);
+  const stage = analyzeRouteConditionSlice(
+    {
+      geometry: routeConditionGeometry,
+      elevationPoints: conditionProfile([100, 200, 300]),
+      elevationSource: "gpx",
+      sourceSegments: sources
+    },
+    routeConditionDistanceKm / 2,
+    routeConditionDistanceKm
+  );
+
+  assert.ok(stage.totalDistanceKm > routeConditionDistanceKm * 0.49);
+  assert.equal(stage.surfaceDistribution[0].classification, "coarse_gravel");
+  assert.ok(stage.elevationUpM > 0);
+});
+
+test("speichert RouteCondition versioniert und lädt alte Touren rückwärtskompatibel", () => {
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 150, 100]),
+    elevationSource: "gpx",
+    sourceSegments: conditionSources([{ from: 0, to: 1, surface: "asphalt", highway: "cycleway" }])
+  });
+  const state = routeConditionStateSnapshot(conditionSources([{ from: 0, to: 1, surface: "asphalt", highway: "cycleway" }]), analysis);
+  const serialized = serializeRouteConditionStoredState(state);
+  const repeated = serializeRouteConditionStoredState(normalizeRouteConditionStoredState(JSON.parse(serialized)));
+  const legacy = parseStoredTourState(JSON.stringify({
+    route: { geometryGeoJson: routeConditionGeometry },
+    stages: [],
+    pois: [],
+    inputMode: "gpx",
+    updatedAt: "2026-08-03T12:00:00.000Z"
+  }));
+
+  assert.equal(repeated, serialized);
+  assert.equal(JSON.parse(serialized).modelVersion, ROUTE_CONDITION_MODEL_VERSION);
+  assert.deepEqual(legacy?.routeCondition?.sourceSegments, []);
+  assert.deepEqual(legacy?.route?.routeConditionSourceSegments, []);
+});
+
+test("liefert nach JSON-Reload identische RouteCondition-Ergebnisse", () => {
+  const input = {
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 180, 130, 240]),
+    elevationSource: "gpx" as const,
+    sourceSegments: conditionSources([
+      { from: 0, to: 0.4, surface: "asphalt", highway: "cycleway" },
+      { from: 0.4, to: 1, surface: "fine_gravel", highway: "track" }
+    ])
+  };
+  const before = analyzeRouteCondition(input);
+  const after = analyzeRouteCondition(JSON.parse(JSON.stringify(input)));
+
+  assert.deepEqual(after, before);
+  assert.equal(after.inputFingerprint, before.inputFingerprint);
+});
+
+test("integriert die RouteCondition-Ansicht responsiv ohne Fachlogik in React", () => {
+  const panel = readFileSync("src/components/RouteConditionPanel.tsx", "utf8");
+  const profile = readFileSync("src/components/ElevationProfile.tsx", "utf8");
+  const planner = readFileSync("src/components/PlannerClient.tsx", "utf8");
+  const core = readFileSync("src/lib/route-elevation-surface.ts", "utf8");
+
+  assert.match(panel, /data-route-condition-overview/);
+  assert.match(panel, /data-stage-route-condition/);
+  assert.match(panel, /min-w-0/);
+  assert.match(panel, /sm:grid-cols-2/);
+  assert.match(profile, /preserveAspectRatio="none"/);
+  assert.match(profile, /w-full/);
+  assert.match(planner, /RouteConditionOverview/);
+  assert.match(planner, /StageRouteConditionPanel/);
+  assert.match(core, /existingCalculationsChanged: false/);
+  assert.doesNotMatch(panel, /Math\.random|Date\.now|fetch\(/);
+});
+
+test("verändert die additive Streckenanalyse den produktiven Energie-Core nicht", () => {
+  const energyInput: StageEnergyProjectionInput = {
+    profile: elevationComparisonProfile,
+    distanceKm: 40,
+    elevationUp: 500,
+    elevationDown: 300,
+    elevationProfile: measuredClimbProfile(40, 500),
+    elevationDataStatus: "measured"
+  };
+  const before = calculateStageEnergyProjection(energyInput);
+  const analysis = analyzeRouteCondition({
+    geometry: routeConditionGeometry,
+    elevationPoints: conditionProfile([100, 250, 180]),
+    elevationSource: "gpx",
+    sourceSegments: conditionSources([{ from: 0, to: 1, surface: "gravel", highway: "track" }])
+  });
+  const after = calculateStageEnergyProjection(energyInput);
+
+  assert.deepEqual(after, before);
+  assert.equal(analysis.existingCalculationsChanged, false);
+  assert.ok(analysis.segments.some((segment) => segment.resistance.energyDemandFactor > 1));
 });

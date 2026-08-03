@@ -399,14 +399,23 @@ Umsetzungsstand: `biketriphub-riding-strategy-v1` verbindet Energie-, Lade- und 
 
 Verbindliche Modelldokumentation: [E_BIKE_RIDING_STRATEGY_MODEL.md](E_BIKE_RIDING_STRATEGY_MODEL.md).
 
-#### Paket 22 – Telemetrie-Datenmodell
+#### Paket 22 – Höhenprofil- und Streckenbeschaffenheitsmodell
 
-Branch: `codex/telemetry-data-model`
+Branch: `codex/route-elevation-surface-model`
 
-- Roh- und Normalformat, Versionierung und Validierung,
-- Geschwindigkeit, Hoehe, Steigung, Leistung, Akku, Motor, Trittfrequenz, Temperatur und GPS,
-- Import-/Export- und Migrationstests,
-- noch keine fachliche Auswertung.
+Umsetzungsstand: `biketriphub-route-condition-v1` analysiert die vorhandene Routengrundlage additiv und verändert die produktiven Berechnungen nicht.
+
+- Roh- und geglättetes Höhenprofil mit versionierten Parametern,
+- Steigung, Gefälle, Höhengewinn und Höhenverlust je Segment,
+- vorhandene BRouter-`WayTags` als belegte Oberfläche und Wegtyp,
+- zentrale Fahrwiderstandsfaktoren ohne produktive Aktivierung,
+- Qualitätsmodell, Warnungen und Eingabe-Fingerprint,
+- rückwärtskompatibler TourState sowie responsive Tour-, Etappen- und Segmentanzeige,
+- keine neue Live-Abfrage, automatische Routenänderung oder Kopplung an Energie und Fahrzeit.
+
+Verbindliche Modelldokumentation: [ROUTE_ELEVATION_SURFACE_MODEL.md](ROUTE_ELEVATION_SURFACE_MODEL.md).
+
+Das ursprünglich im Fachkonzept unter Paket 22 vorgesehene Telemetrie-Datenmodell ist durch diesen konkret beauftragten Abschnitt nicht aufgehoben, aber auf einen späteren, separat zu nummerierenden Auftrag verschoben.
 
 ### Phase 2: Simulation
 
@@ -501,10 +510,10 @@ Branch: `codex/intelligent-tour-simulation`
 
 ```text
 INT-00 Fachkonzept
-|-- 20 Assistance-Core -----------|
-|-- 21 Bike-Profil-Import --------+--> 27 Optimierung --> 28 Varianten
-`-- 22 Telemetrie-Modell --> 23 Telemetrie-Core --> 24 Shadow --> 26 Kalibrierung
-                                      `--> 25 Feature Flags
+|-- 20 Assistance-Core --> 21 adaptive Fahrstrategie --|
+|-- 22 Höhen-/Streckenmodell --------------------------+--> spätere Optimierung und Varianten
+`-- späteres Telemetrie-Modell --> Telemetrie-Core --> Shadow --> Kalibrierung
+                                              `--> Feature Flags
 
 18 Energie-Core + 19 Lade-Core + 27/28
                  |--> 29 Etappen
@@ -521,7 +530,7 @@ Vor den jeweils genannten Paketen muessen folgende Punkte konkretisiert werden:
 
 - Paket 20: Referenzdauer fuer kurzzeitige und dauerhafte Fahrerleistung sowie zulaessiger Unterstuetzungsbereich.
 - spaeteres Fahrradprofil-Importpaket: unterstuetzte Hersteller-/App-Exportformate und Lizenzbedingungen.
-- Paket 22: konkrete Telemetrieformate und Datenschutz-/Loeschkonzept fuer Serverpersistenz.
+- späteres Telemetriepaket: konkrete Formate und Datenschutz-/Löschkonzept für Serverpersistenz.
 - Paket 26: Mindestanzahl Fahrten, Ausreisserregel und Freigabeschwellen.
 - Paket 27: Gewichtung von Reserve, Belastung und Fahrzeit; harte Grenzen haben Vorrang vor Gewichten.
 - Paket 30: belastbare Datenquelle fuer Ladepunkte, bevor Online-Daten produktiv werden.
