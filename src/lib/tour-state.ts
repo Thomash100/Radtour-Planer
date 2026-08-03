@@ -21,6 +21,10 @@ import {
   type RouteConditionSourceSegment,
   type RouteConditionStoredState
 } from "@/lib/route-elevation-surface";
+import {
+  normalizeRouteOptimizationStoredState,
+  type RouteOptimizationStoredState
+} from "@/lib/route-optimizer";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
@@ -115,6 +119,7 @@ export type StoredTourState = {
   chargingPlanning?: ChargingPlanningState;
   ridingStrategy?: RidingStrategyState;
   routeCondition?: RouteConditionStoredState;
+  routeOptimization?: RouteOptimizationStoredState;
   status?: string;
   lastSavedAt?: string | null;
   updatedAt: string;
@@ -196,6 +201,7 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
     const chargingPlanning = normalizeChargingPlanningState(parsed.chargingPlanning);
     const ridingStrategy = normalizeRidingStrategyState(parsed.ridingStrategy);
     const routeCondition = normalizeRouteConditionStoredState(parsed.routeCondition);
+    const routeOptimization = normalizeRouteOptimizationStoredState(parsed.routeOptimization);
     const routeConditionSourceSegments = normalizeRouteConditionSourceSegments(
       parsed.route.routeConditionSourceSegments ?? routeCondition.sourceSegments
     );
@@ -213,6 +219,7 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
       stageAccommodations,
       chargingPlanning,
       ridingStrategy,
+      routeOptimization,
       routeCondition: {
         ...routeCondition,
         sourceSegments: routeConditionSourceSegments

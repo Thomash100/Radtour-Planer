@@ -113,6 +113,23 @@ import {
   type RouteConditionSourceSegment
 } from "../src/lib/route-elevation-surface";
 import { autoStageSchema, routeCalculateSchema } from "../src/lib/validators";
+import {
+  DEFAULT_ROUTE_OPTIMIZATION_CONSTRAINTS,
+  DEFAULT_ROUTE_OPTIMIZATION_STATE,
+  ROUTE_OPTIMIZATION_MODEL_VERSION,
+  evaluateRouteOptimizationConstraints,
+  normalizeRouteOptimizationStoredState,
+  normalizeRouteOptimizationWeights,
+  optimizeRouteCandidates,
+  routeOptimizationObjectives,
+  routeOptimizationPresets,
+  routeOptimizationStateSnapshot,
+  serializeRouteOptimizationStoredState,
+  type RouteCandidate,
+  type RouteOptimizationConstraints,
+  type RouteOptimizationWeights
+} from "../src/lib/route-optimizer";
+import { buildRouteCandidateFromStoredTour } from "../src/lib/route-optimizer-candidate";
 
 const riderBikeProfile = {
   ...DEFAULT_RIDER_BIKE_PROFILE,
@@ -2933,4 +2950,320 @@ test("verändert die additive Streckenanalyse den produktiven Energie-Core nicht
   assert.deepEqual(after, before);
   assert.equal(analysis.existingCalculationsChanged, false);
   assert.ok(analysis.segments.some((segment) => segment.resistance.energyDemandFactor > 1));
+});
+
+function optimizerCandidate(id: string, overrides: Partial<RouteCandidate> = {}): RouteCandidate {
+  return {
+    id,
+    name: `Alternative ${id.toUpperCase()}`,
+    source: {
+      kind: "saved",
+      label: "Gespeicherte Route",
+      detail: "Unveränderte Testgeometrie",
+      existingCandidateOfflineAvailable: true,
+      newCandidateGeneration: "not_available"
+    },
+    geometry: {
+      type: "LineString",
+      coordinates: [[8 + id.length * 0.001, 50], [8.5 + id.length * 0.001, 50.3]]
+    },
+    geometryFingerprint: `geometry-${id}`,
+    distanceKm: 80,
+    travelTimeHours: 4,
+    elevationUpM: 500,
+    elevationDownM: 480,
+    maximumGradePercent: 8,
+    energyNeedWh: 420,
+    destinationBatteryPercent: 32,
+    minimumReservePercent: 24,
+    chargingStops: 1,
+    chargingTimeMinutes: 45,
+    surfaceDistribution: [],
+    asphaltPercent: 80,
+    unpavedPercent: 15,
+    unknownSurfacePercent: 5,
+    comfortScore: 75,
+    dataQualityLevel: "high",
+    dataQualityScore: 90,
+    warnings: [],
+    modelVersions: { energy: "test-energy", charging: "test-charging" },
+    ...overrides
+  };
+}
+
+function optimizerWeights(overrides: Partial<RouteOptimizationWeights> = {}): RouteOptimizationWeights {
+  return { ...routeOptimizationPresets.balanced.weights, ...overrides };
+}
+
+function optimizerConstraints(overrides: Partial<RouteOptimizationConstraints> = {}): RouteOptimizationConstraints {
+  return { ...structuredClone(DEFAULT_ROUTE_OPTIMIZATION_CONSTRAINTS), ...overrides };
+}
+
+function optimizerResult(
+  candidates: RouteCandidate[],
+  weights = optimizerWeights(),
+  constraints = optimizerConstraints()
+) {
+  return optimizeRouteCandidates({ candidates, weights, constraints, presetId: "custom", manualCandidateId: null });
+}
+
+test("bewertet ein, zwei und mehrere vorhandene Routenkandidaten ohne Geometrieänderung", () => {
+  const candidates = [
+    optimizerCandidate("a"),
+    optimizerCandidate("b", { travelTimeHours: 3.5, energyNeedWh: 460 }),
+    optimizerCandidate("c", { comfortScore: 88, asphaltPercent: 92 })
+  ];
+  const geometriesBefore = JSON.stringify(candidates.map((candidate) => candidate.geometry));
+
+  assert.equal(optimizerResult(candidates.slice(0, 1)).evaluations.length, 1);
+  assert.equal(optimizerResult(candidates.slice(0, 2)).evaluations.length, 2);
+  assert.equal(optimizerResult(candidates).evaluations.length, 3);
+  assert.equal(JSON.stringify(candidates.map((candidate) => candidate.geometry)), geometriesBefore);
+});
+
+test("liefert bei gleicher Eingabe unabhängig von Eingabereihenfolge exakt dasselbe Ergebnis", () => {
+  const candidates = [
+    optimizerCandidate("a", { travelTimeHours: 3.8 }),
+    optimizerCandidate("b", { energyNeedWh: 350 }),
+    optimizerCandidate("c", { comfortScore: 92 })
+  ];
+  const first = optimizerResult(candidates);
+  const repeated = optimizerResult(candidates);
+  const reordered = optimizerResult([candidates[2], candidates[0], candidates[1]]);
+
+  assert.deepEqual(repeated, first);
+  assert.deepEqual(reordered, first);
+  assert.equal(first.inputFingerprint, repeated.inputFingerprint);
+});
+
+test("kennzeichnet identische Kandidaten als gleichwertig und nutzt nur einen stabilen technischen Tie-Breaker", () => {
+  const left = optimizerCandidate("a");
+  const right = optimizerCandidate("b", { geometry: left.geometry, geometryFingerprint: left.geometryFingerprint });
+  const result = optimizerResult([right, left]);
+
+  assert.equal(result.recommendation.candidateId, "a");
+  assert.deepEqual(result.recommendation.equivalentCandidateIds, ["b"]);
+  assert.equal(result.recommendation.technicalTieBreak, true);
+  assert.equal(result.evaluations.filter((evaluation) => evaluation.recommended).length, 1);
+});
+
+test("prüft jede harte Grenze und mehrere gleichzeitige Verletzungen transparent", () => {
+  const candidate = optimizerCandidate("limits");
+  const violating: RouteOptimizationConstraints = {
+    minimumDestinationReservePercent: { enabled: true, value: 40 },
+    minimumAlongRouteReservePercent: { enabled: true, value: 30 },
+    maximumChargingTimeMinutes: { enabled: true, value: 30 },
+    maximumChargingStops: { enabled: true, value: 0 },
+    maximumUnknownSurfacePercent: { enabled: true, value: 4 },
+    maximumUnpavedPercent: { enabled: true, value: 10 },
+    maximumGradePercent: { enabled: true, value: 7 },
+    minimumDataQualityScore: { enabled: true, value: 95 }
+  };
+  const violations = evaluateRouteOptimizationConstraints(candidate, violating);
+
+  assert.equal(violations.length, 8);
+  assert.equal(new Set(violations.map((violation) => violation.constraint)).size, 8);
+  assert.ok(violations.every((violation) => violation.message.includes(candidate.name)));
+});
+
+test("schließt bei unbekanntem Pflichtwert aus und empfiehlt nichts, wenn alle Grenzen verletzen", () => {
+  const missing = optimizerCandidate("missing", { destinationBatteryPercent: null });
+  const low = optimizerCandidate("low", { destinationBatteryPercent: 5 });
+  const constraints = optimizerConstraints({ minimumDestinationReservePercent: { enabled: true, value: 20 } });
+  const result = optimizerResult([missing, low], optimizerWeights(), constraints);
+
+  assert.equal(result.status, "all_excluded");
+  assert.equal(result.recommendation.candidateId, null);
+  assert.ok(result.evaluations.some((evaluation) => evaluation.constraintViolations.some((violation) => violation.code === "unknown_required_value")));
+});
+
+test("normalisiert Gewichte deterministisch und weist Nullsumme sowie negative Werte ab", () => {
+  const large = normalizeRouteOptimizationWeights(optimizerWeights({ travelTime: 1_000_000, energy: 500_000 }));
+  const zero = normalizeRouteOptimizationWeights(Object.fromEntries(routeOptimizationObjectives.map((objective) => [objective, 0])) as RouteOptimizationWeights);
+  const negative = normalizeRouteOptimizationWeights(optimizerWeights({ energy: -1 }));
+
+  assert.equal(large.valid, true);
+  assert.ok(Math.abs(routeOptimizationObjectives.reduce((sum, objective) => sum + large.normalizedWeights[objective], 0) - 1) < 1e-9);
+  assert.equal(zero.valid, false);
+  assert.equal(negative.valid, false);
+});
+
+test("weist ungültige harte Grenzen vor der Bewertung ab", () => {
+  const invalid = optimizerResult(
+    [optimizerCandidate("a")],
+    optimizerWeights(),
+    optimizerConstraints({
+      maximumChargingStops: { enabled: true, value: 1.5 },
+      minimumDestinationReservePercent: { enabled: true, value: 120 }
+    })
+  );
+
+  assert.equal(invalid.status, "invalid");
+  assert.ok(invalid.validationErrors.some((message) => message.includes("ganze Zahl")));
+  assert.ok(invalid.validationErrors.some((message) => message.includes("100 Prozent")));
+});
+
+test("liefert für alle vordefinierten Strategien gültige reproduzierbare Bewertungen", () => {
+  const candidates = [optimizerCandidate("a"), optimizerCandidate("b", { travelTimeHours: 3, energyNeedWh: 520 })];
+  Object.entries(routeOptimizationPresets).forEach(([presetId, preset]) => {
+    const first = optimizeRouteCandidates({ candidates, weights: preset.weights, constraints: optimizerConstraints(), presetId: presetId as keyof typeof routeOptimizationPresets });
+    const repeated = optimizeRouteCandidates({ candidates, weights: preset.weights, constraints: optimizerConstraints(), presetId: presetId as keyof typeof routeOptimizationPresets });
+    assert.equal(first.status, "ok");
+    assert.deepEqual(repeated, first);
+  });
+});
+
+test("behandelt identische Werte, Ausreißer und fehlende Werte ohne Division durch null", () => {
+  const candidates = [
+    optimizerCandidate("a", { travelTimeHours: 4, energyNeedWh: null }),
+    optimizerCandidate("b", { travelTimeHours: 4, energyNeedWh: 400 }),
+    optimizerCandidate("c", { travelTimeHours: 4, energyNeedWh: 410 }),
+    optimizerCandidate("d", { travelTimeHours: 4, energyNeedWh: 10_000 })
+  ];
+  const result = optimizerResult(candidates);
+  const missing = result.evaluations.find((evaluation) => evaluation.candidateId === "a")!;
+
+  assert.equal(result.normalization.travelTime.method, "identical");
+  assert.ok(["median-mad-clipped", "min-max"].includes(result.normalization.energy.method));
+  assert.equal(missing.normalizedScores.energy, null);
+  assert.ok(result.evaluations.every((evaluation) => Number.isFinite(evaluation.totalScore)));
+  assert.equal(missing.paretoStatus, "not_comparable");
+  assert.ok(missing.objectiveCoverage < 1);
+});
+
+test("bildet Dominanz, Zielkonflikte und mehrere Kandidaten auf der Pareto-Front korrekt ab", () => {
+  const best = optimizerCandidate("best", { travelTimeHours: 3, energyNeedWh: 300 });
+  const dominated = optimizerCandidate("dominated", { travelTimeHours: 5, energyNeedWh: 500 });
+  const fast = optimizerCandidate("fast", { travelTimeHours: 2, energyNeedWh: 650 });
+  const efficient = optimizerCandidate("efficient", { travelTimeHours: 6, energyNeedWh: 250 });
+  const weights = Object.fromEntries(routeOptimizationObjectives.map((objective) => [objective, ["travelTime", "energy"].includes(objective) ? 1 : 0])) as RouteOptimizationWeights;
+  const result = optimizerResult([dominated, fast, efficient, best], weights);
+
+  assert.equal(result.evaluations.find((entry) => entry.candidateId === "dominated")?.paretoStatus, "dominated");
+  assert.equal(result.evaluations.find((entry) => entry.candidateId === "best")?.paretoStatus, "front");
+  assert.equal(result.evaluations.find((entry) => entry.candidateId === "fast")?.paretoStatus, "front");
+  assert.equal(result.evaluations.find((entry) => entry.candidateId === "efficient")?.paretoStatus, "front");
+  assert.ok(result.paretoRelations.some((relation) => relation.relation === "tradeoff"));
+});
+
+test("niedrige Datenqualität und unbekannte Oberflächen bleiben als eingeschränkte Empfehlung sichtbar", () => {
+  const incomplete = optimizerCandidate("incomplete", {
+    dataQualityLevel: "low",
+    dataQualityScore: 20,
+    asphaltPercent: null,
+    unpavedPercent: null,
+    unknownSurfacePercent: 100,
+    comfortScore: null,
+    warnings: ["Oberflächenquelle fehlt."]
+  });
+  const result = optimizerResult([incomplete]);
+  const evaluation = result.evaluations[0];
+
+  assert.equal(result.recommendation.limited, true);
+  assert.equal(evaluation.recommendationLimited, true);
+  assert.ok(evaluation.uncertainties.some((message) => message.includes("Oberflächen")));
+});
+
+test("speichert Vergleichszustand versioniert und liefert nach JSON-Reload dasselbe Ergebnis", () => {
+  const candidates = [optimizerCandidate("a"), optimizerCandidate("b", { energyNeedWh: 340 })];
+  const result = optimizerResult(candidates);
+  const snapshot = routeOptimizationStateSnapshot(
+    { ...DEFAULT_ROUTE_OPTIMIZATION_STATE, presetId: "custom" },
+    candidates,
+    result
+  );
+  const serialized = serializeRouteOptimizationStoredState(snapshot);
+  const restored = normalizeRouteOptimizationStoredState(JSON.parse(serialized));
+  const afterReload = optimizeRouteCandidates({
+    candidates: JSON.parse(JSON.stringify(candidates)),
+    weights: restored.weights,
+    constraints: restored.constraints,
+    presetId: restored.presetId,
+    manualCandidateId: restored.manualCandidateId
+  });
+
+  assert.equal(restored.modelVersion, ROUTE_OPTIMIZATION_MODEL_VERSION);
+  assert.deepEqual(afterReload, result);
+  assert.equal(serializeRouteOptimizationStoredState(restored), serialized);
+});
+
+test("lädt alte TourStates ohne Optimierungsdaten abwärtskompatibel", () => {
+  const legacy = parseStoredTourState(JSON.stringify({
+    inputMode: "gpx",
+    route: {
+      name: "Legacy",
+      startName: "Start",
+      endName: "Ziel",
+      profile: "balanced",
+      distanceKm: 1,
+      elevationUp: 0,
+      elevationDown: 0,
+      durationHours: 0.1,
+      geometryGeoJson: { type: "LineString", coordinates: [[8, 50], [8.01, 50.01]] },
+      elevationProfile: [],
+      waypoints: []
+    },
+    stages: [],
+    pois: [],
+    updatedAt: "2026-08-04T12:00:00.000Z"
+  }));
+
+  assert.equal(legacy?.routeOptimization?.modelVersion, ROUTE_OPTIMIZATION_MODEL_VERSION);
+  assert.equal(legacy?.routeOptimization?.presetId, "balanced");
+});
+
+test("adaptiert eine gespeicherte Tour mit echten Modellwerten ohne die Geometrie zu mutieren", () => {
+  const geometry: LineStringGeoJson = { type: "LineString", coordinates: [[8, 50], [8.3, 50.2], [8.6, 50.35]] };
+  const before = JSON.stringify(geometry);
+  const distanceKm = routeDistanceKm(geometry.coordinates);
+  const state = parseStoredTourState(JSON.stringify({
+    libraryTourId: "optimizer-test",
+    inputMode: "gpx",
+    route: {
+      name: "GPX-Alternative",
+      startName: "Start",
+      endName: "Ziel",
+      profile: "balanced",
+      distanceKm,
+      elevationUp: 400,
+      elevationDown: 300,
+      durationHours: 4,
+      geometryGeoJson: geometry,
+      elevationSource: "gpx",
+      elevationProfile: [
+        { distanceKm: 0, elevationM: 100 },
+        { distanceKm: distanceKm / 2, elevationM: 500 },
+        { distanceKm, elevationM: 200 }
+      ],
+      waypoints: []
+    },
+    stages: [],
+    pois: [],
+    riderBikeProfile,
+    updatedAt: "2026-08-04T12:00:00.000Z"
+  }))!;
+  const candidate = buildRouteCandidateFromStoredTour({ id: "tour:optimizer-test", name: "GPX-Alternative", state });
+
+  assert.ok(candidate);
+  assert.ok((candidate?.energyNeedWh ?? 0) > 0);
+  assert.equal(candidate?.source.kind, "gpx");
+  assert.equal(JSON.stringify(geometry), before);
+  assert.equal(JSON.stringify(state.route?.geometryGeoJson), before);
+});
+
+test("integriert den Routenvergleich responsiv und hält die Fachlogik aus React heraus", () => {
+  const page = readFileSync("src/app/planer/optimierung/page.tsx", "utf8");
+  const client = readFileSync("src/components/RouteOptimizerClient.tsx", "utf8");
+  const map = readFileSync("src/components/RouteMap.tsx", "utf8");
+  const library = readFileSync("src/components/TourLibraryClient.tsx", "utf8");
+  const core = readFileSync("src/lib/route-optimizer.ts", "utf8");
+
+  assert.match(page, /RouteOptimizerClient/);
+  assert.match(client, /sm:grid-cols-2/);
+  assert.match(client, /xl:grid-cols/);
+  assert.match(client, /overflow-x-auto/);
+  assert.match(client, /vollständig offline bewertbar/);
+  assert.match(map, /comparison-routes/);
+  assert.match(library, /\/planer\/optimierung/);
+  assert.doesNotMatch(core, /React|fetch\(|Math\.random|Date\.now/);
 });

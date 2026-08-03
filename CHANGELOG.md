@@ -1,5 +1,18 @@
 # Changelog
 
+## Paket 23 - 2026-08-04
+
+- separaten, reinen Mehrziel-Core `biketriphub-route-optimizer-v1` und Pareto-Vertrag `biketriphub-route-optimizer-pareto-v1` ergänzt
+- ausschließlich vorhandene GPX-, BRouter- und gespeicherte Routengeometrien als unveränderte Kandidaten angebunden
+- harte Grenzen für Reserve, Laden, Steigung, Oberfläche und Datenqualität vor der Empfehlung eingeführt
+- deterministische Gewichtsnormierung, robuste Ausreißerbehandlung, Pareto-Front, Gleichwertigkeit und stabile Tie-Breaker umgesetzt
+- fehlende Werte ohne Schätzung behandelt und gewichtete Zielabdeckung sowie eingeschränkte Empfehlungen transparent ausgewiesen
+- responsive Übersicht, Detailvergleich und gemeinsame Kartenumschaltung unter `/planer/optimierung` ergänzt
+- TourState rückwärtskompatibel um versionierte Vergleichseinstellungen und Kandidatenreferenzen erweitert
+- 145 automatisierte Tests einschließlich Paket-23-Regressionen erfolgreich ausgeführt
+- vorhandene Energie-, Lade-, Assistance-, Fahrstrategie-, Strecken- und Geometrie-Logik bewusst unverändert gelassen
+- kein Router, keine Live-Daten, KI, automatische Routenübernahme, kein Tag und kein Release eingeführt
+
 ## Paket 22 - 2026-08-03
 
 - PR #74 nach ausdrücklicher Freigabe mit Merge-Commit `0724b3e` nach `private` integriert

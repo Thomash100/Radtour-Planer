@@ -95,6 +95,11 @@ import {
   sliceRouteConditionSourceSegments,
   type RouteConditionSourceSegment
 } from "@/lib/route-elevation-surface";
+import {
+  DEFAULT_ROUTE_OPTIMIZATION_STATE,
+  normalizeRouteOptimizationStoredState,
+  type RouteOptimizationStoredState
+} from "@/lib/route-optimizer";
 import { MAX_ROUTE_WAYPOINTS, routeWaypointLimitMessage } from "@/lib/routing-limits";
 import { calculateStageDifficulty, stageDifficultyLabel, type StageDifficultyLevel } from "@/lib/stage-difficulty";
 import { difficultyPlanningTargets, planStagesByDifficulty, type DifficultyPlanningTarget } from "@/lib/stage-planning";
@@ -564,6 +569,9 @@ export function PlannerClient({
     ...EMPTY_RIDING_STRATEGY_STATE,
     stageOverrides: []
   });
+  const [routeOptimization, setRouteOptimization] = useState<RouteOptimizationStoredState>(
+    DEFAULT_ROUTE_OPTIMIZATION_STATE
+  );
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
@@ -1074,6 +1082,7 @@ export function PlannerClient({
           ...ridingStrategyPlanning,
           lastCalculation: ridingStrategyPlanSnapshot(ridingStrategyPlan)
         }),
+        routeOptimization,
         routeCondition: routeConditionAnalysis
           ? routeConditionStateSnapshot(routeValue.routeConditionSourceSegments ?? [], routeConditionAnalysis)
           : undefined,
@@ -1097,6 +1106,7 @@ export function PlannerClient({
       chargingPlanning,
       ridingStrategyPlan,
       ridingStrategyPlanning,
+      routeOptimization,
       stageBreakpoints,
       stageGenerationMode,
       stages,
@@ -1248,6 +1258,7 @@ export function PlannerClient({
         ...EMPTY_RIDING_STRATEGY_STATE,
         stageOverrides: []
       });
+      setRouteOptimization(normalizeRouteOptimizationStoredState(stored.routeOptimization));
       setLastTourSavedAt(stored.lastSavedAt ?? null);
       setPlannerStep(
         resolvePlannerStep({

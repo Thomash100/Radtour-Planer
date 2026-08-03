@@ -386,6 +386,35 @@ Nicht ausgelöst werden dürfen:
 - automatische Route-, Etappen- oder Profiländerung,
 - Rekuperation, Wetter, Bodenfeuchte oder Verkehrsmodellierung.
 
+## Paket 23
+
+Deterministische Mehrzielbewertung vorhandener Routenalternativen prüfen:
+
+- ein, zwei und mehrere vorhandene Kandidaten werden ohne Geometrieänderung bewertet,
+- identische Eingaben und eine andere Eingabereihenfolge liefern dasselbe Ergebnis und denselben Fingerprint,
+- fachlich identische Kandidaten bleiben gleichwertig; nur ein stabiler technischer Tie-Breaker bestimmt die Anzeige,
+- jede harte Grenze einzeln sowie mehrere gleichzeitige Verletzungen schließen nachvollziehbar aus,
+- bei fehlendem Pflichtwert wird nicht geschätzt; die fehlende Prüfbarkeit wird genannt,
+- wenn alle Kandidaten ausgeschlossen sind, erscheint keine Empfehlung,
+- alle Presets und benutzerdefinierte Gewichte werden korrekt normiert,
+- Nullsumme, negative und ungültige Gewichte werden abgewiesen,
+- identische Werte, Ausreißer und fehlende Werte erzeugen keine Division durch null,
+- Dominanz, Zielkonflikt, mehrere Pareto-Kandidaten und unvollständige Vergleichbarkeit werden getrennt ausgewiesen,
+- geringe Datenqualität und unbekannte Oberflächen begrenzen sichtbar die Empfehlung,
+- Save/Load und JSON-Reload erhalten Einstellungen, Fingerprint und Bewertung,
+- alte TourStates ohne Optimierungsfeld laden mit der ausgewogenen Standardkonfiguration,
+- gemeinsame Karte kann vorhandene Kandidaten ein- und ausblenden,
+- Übersicht und Detailvergleich sind bei 390, 768 und 1280 px ohne horizontalen Seiten-Overflow bedienbar,
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+
+Nicht ausgelöst werden dürfen:
+
+- Erzeugung oder Änderung einer Routen- oder Etappengeometrie,
+- Änderung von Energie-, Lade-, Assistance-, Fahrstrategie- oder Strecken-Core,
+- Router-, Overpass-, Nominatim-, Wetter-, Verkehrs- oder andere Live-Abfragen,
+- erfundene Landschafts-, Verkehrs- oder Oberflächenwerte,
+- automatische Übernahme einer Empfehlung.
+
 ## BikeTripHub Intelligence INT-00
 
 Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüfen:

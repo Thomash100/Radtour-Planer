@@ -78,8 +78,16 @@ export type MapWaypoint = {
   lon: number;
 };
 
+export type MapComparisonRoute = {
+  id: string;
+  name: string;
+  geometryGeoJson: LineStringGeoJson;
+  color: string;
+};
+
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
+  comparisonRoutes?: MapComparisonRoute[];
   accommodationDetours?: LineStringGeoJson[];
   pois?: MapPoi[];
   stages?: Stage[];
@@ -114,6 +122,7 @@ const emptyStages: Stage[] = [];
 const emptyStageBreakpoints: Array<{ name: string; distanceKm: number }> = [];
 const emptyWaypoints: MapWaypoint[] = [];
 const emptyAccommodationDetours: LineStringGeoJson[] = [];
+const emptyComparisonRoutes: MapComparisonRoute[] = [];
 const maxFitJumpKm = 120;
 const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
@@ -388,6 +397,22 @@ function routeFeature(line: LineStringGeoJson) {
   };
 }
 
+function comparisonRouteFeatureCollection(routes: MapComparisonRoute[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: routes.flatMap((route) => {
+      const line = validateRoute(route.geometryGeoJson).line;
+      return line
+        ? [{
+            type: "Feature" as const,
+            properties: { id: route.id, name: route.name, color: route.color },
+            geometry: line
+          }]
+        : [];
+    })
+  };
+}
+
 function stageKey(stage: Stage) {
   return stage.id ?? `day-${stage.dayNumber}`;
 }
@@ -557,6 +582,8 @@ function enforceRouteLayerOrder(map: maplibregl.Map) {
   [
     "route-shadow",
     "route-line",
+    "comparison-routes-casing",
+    "comparison-routes",
     "stage-lines-casing",
     "stage-lines",
     "accommodation-detours",
@@ -581,6 +608,8 @@ function routeLayerDebug(map: maplibregl.Map) {
   const orderedLayerIds = [
     "route-shadow",
     "route-line",
+    "comparison-routes-casing",
+    "comparison-routes",
     "stage-lines-casing",
     "stage-lines",
     "accommodation-detours",
@@ -643,6 +672,13 @@ function ensureRouteLayers(map: maplibregl.Map) {
     });
   }
 
+  if (!map.getSource("comparison-routes")) {
+    map.addSource("comparison-routes", {
+      type: "geojson",
+      data: emptyFeatureCollection()
+    });
+  }
+
   if (!map.getSource("accommodation-detours")) {
     map.addSource("accommodation-detours", {
       type: "geojson",
@@ -677,6 +713,26 @@ function ensureRouteLayers(map: maplibregl.Map) {
         "line-opacity": 0.28,
         "line-width": 3
       }
+    });
+  }
+
+  if (!map.getLayer("comparison-routes-casing")) {
+    map.addLayer({
+      id: "comparison-routes-casing",
+      type: "line",
+      source: "comparison-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-opacity": 0.88, "line-width": 8 }
+    });
+  }
+
+  if (!map.getLayer("comparison-routes")) {
+    map.addLayer({
+      id: "comparison-routes",
+      type: "line",
+      source: "comparison-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": ["get", "color"], "line-opacity": 0.86, "line-width": 5 }
     });
   }
 
@@ -868,6 +924,7 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
 
 export function RouteMap({
   route,
+  comparisonRoutes = emptyComparisonRoutes,
   accommodationDetours = emptyAccommodationDetours,
   pois = emptyPois,
   stages = emptyStages,
@@ -1204,6 +1261,17 @@ export function RouteMap({
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map) return;
+    const update = () => {
+      const source = map.getSource("comparison-routes") as GeoJSONSource | undefined;
+      source?.setData(comparisonRouteFeatureCollection(comparisonRoutes));
+      updateLayerDebug(map);
+    };
+    return runWhenMapReady(map, update);
+  }, [comparisonRoutes, updateLayerDebug]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     if (!map) {
       return;
     }
@@ -1460,6 +1528,7 @@ export function RouteMap({
       )}
       <div
         data-stage-layer-features={stageLayerFeatureCount}
+        data-comparison-route-features={comparisonRoutes.length}
         data-route-layer-order={layerDebug.order}
         data-route-line-width={layerDebug.routeWidth}
         data-route-line-opacity={layerDebug.routeOpacity}

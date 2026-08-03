@@ -1,5 +1,7 @@
 # Vertrags- und Schemaentwurf BikeTripHub Intelligence
 
+Paket 23 konkretisiert den Optimierungsvertrag mit `biketriphub-route-optimizer-v1`, Pareto-Vertrag `biketriphub-route-optimizer-pareto-v1` und TourState-Schema Version `1`. Bewertet werden ausschließlich vorhandene, unveränderte Routengeometrien. Details: [MULTI_CRITERIA_ROUTE_OPTIMIZER.md](MULTI_CRITERIA_ROUTE_OPTIMIZER.md).
+
 Paket 22 ergänzt den gemeinsamen Routenvertrag durch `biketriphub-route-condition-v1`. Höhenprofil, Oberfläche, Wegtyp, Qualität und Warnungen werden als additive Analyse bereitgestellt; produktive Energie-, Lade-, Unterstützungs-, Fahrstrategie- und Zeitmodelle bleiben unverändert. Details: [ROUTE_ELEVATION_SURFACE_MODEL.md](ROUTE_ELEVATION_SURFACE_MODEL.md).
 
 Paket 21 konkretisiert den Optimierungsvertrag durch `biketriphub-riding-strategy-v1`. Der versionierte TourState speichert Modus, Etappen-Overrides, Eingabe-Fingerprint und einen nachvollziehbaren Ergebnissnapshot; die Fachberechnung bleibt im reinen Core `src/lib/ebike-riding-strategy.ts`.
@@ -23,6 +25,40 @@ Jedes spaetere Paket darf den fuer seinen Umfang benoetigten Teil konkretisieren
 - Alte Daten werden beim Lesen migriert. Das Schreiben verwendet nur die aktuelle Version.
 - Unbekannte Hauptversionen werden mit einer verstaendlichen Meldung abgelehnt.
 - IDs sind stabile Strings und werden nicht aus lokalisierten Anzeigenamen erzeugt.
+
+### Konkretisierter Routenoptimierungsvertrag
+
+```ts
+type RouteOptimizationInputV1 = {
+  candidates: RouteCandidate[];
+  weights: Record<RouteOptimizationObjective, number>;
+  constraints: RouteOptimizationConstraints;
+  presetId: RouteOptimizationPresetId;
+  manualCandidateId?: string | null;
+};
+
+type RouteOptimizationResultV1 = {
+  modelVersion: "biketriphub-route-optimizer-v1";
+  paretoModelVersion: "biketriphub-route-optimizer-pareto-v1";
+  inputFingerprint: string;
+  status: "ok" | "invalid" | "all_excluded" | "empty";
+  normalizedWeights: Record<RouteOptimizationObjective, number>;
+  evaluations: RouteCandidateEvaluation[];
+  paretoRelations: ParetoRelation[];
+  recommendation: RouteRecommendation;
+};
+```
+
+Verbindliche Invarianten:
+
+- Kandidaten-IDs sind je Vergleich eindeutig.
+- Die Geometrie enthält mindestens zwei WGS84-Positionen und wird nie mutiert.
+- Gewichte sind endlich, nichtnegativ und besitzen eine Summe größer null.
+- Aktive harte Grenzen werden vor der Empfehlung geprüft.
+- Unbekannte Pflichtwerte führen nicht zu einer stillen Schätzung.
+- Fehlende Zielwerte tragen `0` zum Score bei und reduzieren die ausgewiesene Abdeckung.
+- Fachlich gleiche Kandidaten bleiben gleichwertig; eine ID-Reihenfolge ist nur technischer Tie-Breaker.
+- Das Lesen alter TourStates erzeugt den versionierten Standardzustand.
 
 ## 3. Einheiten und Basistypen
 

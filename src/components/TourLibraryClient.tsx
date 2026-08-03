@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, Download, FileJson, FolderOpen, Trash2, Upload } from "lucide-react";
+import { Copy, Download, FileJson, FolderOpen, Scale, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -165,6 +165,12 @@ export function TourLibraryClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/planer/optimierung">
+              <Scale className="h-4 w-4" />
+              Routen vergleichen
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/planer/route?open=last">
               <FolderOpen className="h-4 w-4" />

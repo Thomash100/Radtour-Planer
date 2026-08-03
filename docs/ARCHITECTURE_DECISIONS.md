@@ -200,3 +200,23 @@ Konsequenz:
 - Rohhöhe und geglättete Auswertung werden getrennt gespeichert.
 - Neue produktive Faktoren benötigen eine neue Modellversion, Vergleichstests, eigenen Auftrag und ausdrückliche Freigabe.
 - BRouter-`WayTags` werden nur aus dem vorhandenen Routing-Ergebnis übernommen; Paket 22 führt keine neue Live-Abfrage ein.
+
+## ADR-014: Routenalternativen ausschließlich deterministisch bewerten
+
+Entscheidung: Paket 23 bewertet nur bereits vorhandene, unveränderte Routengeometrien in einem separaten reinen Core. Harte Grenzen werden vor gewichteten Zielen geprüft. Normalisierung, Pareto-Front, Erklärungen und stabile Tie-Breaker sind versionierte Bestandteile des Modells.
+
+Begründung:
+
+- Die geprüften Energie-, Lade-, Assistance-, Fahrstrategie- und Streckenmodelle sollen gemeinsam genutzt, aber nicht dupliziert oder verändert werden.
+- Eine Empfehlung muss bei identischen Eingaben reproduzierbar und fachlich erklärbar sein.
+- Score, Datenqualität und fehlende Werte dürfen nicht mit der eigentlichen Routenerzeugung vermischt werden.
+- Bereits gespeicherte GPX- und BRouter-Routen sollen ohne Netzwerk vergleichbar bleiben.
+
+Konsequenz:
+
+- Der Optimizer hat keine Abhängigkeit von UI, Browser-Speicher, Datenbank, Netzwerk, Systemzeit oder Zufall.
+- Eine aktive harte Grenze mit unbekanntem Pflichtwert führt sichtbar zum Ausschluss.
+- Fehlende Zielwerte erhalten keinen Bonus; die gewichtete Zielabdeckung begrenzt die Aussagekraft der Empfehlung.
+- Fachlich gleichwertige Alternativen bleiben als gleichwertig markiert; die Kandidaten-ID dient nur als technischer Tie-Breaker.
+- Paket 23 ruft keinen Router auf und verändert weder Routen- noch Etappengeometrien.
+- Neue produktive Zielgrößen oder eine automatische Routenübernahme benötigen einen eigenen Auftrag, Modellversion, Regressionstests und ausdrückliche Freigabe.
