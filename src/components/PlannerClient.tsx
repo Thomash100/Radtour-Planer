@@ -31,6 +31,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
+import { AssistanceStrategyPanel } from "@/components/AssistanceStrategyPanel";
 import {
   ChargingTourOverview,
   StageChargingPanel,
@@ -63,6 +64,11 @@ import {
 import { replaceRouteAfterSuccessfulCalculation } from "@/lib/direct-route-replacement";
 import { normalizeDirectRouteInput } from "@/lib/direct-route-input";
 import { calculateStageEnergyProjection } from "@/lib/ebike-energy";
+import {
+  assistanceStrategyFromProfile,
+  calculateStageAssistancePlan,
+  type StageAssistancePlan
+} from "@/lib/ebike-assistance";
 import {
   CHARGING_PLANNING_STATE_VERSION,
   EMPTY_CHARGING_PLANNING_STATE,
@@ -893,6 +899,33 @@ export function PlannerClient({
       }),
     [chargingPlanning.manualStops, chargingPoints, chargingSegments, riderBikeProfile]
   );
+  const assistancePlansByStageId = useMemo(() => {
+    if (!route) return {} as Record<string, StageAssistancePlan>;
+    return Object.fromEntries(
+      stages.map((stage) => {
+        const bounds = stageBoundsById[stage.id] ?? { startKm: 0, endKm: stage.distanceKm };
+        const elevationProfile = sliceElevationProfile(route.elevationProfile, bounds.startKm, bounds.endKm);
+        return [
+          stage.id,
+          calculateStageAssistancePlan({
+            profile: riderBikeProfile,
+            distanceKm: stage.distanceKm,
+            elevationProfile,
+            elevationDataStatus:
+              route.elevationSource === "estimated" || route.routingProvider === "mock"
+                ? "estimated"
+                : elevationProfile.length >= 2
+                  ? "measured"
+                  : "missing",
+            strategy: assistanceStrategyFromProfile(riderBikeProfile),
+            startingBatteryCapacityPercent: 100,
+            remainingDistanceKm: stage.distanceKm,
+            remainingElevationUpM: stage.elevationUp
+          })
+        ];
+      })
+    ) as Record<string, StageAssistancePlan>;
+  }, [riderBikeProfile, route, stageBoundsById, stages]);
 
   const buildStoredTourState = useCallback(
     ({
@@ -3949,6 +3982,7 @@ export function PlannerClient({
                           ? "measured"
                           : "missing"
                   });
+                  const stageAssistancePlan = assistancePlansByStageId[stage.id];
                   const stageChargingPlan = chargingPlan.stages.find((item) => item.stageId === stage.id);
                   const stageChargingCandidates = chargingPoints.filter((point) => point.stageId === stage.id);
                   const stageChargingPointIds = new Set(stageChargingCandidates.map((point) => point.id));
@@ -4196,6 +4230,7 @@ export function PlannerClient({
                               : "Für ein klassisches Fahrrad werden keine Akkuwerte abgeleitet."}
                           </p>
                         </div>
+                        {stageAssistancePlan && <AssistanceStrategyPanel plan={stageAssistancePlan} />}
                         {riderBikeProfile.bike.type === "ebike" && (
                           <StageChargingPanel
                             allPoints={chargingPoints}

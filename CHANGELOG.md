@@ -1,5 +1,17 @@
 # Changelog
 
+## Paket 20 - 2026-08-03
+
+- deterministischen Assistance-Core `biketriphub-assistance-v1` als separates Modul ergänzt
+- Höhenprofil stabil segmentiert und mittlere sowie maximale Steigung kontinuierlich ausgewertet
+- kurze Rampen, mittlere und lange zusammenhängende Anstiege unterschieden
+- Fahrerleistung, Gesamtgewicht, Zieltempo, Motorgrenze, Reststrecke und Zielreserve berücksichtigt
+- Strategien energiesparend, ausgewogen, komfortabel, schnell und benutzerdefiniert im Core unterstützt
+- Motoranteil als Unsicherheitsbereich und generische beziehungsweise belegte Fahrradmodi mit Quelle und Qualität ausgegeben
+- erwartete Abschnittsenergie ausschließlich über den unveränderten produktiven Energie-Core berechnet
+- experimentelle, responsive Etappenanzeige mit Akku, Energie, Begründungen und Warnungen ergänzt
+- keine Telemetrie, Kalibrierung, Fahrradsteuerung oder automatische Touränderung eingeführt
+
 ## BikeTripHub Intelligence INT-00 - 2026-08-03
 
 - PR #69 nach bestätigter Wiederholungsprüfung und ausdrücklicher Freigabe mit Merge-Commit `41354ac` nach `private` integriert

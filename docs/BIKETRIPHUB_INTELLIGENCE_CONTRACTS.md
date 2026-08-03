@@ -205,6 +205,8 @@ Verbindliche Regeln:
 
 ## 7. Unterstuetzungsempfehlung
 
+Paket 20 konkretisiert diesen Zielvertrag mit Modellversion `biketriphub-assistance-v1`. Die aktuelle Implementierung liefert je Etappenabschnitt Motoranteil als Bereich, Modus mit Quelle und Qualitaet, Zieltempo, Dauer, erwartete Energie, fortgeschriebenen Etappenakku, Begruendung und Warnungen. Sie persistiert kein paralleles Ergebnis und veraendert den produktiven Energie-Core nicht.
+
 ```ts
 type AssistanceRecommendationV1 = {
   model: ModelIdentity;

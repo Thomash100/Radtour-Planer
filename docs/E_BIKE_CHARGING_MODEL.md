@@ -1,5 +1,11 @@
 # E-Bike-Ladeplanungsmodell
 
+## Abgrenzung zu Paket 20
+
+Die experimentelle Unterstützungsstrategie verändert `biketriphub-charging-v1` nicht. Paket 20 schreibt den Akku nur innerhalb einer isolierten Etappensimulation fort und berücksichtigt keine Ladehalte. Akku-Fortschreibung über die gesamte Tour, erreichbare Ladepunkte, Ziel-Ladung und Ladezeit bleiben ausschließlich Aufgabe dieses produktiven Lade-Cores.
+
+Modell und Annahmen: [E_BIKE_ASSISTANCE_MODEL.md](E_BIKE_ASSISTANCE_MODEL.md).
+
 ## Zweck und Modellversion
 
 Paket 19 ergänzt den korrigierten Energie-Rechenkern aus Paket 18 um eine getrennte, deterministische Ladeplanung. Das

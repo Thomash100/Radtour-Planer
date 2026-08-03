@@ -25,6 +25,14 @@ import {
   type StageEnergyProjectionInput
 } from "../src/lib/ebike-energy";
 import {
+  EBIKE_ASSISTANCE_MODEL_VERSION,
+  assistanceGradeBandFor,
+  assistanceStrategyFromProfile,
+  calculateStageAssistancePlan,
+  type AssistanceModeDefinition,
+  type StageAssistancePlanInput
+} from "../src/lib/ebike-assistance";
+import {
   buildTourChargingSegments,
   calculateChargingPlan,
   normalizeChargingPlanningState,
@@ -149,6 +157,29 @@ const measuredClimbProfile = (distanceKm: number, elevationGainM: number) =>
       elevationM: 100 + (elevationGainM * pointDistanceKm) / distanceKm
     };
   }).filter((point, index, points) => index === 0 || point.distanceKm > points[index - 1].distanceKm);
+
+const constantGradeProfile = (distanceKm: number, gradePercent: number, stepKm = 0.25) =>
+  Array.from({ length: Math.ceil(distanceKm / stepKm) + 1 }, (_, index) => {
+    const pointDistanceKm = Math.min(index * stepKm, distanceKm);
+    return {
+      distanceKm: pointDistanceKm,
+      elevationM: 100 + pointDistanceKm * 10 * gradePercent
+    };
+  }).filter((point, index, points) => index === 0 || point.distanceKm > points[index - 1].distanceKm);
+
+function assistancePlan(overrides: Partial<StageAssistancePlanInput> = {}) {
+  return calculateStageAssistancePlan({
+    profile: riderBikeProfile,
+    distanceKm: 12,
+    elevationProfile: constantGradeProfile(12, 4),
+    elevationDataStatus: "measured",
+    strategy: "balanced",
+    startingBatteryCapacityPercent: 100,
+    remainingDistanceKm: 12,
+    remainingElevationUpM: 480,
+    ...overrides
+  });
+}
 
 function energyProjection(
   overrides: Partial<StageEnergyProjectionInput> = {}
@@ -1981,4 +2012,253 @@ test("validates and restores the selected difficulty planning mode", () => {
 
   assert.equal(stored?.stageGenerationMode, "difficulty");
   assert.equal(stored?.difficultyTarget, "hard");
+});
+
+test("gliedert Steigungen nur für die Anzeige in die vereinbarten Klassen", () => {
+  assert.equal(assistanceGradeBandFor(-6), "significant_descent");
+  assert.equal(assistanceGradeBandFor(-2), "light_descent");
+  assert.equal(assistanceGradeBandFor(0), "nearly_flat");
+  assert.equal(assistanceGradeBandFor(1), "climb_0_5_2");
+  assert.equal(assistanceGradeBandFor(3), "climb_2_4");
+  assert.equal(assistanceGradeBandFor(5), "climb_4_6");
+  assert.equal(assistanceGradeBandFor(7), "climb_6_8");
+  assert.equal(assistanceGradeBandFor(9), "climb_8_10");
+  assert.equal(assistanceGradeBandFor(11), "climb_10_12");
+  assert.equal(assistanceGradeBandFor(13), "climb_12_15");
+  assert.equal(assistanceGradeBandFor(16), "climb_over_15");
+});
+
+test("berechnet die kontinuierliche Unterstützungsstrategie deterministisch", () => {
+  const first = assistancePlan();
+  const second = assistancePlan();
+
+  assert.deepEqual(first, second);
+  assert.equal(first.modelVersion, EBIKE_ASSISTANCE_MODEL_VERSION);
+  assert.equal(first.bicycleMode, "ebike");
+  assert.ok(first.sections.length > 0);
+  assert.ok(first.totalExpectedBatteryEnergyWh && first.totalExpectedBatteryEnergyWh > 0);
+  assert.equal(first.assumptions.productEnergyModelUnchanged, true);
+  assert.equal(first.assumptions.chargingStopsIncluded, false);
+  assert.equal(first.sections[0].recommendedMode.source, "generic");
+  assert.ok(
+    first.sections[0].recommendedMotorAssistancePercent.minimum <=
+      first.sections[0].recommendedMotorAssistancePercent.maximum
+  );
+});
+
+test("springt die Berechnung nicht an den sichtbaren Steigungsgrenzen", () => {
+  const below = assistancePlan({
+    distanceKm: 4,
+    elevationProfile: constantGradeProfile(4, 3.99),
+    remainingDistanceKm: 4,
+    remainingElevationUpM: 159.6
+  });
+  const above = assistancePlan({
+    distanceKm: 4,
+    elevationProfile: constantGradeProfile(4, 4.01),
+    remainingDistanceKm: 4,
+    remainingElevationUpM: 160.4
+  });
+
+  assert.equal(below.sections[0].gradeBand, "climb_2_4");
+  assert.equal(above.sections[0].gradeBand, "climb_4_6");
+  assert.ok(
+    Math.abs(below.sections[0].recommendedMotorRatio - above.sections[0].recommendedMotorRatio) < 0.03
+  );
+});
+
+test("erhöht die empfohlene Unterstützung kontinuierlich mit Steigung und Gewicht", () => {
+  const gentle = assistancePlan({
+    distanceKm: 3,
+    elevationProfile: constantGradeProfile(3, 2),
+    remainingDistanceKm: 3,
+    remainingElevationUpM: 60
+  });
+  const medium = assistancePlan({
+    distanceKm: 3,
+    elevationProfile: constantGradeProfile(3, 6),
+    remainingDistanceKm: 3,
+    remainingElevationUpM: 180
+  });
+  const steep = assistancePlan({
+    distanceKm: 3,
+    elevationProfile: constantGradeProfile(3, 10),
+    remainingDistanceKm: 3,
+    remainingElevationUpM: 300
+  });
+  const heavierProfile: RiderBikeProfile = {
+    ...riderBikeProfile,
+    rider: { ...riderBikeProfile.rider, bodyWeightKg: riderBikeProfile.rider.bodyWeightKg + 35 }
+  };
+  const heavier = assistancePlan({
+    profile: heavierProfile,
+    distanceKm: 3,
+    elevationProfile: constantGradeProfile(3, 6),
+    remainingDistanceKm: 3,
+    remainingElevationUpM: 180
+  });
+
+  assert.ok(gentle.sections[0].recommendedMotorRatio < medium.sections[0].recommendedMotorRatio);
+  assert.ok(medium.sections[0].recommendedMotorRatio < steep.sections[0].recommendedMotorRatio);
+  assert.ok(heavier.sections[0].recommendedMotorRatio > medium.sections[0].recommendedMotorRatio);
+});
+
+test("unterscheidet kurze Rampen, mittlere und lange zusammenhängende Anstiege", () => {
+  const short = assistancePlan({
+    distanceKm: 0.3,
+    elevationProfile: constantGradeProfile(0.3, 6, 0.1),
+    remainingDistanceKm: 0.3,
+    remainingElevationUpM: 18
+  });
+  const medium = assistancePlan({
+    distanceKm: 1.5,
+    elevationProfile: constantGradeProfile(1.5, 6),
+    remainingDistanceKm: 1.5,
+    remainingElevationUpM: 90
+  });
+  const long = assistancePlan({
+    distanceKm: 5,
+    elevationProfile: constantGradeProfile(5, 6),
+    remainingDistanceKm: 5,
+    remainingElevationUpM: 300
+  });
+
+  assert.equal(short.sections[0].climbDuration, "short");
+  assert.equal(medium.sections[0].climbDuration, "medium");
+  assert.equal(long.sections[0].climbDuration, "long");
+  assert.ok(short.sections[0].continuousClimbDurationMinutes < medium.sections[0].continuousClimbDurationMinutes);
+  assert.ok(medium.sections[0].continuousClimbDurationMinutes < long.sections[0].continuousClimbDurationMinutes);
+});
+
+test("berücksichtigt Strategie und Reserve ohne automatische Touränderung", () => {
+  const economical = assistancePlan({ strategy: "energy_saving" });
+  const comfort = assistancePlan({ strategy: "comfort" });
+  const fullBattery = assistancePlan({
+    distanceKm: 20,
+    elevationProfile: constantGradeProfile(20, 0),
+    remainingDistanceKm: 20,
+    remainingElevationUpM: 0,
+    startingBatteryCapacityPercent: 100
+  });
+  const lowBattery = assistancePlan({
+    distanceKm: 20,
+    elevationProfile: constantGradeProfile(20, 0),
+    remainingDistanceKm: 20,
+    remainingElevationUpM: 0,
+    startingBatteryCapacityPercent: 40
+  });
+
+  assert.equal(assistanceStrategyFromProfile(riderBikeProfile), "energy_saving");
+  assert.ok(
+    economical.sections[0].recommendedMotorRatio < comfort.sections[0].recommendedMotorRatio
+  );
+  assert.ok(lowBattery.sections[0].targetSpeedKmh < fullBattery.sections[0].targetSpeedKmh);
+  assert.equal(lowBattery.assumptions.productEnergyModelUnchanged, true);
+});
+
+test("ordnet belegte Fahrradmodi zu und weist unvollständige benutzerdefinierte Strategien zurück", () => {
+  const manufacturerModes: AssistanceModeDefinition[] = [
+    {
+      id: "manufacturer-auto",
+      label: "Hersteller Auto",
+      minimumRatio: 0,
+      maximumRatio: 4,
+      source: "manufacturer",
+      quality: "high"
+    }
+  ];
+  const mapped = assistancePlan({ availableModes: manufacturerModes });
+  const incomplete = assistancePlan({ strategy: "custom", customStrategy: undefined });
+
+  assert.ok(mapped.sections.every((section) => section.recommendedMode.id === "manufacturer-auto"));
+  assert.equal(mapped.assumptions.modeMappingSource, "manufacturer");
+  assert.equal(incomplete.status, "incomplete");
+  assert.equal(incomplete.sections.length, 0);
+  assert.match(incomplete.warnings[0], /benutzerdefinierte Strategie/i);
+});
+
+test("kennzeichnet klassische Fahrräder und fehlende Höhenprofile ohne erfundene Abschnitte", () => {
+  const classicProfile: RiderBikeProfile = {
+    ...riderBikeProfile,
+    bike: { ...riderBikeProfile.bike, type: "trekking" }
+  };
+  const classic = assistancePlan({ profile: classicProfile });
+  const missing = assistancePlan({ elevationProfile: [], elevationDataStatus: "missing" });
+
+  assert.equal(classic.status, "not_applicable");
+  assert.equal(classic.sections.length, 0);
+  assert.equal(classic.totalExpectedBatteryEnergyWh, null);
+  assert.equal(missing.status, "incomplete");
+  assert.equal(missing.sections.length, 0);
+  assert.match(missing.warnings[0], /Höhenprofil/i);
+});
+
+test("verändert die Unterstützungssimulation den produktiven Energie-Core nicht", () => {
+  const input: StageEnergyProjectionInput = {
+    profile: riderBikeProfile,
+    distanceKm: 12,
+    elevationUp: 480,
+    elevationDown: 0,
+    elevationProfile: constantGradeProfile(12, 4),
+    elevationDataStatus: "measured"
+  };
+  const before = calculateStageEnergyProjection(input);
+  assistancePlan();
+  const after = calculateStageEnergyProjection(input);
+
+  assert.deepEqual(after, before);
+});
+
+test("begrenzt Extremanstiege transparent und erzeugt keine negativen Akkuwerte", () => {
+  const limitedProfile: RiderBikeProfile = {
+    ...riderBikeProfile,
+    bike: {
+      ...riderBikeProfile.bike,
+      ebike: { ...riderBikeProfile.bike.ebike, motorPowerW: 100 }
+    }
+  };
+  const plan = assistancePlan({
+    profile: limitedProfile,
+    distanceKm: 2,
+    elevationProfile: constantGradeProfile(2, 16),
+    remainingDistanceKm: 2,
+    remainingElevationUpM: 320
+  });
+
+  assert.ok(plan.sections.some((section) => section.gradeBand === "climb_over_15"));
+  assert.ok(plan.warnings.some((warning) => warning.includes("Motorleistungsgrenze")));
+  assert.ok(plan.warnings.some((warning) => warning.includes("Grenzbereich")));
+  assert.ok(plan.sections.every((section) => section.expectedBatteryEnergyWh >= 0));
+  assert.ok(plan.sections.every((section) => section.batteryCapacityPercentAtEnd >= 0));
+});
+
+test("liefert nach Save-/Load-ähnlichem JSON-Roundtrip identische Unterstützung", () => {
+  const input: StageAssistancePlanInput = {
+    profile: riderBikeProfile,
+    distanceKm: 12,
+    elevationProfile: constantGradeProfile(12, 4),
+    elevationDataStatus: "measured",
+    strategy: "balanced",
+    startingBatteryCapacityPercent: 100,
+    remainingDistanceKm: 12,
+    remainingElevationUpM: 480
+  };
+  const before = calculateStageAssistancePlan(input);
+  const restored = JSON.parse(JSON.stringify(input)) as StageAssistancePlanInput;
+  const after = calculateStageAssistancePlan(restored);
+
+  assert.deepEqual(after, before);
+});
+
+test("integriert die Unterstützung nur als klar gekennzeichnete responsive Simulation", () => {
+  const source = readFileSync("src/components/AssistanceStrategyPanel.tsx", "utf8");
+
+  assert.match(source, /data-assistance-plan/);
+  assert.match(source, />Simulation</);
+  assert.match(source, /Motoranteil/);
+  assert.match(source, /Max\. Steigung/);
+  assert.match(source, /Akku Ende/);
+  assert.match(source, /lg:grid-cols-2/);
+  assert.match(source, /ohne Fahrradsteuerung/);
+  assert.match(source, /unveränderten produktiven/);
 });
