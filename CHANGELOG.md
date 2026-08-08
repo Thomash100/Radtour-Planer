@@ -1,5 +1,14 @@
 # Changelog
 
+## Fehlerkorrektur Routenworkflow - 2026-08-08
+
+- ungefangenen `QuotaExceededError` beim automatischen Speichern großer Routen behoben
+- reproduzierbare Streckenanalyse-Snapshots und exakte Duplikate der unveränderten Originalroute vor der Browser-Persistenz entfernt; reale Geometrie, Höhenpunkte und Quellsegmente bleiben erhalten
+- alte unkomprimierte TourStates weiterhin abwärtskompatibel lesbar gehalten
+- Browser-Speicherfehler in eine verständliche Statusmeldung überführt und eine Planer-Error-Boundary mit Wiederholungs- und Rücksprungaktion ergänzt
+- mobilen End-to-End-Smoke-Test für Direkte Route, GPX-Import und Demo-Tour bis zur Etappenansicht ergänzt
+- keine Routing-, Etappen-, Energie-, Lade- oder Kartenlogik verändert
+
 ## Responsive UI-Neugestaltung - 2026-08-08
 
 - globale Hauptnavigation auf eine gemeinsame responsive Struktur mit mobiler/Tablet-Bottom-Navigation und horizontaler Desktop-Navigation ab 1180 px umgestellt

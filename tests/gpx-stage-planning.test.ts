@@ -98,7 +98,14 @@ import {
 } from "../src/lib/tour-library";
 import { calculateStageDifficulty } from "../src/lib/stage-difficulty";
 import { planStagesByDifficulty } from "../src/lib/stage-planning";
-import { parseStoredTourState } from "../src/lib/tour-state";
+import {
+  compactStoredTourState,
+  parseStoredTourState,
+  serializeStoredTourState,
+  storeCurrentTourState,
+  TOUR_STATE_STORAGE_KEY,
+  type StoredTourState
+} from "../src/lib/tour-state";
 import {
   ROUTE_CONDITION_MODEL_VERSION,
   analyzeRouteCondition,
@@ -3334,4 +3341,103 @@ test("verwendet eine gemeinsame responsive Navigation und funktionale Darstellun
   assert.match(planner, /preferences\.showMiniElevationProfiles/);
   assert.match(planner, /preferences\.showPois/);
   assert.match(miniProfile, /data-mini-elevation-empty/);
+});
+
+test("persistiert eine lange Demo-Route kompakt und ohne Quota-Absturz", () => {
+  const route = calculateMockRoute({ start: "Dresden", end: "Hamburg", profile: "touristic" });
+  const sourceSegments: RouteConditionSourceSegment[] = [{
+    id: "demo-surface",
+    startKm: 0,
+    endKm: route.distanceKm,
+    surface: "asphalt",
+    wayType: "cycleway",
+    tags: { surface: "asphalt", highway: "cycleway" },
+    dataSource: "brouter"
+  }];
+  const analysis = analyzeRouteCondition({
+    geometry: route.geometryGeoJson,
+    elevationPoints: route.elevationProfile,
+    elevationSource: route.elevationSource,
+    sourceSegments
+  });
+  const state: StoredTourState = {
+    inputMode: "demo",
+    route: {
+      ...route,
+      originalGeometryGeoJson: route.geometryGeoJson,
+      originalDistanceKm: route.distanceKm,
+      originalElevationUp: route.elevationUp,
+      originalElevationDown: route.elevationDown,
+      originalDurationHours: route.durationHours,
+      originalElevationProfile: route.elevationProfile,
+      routeConditionSourceSegments: sourceSegments,
+      originalRouteConditionSourceSegments: sourceSegments,
+      trimStartKmOriginal: 0,
+      trimEndKmOriginal: route.distanceKm
+    },
+    stages: [],
+    pois: [],
+    routeCondition: routeConditionStateSnapshot(sourceSegments, analysis),
+    updatedAt: "2026-08-08T12:00:00.000Z"
+  };
+
+  const rawLength = JSON.stringify(state).length;
+  const compact = compactStoredTourState(state);
+  const serialized = serializeStoredTourState(state);
+  let storedValue = "";
+  const result = storeCurrentTourState(
+    {
+      setItem(key, value) {
+        assert.equal(key, TOUR_STATE_STORAGE_KEY);
+        if (value.length > 5_000_000) throw new DOMException("quota", "QuotaExceededError");
+        storedValue = value;
+      }
+    },
+    state
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(storedValue, serialized);
+  assert.ok(serialized.length < rawLength * 0.5);
+  assert.equal(compact.routeCondition, undefined);
+  assert.equal(compact.route?.originalGeometryGeoJson, undefined);
+  assert.equal(compact.route?.originalElevationProfile, undefined);
+  assert.ok((compact.route?.routeConditionSourceSegments?.length ?? 0) > 0);
+  assert.equal(serializeStoredTourState(state), serialized);
+
+  const restored = parseStoredTourState(serialized);
+  assert.ok(restored?.route);
+  const repeated = analyzeRouteCondition({
+    geometry: restored.route.geometryGeoJson,
+    elevationPoints: restored.route.elevationProfile,
+    elevationSource: restored.route.elevationSource,
+    sourceSegments: restored.route.routeConditionSourceSegments
+  });
+  assert.equal(repeated.inputFingerprint, analysis.inputFingerprint);
+});
+
+test("meldet ein Browser-Speicherlimit ohne Exception an den Aufrufer", () => {
+  const route = calculateMockRoute({ start: "Dresden", end: "Meißen", profile: "balanced" });
+  const state: StoredTourState = {
+    inputMode: "direct",
+    route,
+    stages: [],
+    pois: [],
+    updatedAt: "2026-08-08T12:00:00.000Z"
+  };
+
+  const result = storeCurrentTourState(
+    {
+      setItem() {
+        throw new DOMException("quota", "QuotaExceededError");
+      }
+    },
+    state
+  );
+
+  assert.deepEqual(result, {
+    ok: false,
+    reason: "quota",
+    message: "Die Route konnte im Browser nicht gespeichert werden. Bitte eine vorhandene Tour löschen oder die Tour exportieren."
+  });
 });

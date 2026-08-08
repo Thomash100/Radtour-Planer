@@ -123,7 +123,13 @@ import {
   type Position,
   type StageBreakpoint
 } from "@/lib/geo";
-import { parseStoredTourState, TOUR_STATE_STORAGE_KEY, type StoredTourState, type TourInputMode } from "@/lib/tour-state";
+import {
+  parseStoredTourState,
+  storeCurrentTourState,
+  TOUR_STATE_STORAGE_KEY,
+  type StoredTourState,
+  type TourInputMode
+} from "@/lib/tour-state";
 import {
   isPlannerStepForWorkflow,
   normalizePlannerStep,
@@ -1123,10 +1129,14 @@ export function PlannerClient({
 
   const persistStoredTourState = useCallback((state: StoredTourState | null) => {
     if (!state) {
-      return;
+      return null;
     }
 
-    window.localStorage.setItem(TOUR_STATE_STORAGE_KEY, JSON.stringify(state));
+    const result = storeCurrentTourState(window.localStorage, state);
+    if (!result.ok) {
+      setStatus(result.message);
+    }
+    return result;
   }, []);
 
   const quickFilters = [
@@ -1303,7 +1313,7 @@ export function PlannerClient({
             updatedAt: now
           }
         };
-        window.localStorage.setItem(TOUR_STATE_STORAGE_KEY, JSON.stringify(nextEntry.state));
+        persistStoredTourState(nextEntry.state);
         window.localStorage.setItem(TOUR_LIBRARY_STORAGE_KEY, serializeTourLibrary(upsertTourLibraryEntry(library, nextEntry)));
         restoreStoredTourState(nextEntry.state, "Tour aus Verwaltung geladen.");
         setPlannerStep(
@@ -1352,7 +1362,7 @@ export function PlannerClient({
     if (urlStep && isPlannerStepForWorkflow(urlStep, workflowView)) {
       setPlannerStep(urlStep);
     }
-  }, [initialMode, initialStep, initialTourId, openLast, restoreStoredTourState, workflowView]);
+  }, [initialMode, initialStep, initialTourId, openLast, persistStoredTourState, restoreStoredTourState, workflowView]);
 
   useEffect(() => {
     persistStoredTourState(buildStoredTourState());

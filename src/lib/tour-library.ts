@@ -1,4 +1,9 @@
-import { TOUR_STATE_STORAGE_KEY, parseStoredTourState, type StoredTourState } from "@/lib/tour-state";
+import {
+  TOUR_STATE_STORAGE_KEY,
+  compactStoredTourState,
+  parseStoredTourState,
+  type StoredTourState
+} from "@/lib/tour-state";
 
 export const TOUR_LIBRARY_STORAGE_KEY = "biketriphub.tourLibrary.v1";
 export const TOUR_EXPORT_SCHEMA = "biketriphub.tour-export.v1";
@@ -51,7 +56,11 @@ export function parseTourLibrary(raw: string | null): TourLibraryEntry[] {
 }
 
 export function serializeTourLibrary(entries: TourLibraryEntry[]) {
-  return JSON.stringify(entries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+  return JSON.stringify(
+    entries
+      .map((entry) => ({ ...entry, state: compactStoredTourState(entry.state) }))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  );
 }
 
 export function createTourLibraryEntry(
@@ -74,12 +83,12 @@ export function createTourLibraryEntry(
     name,
     kind,
     releaseStatus: options.releaseStatus ?? "draft",
-    state: {
+    state: compactStoredTourState({
       ...state,
       libraryTourId: id,
       tourKind: kind,
       updatedAt: now
-    },
+    }),
     createdAt: now,
     updatedAt: now,
     lastOpenedAt: now

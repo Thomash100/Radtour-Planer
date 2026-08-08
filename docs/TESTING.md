@@ -61,6 +61,19 @@ Je Geräteklasse prüfen:
 
 Die sechs Vergleichsscreenshots werden als `01-mobile-route.png` bis `06-desktop-settings.png` dokumentiert und direkt mit den lokalen Referenzbildern verglichen.
 
+### Routenworkflow-Regression
+
+Nach Änderungen an Navigation, TourState oder Browser-Persistenz werden Direkte Route, GPX-Import und Demo-Tour in einem echten mobilen Browser bis zur Etappenansicht durchlaufen:
+
+```bash
+ROUTE_WORKFLOW_BASE_URL=http://raspberrypi.local:3000 \
+PLAYWRIGHT_PACKAGE=/pfad/zu/playwright \
+BROWSER_EXECUTABLE=/pfad/zu/chrome \
+node scripts/route-workflow-smoke.mjs
+```
+
+Der Lauf prüft Zielansicht, Page Errors, Konsolenfehler, fehlgeschlagene App-Requests sowie Route und Etappen im gemeinsamen TourState. Bericht und Screenshots liegen unter `artifacts/route-workflow-regression/`.
+
 ## GPX-/Etappen-MVP
 
 Je nach Paket prüfen:
