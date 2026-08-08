@@ -30,6 +30,9 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Adaptive Fahrstrategie tourweit aus Energie-, Lade- und Unterstützungsergebnissen ableiten; Modi, Ladehalte, Reserve und manuelle Etappenvorgaben werden deterministisch berücksichtigt.
 - Höhenprofil und vorhandene Streckenbeschaffenheit deterministisch analysieren; Roh-/Glättungsprofil, Steigungen, Oberflächen, Wegtypen, Qualität und Warnungen werden für Tour, Etappe und Segment angezeigt.
 - Gesamte Tour speichern und erneut öffnen.
+- Gemeinsame responsive Hauptnavigation für Start, Route, Etappen, Unterkünfte und Reiseplan; mobil und auf Tablets als Bottom-Navigation, im Browser horizontal im Kopfbereich.
+- Deterministische Etappenfarben und echte Mini-Höhenprofile aus vorhandenen Etappen-Höhendaten in Karte, Übersicht und Reiseplan.
+- Versionierte Darstellungsoptionen für Etappenfarben, Mini-Höhenprofile, Etappennummern, großes Höhenprofil, POIs und Kartenstil ohne Änderung des TourState.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
 
@@ -82,6 +85,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 21: Adaptive E-Bike-Fahrstrategie `biketriphub-riding-strategy-v1` wurde nach Freigabe über PR #74 mit Merge-Commit `0724b3e` in `private` integriert.
 - Paket 22: Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell `biketriphub-route-condition-v1` wurde nach Freigabe über PR #75 mit Merge-Commit `24231ae` in `private` integriert.
 - Paket 23: Deterministische Mehrzielbewertung vorhandener Routenalternativen `biketriphub-route-optimizer-v1` wird auf `codex/multi-criteria-route-optimizer` additiv umgesetzt; PR bleibt bis zur ausdrücklichen Freigabe im Draft.
+- Responsive UI-Neugestaltung: wird auf `codex/responsive-ui-redesign` gestapelt auf dem noch nicht freigegebenen Paket-23-Stand umgesetzt; die sechs lokalen Mobil-, Pad- und Browser-Referenzen sind die visuelle Vorgabe.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
 Aktuelle Integrationsbasis für Paket 23:

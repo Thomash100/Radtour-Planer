@@ -34,11 +34,12 @@ html {
 
 body {
   min-height: 100vh;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(235, 249, 244, 0.84)),
-    radial-gradient(circle at top left, rgba(14, 116, 144, 0.16), transparent 32rem),
-    hsl(var(--background));
+  background: #f7f8f4;
   color: hsl(var(--foreground));
+}
+
+::selection {
+  background: rgba(13, 148, 136, 0.2);
 }
 
 button,

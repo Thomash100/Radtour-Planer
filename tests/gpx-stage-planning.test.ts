@@ -18,6 +18,7 @@ import {
   createAccommodationProvider
 } from "../src/lib/accommodation-providers";
 import { calculateAccommodationDetour } from "../src/lib/accommodation-routing";
+import { APP_NAVIGATION_ITEMS, activeNavigationId } from "../src/lib/app-navigation";
 import { normalizeDirectRouteInput, normalizeRouteCalculationPayload, parseRouteExpression } from "../src/lib/direct-route-input";
 import { replaceRouteAfterSuccessfulCalculation } from "../src/lib/direct-route-replacement";
 import {
@@ -130,6 +131,13 @@ import {
   type RouteOptimizationWeights
 } from "../src/lib/route-optimizer";
 import { buildRouteCandidateFromStoredTour } from "../src/lib/route-optimizer-candidate";
+import { STAGE_COLOR_PALETTE, buildMiniElevationGeometry, stageColorForDay } from "../src/lib/stage-visuals";
+import {
+  DEFAULT_UI_PREFERENCES,
+  normalizeUiPreferences,
+  parseUiPreferences,
+  serializeUiPreferences
+} from "../src/lib/ui-preferences";
 
 const riderBikeProfile = {
   ...DEFAULT_RIDER_BIKE_PROFILE,
@@ -3266,4 +3274,64 @@ test("integriert den Routenvergleich responsiv und hält die Fachlogik aus React
   assert.match(map, /comparison-routes/);
   assert.match(library, /\/planer\/optimierung/);
   assert.doesNotMatch(core, /React|fetch\(|Math\.random|Date\.now/);
+});
+
+test("ordnet die fünf Hauptbereiche eindeutig und mit stabilem aktivem Zustand zu", () => {
+  assert.deepEqual(APP_NAVIGATION_ITEMS.map((item) => item.label), ["Start", "Route", "Etappen", "Unterkünfte", "Reiseplan"]);
+  assert.equal(activeNavigationId("/"), "start");
+  assert.equal(activeNavigationId("/planer/route"), "route");
+  assert.equal(activeNavigationId("/planer/etappen"), "stages");
+  assert.equal(activeNavigationId("/planer/unterkuenfte"), "accommodations");
+  assert.equal(activeNavigationId("/reiseplan"), "travel-plan");
+  assert.equal(activeNavigationId("/einstellungen"), null);
+});
+
+test("vergibt Etappenfarben deterministisch und erweitert die Referenzpalette stabil", () => {
+  assert.equal(stageColorForDay(1), STAGE_COLOR_PALETTE[0]);
+  assert.equal(stageColorForDay(STAGE_COLOR_PALETTE.length), STAGE_COLOR_PALETTE.at(-1));
+  assert.equal(stageColorForDay(12), stageColorForDay(12));
+  assert.notEqual(stageColorForDay(9), stageColorForDay(10));
+  assert.match(stageColorForDay(12), /^hsl\(/);
+});
+
+test("erzeugt Mini-Höhenprofile ausschließlich aus realen Punkten und hält fehlende Daten leer", () => {
+  assert.equal(buildMiniElevationGeometry([]), null);
+  assert.equal(buildMiniElevationGeometry([{ distanceKm: 0, elevationM: 120 }]), null);
+
+  const geometry = buildMiniElevationGeometry([
+    { distanceKm: 4, elevationM: 120 },
+    { distanceKm: 8, elevationM: 260 },
+    { distanceKm: 12, elevationM: 170 }
+  ]);
+  assert.ok(geometry);
+  assert.equal(geometry?.minElevationM, 120);
+  assert.equal(geometry?.maxElevationM, 260);
+  assert.match(geometry?.linePath ?? "", /^M 4 /);
+  assert.match(geometry?.areaPath ?? "", / Z$/);
+});
+
+test("speichert Darstellungsoptionen versioniert und normalisiert alte oder defekte Werte", () => {
+  const changed = { ...DEFAULT_UI_PREFERENCES, showMiniElevationProfiles: false, mapStyle: "cycle" as const };
+  assert.deepEqual(parseUiPreferences(serializeUiPreferences(changed)), changed);
+  assert.deepEqual(parseUiPreferences("kein-json"), DEFAULT_UI_PREFERENCES);
+  assert.deepEqual(normalizeUiPreferences({ showStageColors: false }), {
+    ...DEFAULT_UI_PREFERENCES,
+    showStageColors: false
+  });
+});
+
+test("verwendet eine gemeinsame responsive Navigation und funktionale Darstellungsoptionen", () => {
+  const shell = readFileSync("src/components/ShellNav.tsx", "utf8");
+  const settings = readFileSync("src/components/SettingsClient.tsx", "utf8");
+  const planner = readFileSync("src/components/PlannerClient.tsx", "utf8");
+  const miniProfile = readFileSync("src/components/StageMiniElevationProfile.tsx", "utf8");
+
+  assert.match(shell, /data-app-navigation="desktop"/);
+  assert.match(shell, /data-app-navigation="bottom"/);
+  assert.match(shell, /desktop:hidden/);
+  assert.match(settings, /showMiniElevationProfiles/);
+  assert.match(settings, /showStageColors/);
+  assert.match(planner, /preferences\.showMiniElevationProfiles/);
+  assert.match(planner, /preferences\.showPois/);
+  assert.match(miniProfile, /data-mini-elevation-empty/);
 });

@@ -31,6 +31,8 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { ElevationProfile } from "@/components/ElevationProfile";
+import { StageMiniElevationProfile } from "@/components/StageMiniElevationProfile";
+import { StageOverviewCard } from "@/components/StageOverviewCard";
 import { RouteConditionOverview, StageRouteConditionPanel } from "@/components/RouteConditionPanel";
 import { AssistanceStrategyPanel } from "@/components/AssistanceStrategyPanel";
 import { RidingStrategyTourPanel, StageRidingStrategyPanel } from "@/components/RidingStrategyPanel";
@@ -39,7 +41,6 @@ import {
   StageChargingPanel,
   type ChargingPointDraft
 } from "@/components/ChargingPlanningPanel";
-import { PlannerWorkflowNavigation } from "@/components/PlannerWorkflowNavigation";
 import { categoryIcon, RouteMap, type MapPoi } from "@/components/RouteMap";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,6 +147,8 @@ import {
   upsertTourLibraryEntry
 } from "@/lib/tour-library";
 import { cn, formatHours, formatKm } from "@/lib/utils";
+import { useUiPreferences } from "@/hooks/useUiPreferences";
+import { stageColorForDay } from "@/lib/stage-visuals";
 
 type RouteCalculation = {
   name: string;
@@ -573,6 +576,7 @@ export function PlannerClient({
     DEFAULT_ROUTE_OPTIMIZATION_STATE
   );
   const [visualizationMode, setVisualizationMode] = useState<VisualizationMode>("map");
+  const { preferences } = useUiPreferences();
   const [pendingDirectPlan, setPendingDirectPlan] = useState<PendingDirectPlan | null>(null);
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
   const stageCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -2826,13 +2830,12 @@ export function PlannerClient({
   }
 
   const workflowHeader = (
-    <section className="rounded-lg border bg-white p-3 shadow-sm">
+    <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
       <div className="flex flex-col gap-4">
-        <PlannerWorkflowNavigation activeView={workflowView} hasRoute={Boolean(route)} />
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm text-muted-foreground">Planungsworkflow</div>
-            <h1 className="text-2xl font-semibold">{workflowView === "route" ? "Routenplanung" : "Etappenplanung"}</h1>
+            <div className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Planungsworkflow</div>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{workflowView === "route" ? "Routenplanung" : "Etappenplanung"}</h1>
             <p className="text-sm text-muted-foreground">
               {workflowView === "route"
                 ? `Grundroute festlegen und speichern · Modus: ${modeLabel}`
@@ -3253,16 +3256,21 @@ export function PlannerClient({
 
   if (route && plannerStep === "overview") {
     return (
-      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
-        {workflowHeader}
-        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-4">
-              <Metric label="Distanz" value={formatKm(route.distanceKm)} />
-              <Metric label="Höhenmeter" value={`${route.elevationUp} m`} />
-              <Metric label="Fahrzeit" value={formatHours(route.durationHours)} />
-              <Metric label="Eingabe" value={modeLabel} />
-            </div>
+      <main className="mx-auto flex w-full max-w-[1536px] flex-col gap-5 px-4 py-6 sm:px-6 desktop:px-8 desktop:py-9" data-route-overview="true">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Route</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{route.name}</h1>
+            <p className="mt-2 text-sm text-slate-500 sm:text-base">{route.startName} – {route.endName}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => setPlannerStep("direct")}><Route className="h-4 w-4" />Route ändern</Button>
+            <Button disabled={!route || isBusy} type="button" onClick={saveTour}><Save className="h-4 w-4" />Speichern</Button>
+          </div>
+        </header>
+
+        <section className="grid gap-4 desktop:grid-cols-[minmax(0,1fr)_310px]">
+          <div className="min-w-0 space-y-4">
             {routeTrimSummary && (
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                 <Badge variant="outline">Route gekürzt</Badge>
@@ -3303,19 +3311,26 @@ export function PlannerClient({
                 </p>
               </div>
             ) : null}
-            <RouteMap
-              route={route.geometryGeoJson}
-              stages={[]}
-              waypoints={route.waypoints}
-            />
+            <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white p-2 shadow-[0_24px_65px_rgba(15,23,42,0.09)] sm:p-3">
+              <RouteMap
+                mapStyle={preferences.mapStyle}
+                pois={preferences.showPois ? mapPois : []}
+                route={route.geometryGeoJson}
+                showStageColors={preferences.showStageColors}
+                showStageNumbers={preferences.showStageNumbers}
+                stages={stages}
+                waypoints={route.waypoints}
+              />
+            </div>
             {routeConditionAnalysis && <RouteConditionOverview analysis={routeConditionAnalysis} />}
           </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Übersicht prüfen</CardTitle>
-              <CardDescription>{route.startName} - {route.endName}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <aside className="grid content-start gap-3 sm:grid-cols-3 desktop:grid-cols-1">
+            <Metric label="Distanz" value={formatKm(route.distanceKm)} />
+            <Metric label="Höhenmeter" value={`${route.elevationUp} m`} />
+            <Metric label="Fahrzeit" value={formatHours(route.durationHours)} />
+            <Card className="rounded-[26px] border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.06)] sm:col-span-3 desktop:col-span-1">
+              <CardHeader><CardTitle>Nächster Schritt</CardTitle><CardDescription>{stages.length > 0 ? `${stages.length} Etappen sind vorhanden.` : "Plane passende Tagesetappen."}</CardDescription></CardHeader>
+              <CardContent className="space-y-3">
               {inputMode === "direct" ? (
                 <p
                   className={cn(
@@ -3336,11 +3351,7 @@ export function PlannerClient({
                   Koordinatenkorrektur: {route.coordinateCorrections.join(", ")}
                 </p>
               ) : null}
-              <div className="grid gap-2 rounded-md border bg-white p-3">
-                <Button disabled={!route || isBusy} type="button" onClick={saveTour}>
-                  <Save className="h-4 w-4" />
-                  Grundroute speichern
-                </Button>
+              <div className="grid gap-2 rounded-2xl border bg-slate-50 p-3">
                 <p className="text-sm font-medium text-emerald-700">
                   {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Grundroute noch nicht bewusst gespeichert."}
                 </p>
@@ -3363,8 +3374,24 @@ export function PlannerClient({
                   Zur Etappenplanung
                 </Link>
               </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </aside>
+        </section>
+
+        <section className="rounded-[30px] border border-slate-200/80 bg-white p-5 shadow-[0_20px_55px_rgba(15,23,42,0.06)]">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold text-slate-950">Deine Etappen</h2><p className="mt-1 text-sm text-slate-500">Farben und Höhenprofile stammen aus der aktuellen Tour.</p></div><Button asChild variant="outline"><Link href="/planer/etappen?open=last">Etappen bearbeiten</Link></Button></div>
+          {stages.length > 0 ? (
+            <div className="flex gap-4 overflow-x-auto pb-3" data-stage-overview-list="true">
+              {stages.map((stage) => {
+                const bounds = stageKilometers(stage);
+                const profile = sliceElevationProfile(route.elevationProfile, bounds.startKm, bounds.endKm);
+                return <StageOverviewCard key={stage.id} compact={preferences.compactStageCards} color={preferences.showStageColors ? stageColorForDay(stage.dayNumber) : "#0f766e"} dayNumber={stage.dayNumber} distanceKm={stage.distanceKm} elevationPoints={profile} elevationUp={stage.elevationUp} endName={stage.endName} showMiniElevationProfile={preferences.showMiniElevationProfiles} showStageNumber={preferences.showStageNumbers} startName={stage.startName} />;
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[22px] border border-dashed border-emerald-200 bg-emerald-50/50 p-5 text-sm text-slate-600">Noch keine Etappen vorhanden. Die Route bleibt unverändert, bis du die Etappenplanung bewusst startest.</div>
+          )}
         </section>
       </main>
     );
@@ -3583,27 +3610,30 @@ export function PlannerClient({
                   <Map className="h-4 w-4" />
                   Karte
                 </button>
-                <button
-                  aria-pressed={visualizationMode === "elevation"}
-                  className={cn(
-                    "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
-                    visualizationMode === "elevation" ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
-                  )}
-                  type="button"
-                  onClick={() => {
-                    setIsPickingStagePoint(false);
-                    setVisualizationMode("elevation");
-                  }}
-                >
-                  <Activity className="h-4 w-4" />
-                  Höhenprofil
-                </button>
+                {preferences.showElevationProfile && (
+                  <button
+                    aria-pressed={visualizationMode === "elevation"}
+                    className={cn(
+                      "inline-flex items-center gap-2 rounded px-3 py-2 text-sm font-medium transition",
+                      visualizationMode === "elevation" ? "bg-primary text-primary-foreground" : "text-slate-700 hover:bg-muted"
+                    )}
+                    type="button"
+                    onClick={() => {
+                      setIsPickingStagePoint(false);
+                      setVisualizationMode("elevation");
+                    }}
+                  >
+                    <Activity className="h-4 w-4" />
+                    Höhenprofil
+                  </button>
+                )}
               </div>
             </div>
-            {visualizationMode === "map" ? (
+            {visualizationMode === "map" || !preferences.showElevationProfile ? (
               <RouteMap
                 accommodationDetours={workflowView === "stages" ? accommodationDetours : []}
-                pois={workflowView === "stages" ? mapPois : []}
+                mapStyle={preferences.mapStyle}
+                pois={workflowView === "stages" && preferences.showPois ? mapPois : []}
                 route={route?.geometryGeoJson}
                 routePointSelection={{
                   enabled: isPickingStagePoint,
@@ -3614,6 +3644,8 @@ export function PlannerClient({
                 }}
                 selectedPoiId={workflowView === "stages" ? selectedPoi?.id : undefined}
                 selectedStageId={workflowView === "stages" ? selectedStageId : undefined}
+                showStageColors={preferences.showStageColors}
+                showStageNumbers={preferences.showStageNumbers}
                 stages={workflowView === "stages" ? stages : []}
                 stageBreakpoints={workflowView === "stages" ? effectiveStageBreakpoints : []}
                 waypoints={route?.waypoints}
@@ -4066,7 +4098,7 @@ export function PlannerClient({
                 <CardDescription className="leading-relaxed">{status}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="grid gap-3 rounded-lg border bg-slate-50 p-3">
+                <div id="unterkuenfte" className="grid scroll-mt-24 gap-3 rounded-[22px] border bg-slate-50 p-3">
                   <div>
                     <h3 className="text-sm font-semibold">Unterkunftsfilter</h3>
                     <p className="text-xs text-muted-foreground">
@@ -4189,9 +4221,14 @@ export function PlannerClient({
                       onFocusCapture={() => setSelectedStageId(stage.id)}
                     >
                       <div className="flex flex-wrap items-start gap-2 xl:block">
-                        <div className="grid h-14 w-14 place-items-center rounded-md bg-primary text-primary-foreground">
-                          Tag {stage.dayNumber}
+                        <div className="grid h-14 w-14 place-items-center rounded-2xl text-sm font-bold text-white shadow-sm" style={{ background: preferences.showStageColors ? stageColorForDay(stage.dayNumber) : "#0f766e" }}>
+                          {preferences.showStageNumbers ? `Tag ${stage.dayNumber}` : "Etappe"}
                         </div>
+                        {preferences.showMiniElevationProfiles && !preferences.compactStageCards && (
+                          <div className="mt-2 w-full min-w-[130px] xl:w-[138px]">
+                            <StageMiniElevationProfile color={preferences.showStageColors ? stageColorForDay(stage.dayNumber) : "#0f766e"} label={`Mini-Höhenprofil Etappe ${stage.dayNumber}`} points={stageElevationProfile} />
+                          </div>
+                        )}
                         {isSelectedStage && (
                           <Badge className="mt-0 xl:mt-2" variant="secondary">
                             Ausgewählt

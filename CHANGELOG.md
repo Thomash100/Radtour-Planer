@@ -1,5 +1,16 @@
 # Changelog
 
+## Responsive UI-Neugestaltung - 2026-08-08
+
+- globale Hauptnavigation auf eine gemeinsame responsive Struktur mit mobiler/Tablet-Bottom-Navigation und horizontaler Desktop-Navigation ab 1180 px umgestellt
+- Tourauswahl in den Kopfbereich integriert und Route, Etappen, Unterkünfte sowie Reiseplan als eigenständige Hauptbereiche erreichbar gemacht
+- Routenübersicht, Start-Dashboard und lokaler Reiseplan mit realen Daten des aktuellen TourState neu aufgebaut
+- deterministische Etappenpalette zentralisiert und konsistent an Kartenlinien, Legenden, Etappenkarten und Mini-Höhenprofile angebunden
+- echte SVG-Mini-Höhenprofile aus den vorhandenen Höhenpunkten der jeweiligen Etappe ergänzt; fehlende Daten bleiben ausdrücklich leer
+- responsive Konfiguration für Allgemein, Tourplanung, Darstellung, Karten & Navigation, Benachrichtigungen sowie Daten & Sync ergänzt
+- versionierte, tourunabhängige UI-Präferenzen eingeführt, ohne bestehende TourState- oder Tour-JSON-Verträge zu verändern
+- keine Routing-, Etappen-, Unterkunfts-, Energie- oder Ladeberechnung dupliziert oder fachlich verändert
+
 ## Paket 23 - 2026-08-04
 
 - separaten, reinen Mehrziel-Core `biketriphub-route-optimizer-v1` und Pareto-Vertrag `biketriphub-route-optimizer-pareto-v1` ergänzt

@@ -10,6 +10,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      screens: {
+        desktop: "1180px"
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -42,9 +45,9 @@ const config: Config = {
         }
       },
       borderRadius: {
-        lg: "0.5rem",
-        md: "calc(0.5rem - 2px)",
-        sm: "calc(0.5rem - 4px)"
+        lg: "1rem",
+        md: "calc(1rem - 2px)",
+        sm: "calc(1rem - 4px)"
       },
       boxShadow: {
         panel: "0 18px 50px rgba(15, 23, 42, 0.12)"

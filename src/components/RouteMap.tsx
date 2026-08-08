@@ -33,6 +33,7 @@ import {
   MAP_MIN_ZOOM,
   OSM_SOURCE_MAX_ZOOM
 } from "@/lib/map-zoom";
+import { stageColorForDay } from "@/lib/stage-visuals";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 export type MapPoi = {
@@ -95,6 +96,9 @@ type RouteMapProps = {
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
   selectedStageId?: string | null;
+  mapStyle?: "standard" | "cycle";
+  showStageColors?: boolean;
+  showStageNumbers?: boolean;
   variant?: "embedded" | "workspace";
   routePointSelection?: {
     enabled: boolean;
@@ -110,7 +114,6 @@ type RouteMapTestWindow = Window & {
   __routePlannerMap?: maplibregl.Map;
 };
 
-const stageColors = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#16a34a"];
 const selectedStageCasingWidth = 16;
 const selectedStageLineWidth = 12;
 const stageHitAreaWidth = 36;
@@ -417,7 +420,7 @@ function stageKey(stage: Stage) {
   return stage.id ?? `day-${stage.dayNumber}`;
 }
 
-function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null) {
+function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null, showStageColors = true) {
   return {
     type: "FeatureCollection" as const,
     features: stages.flatMap((stage, index) => {
@@ -432,7 +435,7 @@ function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null
           properties: {
             stageId: stageKey(stage),
             stageIndex: index,
-            color: stageColors[index % stageColors.length],
+            color: showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e",
             dayNumber: stage.dayNumber,
             selected: stageKey(stage) === selectedStageId
           },
@@ -443,9 +446,9 @@ function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null
   };
 }
 
-function stageColorForId(stages: Stage[], stageId?: string | null) {
+function stageColorForId(stages: Stage[], stageId?: string | null, showStageColors = true) {
   const stageIndex = stages.findIndex((stage) => stageKey(stage) === stageId);
-  return stageIndex >= 0 ? stageColors[stageIndex % stageColors.length] : stageColors[0];
+  return stageIndex >= 0 && showStageColors ? stageColorForDay(stages[stageIndex].dayNumber || stageIndex + 1) : "#0f766e";
 }
 
 function stageIdFromProperties(properties?: Record<string, unknown> | null) {
@@ -932,6 +935,9 @@ export function RouteMap({
   waypoints = emptyWaypoints,
   selectedPoiId,
   selectedStageId,
+  mapStyle = "standard",
+  showStageColors = true,
+  showStageNumbers = true,
   variant = "embedded",
   routePointSelection,
   onSelectPoi,
@@ -950,7 +956,7 @@ export function RouteMap({
   const stageClickSuppressRef = useRef(false);
   const fittedRouteSignatureRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState("");
-  const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
+  const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">(mapStyle);
   const [autoFitRoute, setAutoFitRoute] = useState(true);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const [layerDebug, setLayerDebug] = useState({
@@ -971,9 +977,11 @@ export function RouteMap({
   }, []);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
   const selectedStage = useMemo(() => stages.find((stage) => stageKey(stage) === selectedStageId) ?? null, [selectedStageId, stages]);
-  const selectedStageColor = useMemo(() => stageColorForId(stages, selectedStageId), [selectedStageId, stages]);
-  const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages, selectedStageId).features.length, [selectedStageId, stages]);
+  const selectedStageColor = useMemo(() => stageColorForId(stages, selectedStageId, showStageColors), [selectedStageId, showStageColors, stages]);
+  const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages, selectedStageId, showStageColors).features.length, [selectedStageId, showStageColors, stages]);
   const routePointSelectionEnabled = Boolean(routePointSelection?.enabled && routeValidation.line && onRoutePointSelect);
+
+  useEffect(() => setBaseLayer(mapStyle), [mapStyle]);
 
   const fitRouteToBounds = useCallback(
     (force = false) => {
@@ -1252,12 +1260,12 @@ export function RouteMap({
 
     const update = () => {
       const source = map.getSource("stages") as GeoJSONSource | undefined;
-      source?.setData(stageFeatureCollection(stages, selectedStageId));
+      source?.setData(stageFeatureCollection(stages, selectedStageId, showStageColors));
       updateLayerDebug(map);
     };
 
     return runWhenMapReady(map, update);
-  }, [selectedStageId, stages, updateLayerDebug]);
+  }, [selectedStageId, showStageColors, stages, updateLayerDebug]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1579,7 +1587,7 @@ export function RouteMap({
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-semibold text-slate-950">
               <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: selectedStageColor }} />
-              Etappe {selectedStage.dayNumber}
+              {showStageNumbers ? `Etappe ${selectedStage.dayNumber}` : "Etappe"}
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{typeof selectedStage.distanceKm === "number" ? formatKm(selectedStage.distanceKm) : "Distanz offen"}</span>
@@ -1597,7 +1605,10 @@ export function RouteMap({
         </div>
       )}
       {stages.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto rounded-md border bg-white p-2 shadow-sm">
+        <div className={cn(
+          "flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2 shadow-sm",
+          !selectedStage && "relative z-10 mx-3 -mt-16 bg-white/95 backdrop-blur"
+        )}>
           {stages.map((stage, index) => {
             const currentStageId = stageKey(stage);
             const isSelected = currentStageId === selectedStageId;
@@ -1618,10 +1629,10 @@ export function RouteMap({
                   <span
                     aria-hidden="true"
                     className="route-stage-swatch h-2.5 w-2.5 rounded-full"
-                    data-stage-color={stageColors[index % stageColors.length]}
-                    style={{ background: stageColors[index % stageColors.length] }}
+                    data-stage-color={showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e"}
+                    style={{ background: showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e" }}
                   />
-                  Tag {stage.dayNumber}
+                  {showStageNumbers ? `Tag ${stage.dayNumber}` : "Etappe"}
                 </div>
                 <div className="text-xs text-muted-foreground">{stage.geometryGeoJson.coordinates.length} Punkte</div>
               </button>

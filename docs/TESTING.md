@@ -41,6 +41,26 @@ Nicht akzeptabel:
 
 Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.
 
+## Responsive UI-Abnahme
+
+Für Änderungen am globalen Bedienkonzept werden Route und Konfiguration mindestens in diesen Breiten geprüft:
+
+- Smartphone: 390 px (zusätzlich Grenzbereich 360 bis 480 px)
+- Tablet: 768 px (zusätzlich Zwischenbreiten bis 1180 px)
+- Desktop: 1440 px beziehungsweise mindestens 1180 px
+
+Je Geräteklasse prüfen:
+
+- aktiver Navigationspunkt, Deep Links sowie Browser Zurück/Vorwärts
+- keine permanente linke Hauptnavigation und keine verdeckten Inhalte durch die Bottom-Navigation
+- gleiche deterministische Etappenfarbe in Karte, Legende, Etappenkarte und Mini-Höhenprofil
+- Mini-Höhenprofil aus realen Etappen-Höhenpunkten sowie stabiler Leerzustand ohne Höhenwerte
+- Darstellungsoptionen wirken nach Änderung und Reload tatsächlich in Route, Etappen und Reiseplan
+- TourState, Save/Load, Tour-JSON und bestehende Fachmodule bleiben unverändert funktionsfähig
+- keine horizontale Seitenscrollbar und keine Browserkonsolenfehler
+
+Die sechs Vergleichsscreenshots werden als `01-mobile-route.png` bis `06-desktop-settings.png` dokumentiert und direkt mit den lokalen Referenzbildern verglichen.
+
 ## GPX-/Etappen-MVP
 
 Je nach Paket prüfen:
