@@ -99,7 +99,7 @@ type RouteMapProps = {
   mapStyle?: "standard" | "cycle";
   showStageColors?: boolean;
   showStageNumbers?: boolean;
-  variant?: "embedded" | "workspace";
+  variant?: "embedded" | "overview" | "workspace";
   routePointSelection?: {
     enabled: boolean;
     label?: string;
@@ -1466,7 +1466,7 @@ export function RouteMap({
 
   return (
     <div className={cn("space-y-2", isFullscreenMap && "fixed inset-0 z-50 flex flex-col bg-white p-2")}>
-      <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-2 shadow-sm">
+      {(variant !== "overview" || isFullscreenMap) && <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-2 shadow-sm">
         <div className="inline-flex rounded-md border bg-white p-1">
           {[
             { value: "standard", label: "Standardkarte" },
@@ -1525,7 +1525,7 @@ export function RouteMap({
           {isFullscreenMap ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           <span>{isFullscreenMap ? "Verkleinern" : "Vollbild"}</span>
         </button>
-      </div>
+      </div>}
       {(mapError || routeValidation.warning) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-sm">
           <div className="flex items-start gap-2">
@@ -1548,8 +1548,9 @@ export function RouteMap({
         data-selected-stage-casing-width={layerDebug.selectedCasingWidth}
         data-selected-stage-line-width={layerDebug.selectedStageWidth}
         data-stage-hit-area-width={layerDebug.hitAreaWidth}
+        data-map-variant={variant}
         className={cn(
-          "relative overflow-hidden rounded-lg border bg-slate-100",
+          "route-map-canvas relative overflow-hidden rounded-lg border bg-slate-100",
           isFullscreenMap && "min-h-0 flex-1 rounded-md",
           routePointSelectionEnabled && "cursor-crosshair"
         )}
@@ -1562,6 +1563,8 @@ export function RouteMap({
                   maxHeight: "none",
                   overscrollBehavior: "contain"
                 }
+              : variant === "overview"
+                ? { overscrollBehavior: "contain" }
               : {
                   height: "clamp(300px, 60dvh, 560px)",
                   maxHeight: "calc(100dvh - 12rem)",

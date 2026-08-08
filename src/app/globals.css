@@ -133,3 +133,19 @@ textarea {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.route-map-canvas[data-map-variant="overview"] {
+  height: 260px;
+}
+
+@media (min-width: 768px) {
+  .route-map-canvas[data-map-variant="overview"] {
+    height: 430px;
+  }
+}
+
+@media (min-width: 1180px) {
+  .route-map-canvas[data-map-variant="overview"] {
+    height: 360px;
+  }
+}

@@ -3259,17 +3259,17 @@ export function PlannerClient({
       <main className="mx-auto flex w-full max-w-[1536px] flex-col gap-5 px-4 py-6 sm:px-6 desktop:px-8 desktop:py-9" data-route-overview="true">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Route</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{route.name}</h1>
-            <p className="mt-2 text-sm text-slate-500 sm:text-base">{route.startName} – {route.endName}</p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">{route.name}</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Route</h1>
+            <p className="mt-1 text-sm text-slate-500 sm:mt-2 sm:text-base">{route.startName} – {route.endName}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="hidden flex-wrap gap-2 sm:flex">
             <Button type="button" variant="outline" onClick={() => setPlannerStep("direct")}><Route className="h-4 w-4" />Route ändern</Button>
             <Button disabled={!route || isBusy} type="button" onClick={saveTour}><Save className="h-4 w-4" />Speichern</Button>
           </div>
         </header>
 
-        <section className="grid gap-4 desktop:grid-cols-[minmax(0,1fr)_310px]">
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_270px] desktop:grid-cols-[minmax(0,1fr)_310px]">
           <div className="min-w-0 space-y-4">
             {routeTrimSummary && (
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
@@ -3319,16 +3319,16 @@ export function PlannerClient({
                 showStageColors={preferences.showStageColors}
                 showStageNumbers={preferences.showStageNumbers}
                 stages={stages}
+                variant="overview"
                 waypoints={route.waypoints}
               />
             </div>
-            {routeConditionAnalysis && <RouteConditionOverview analysis={routeConditionAnalysis} />}
           </div>
-          <aside className="grid content-start gap-3 sm:grid-cols-3 desktop:grid-cols-1">
+          <aside className="grid grid-cols-3 content-start gap-2 sm:gap-3 lg:grid-cols-1">
             <Metric label="Distanz" value={formatKm(route.distanceKm)} />
             <Metric label="Höhenmeter" value={`${route.elevationUp} m`} />
             <Metric label="Fahrzeit" value={formatHours(route.durationHours)} />
-            <Card className="rounded-[26px] border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.06)] sm:col-span-3 desktop:col-span-1">
+            <Card className="col-span-3 rounded-[26px] border-slate-200 shadow-[0_18px_45px_rgba(15,23,42,0.06)] lg:col-span-1">
               <CardHeader><CardTitle>Nächster Schritt</CardTitle><CardDescription>{stages.length > 0 ? `${stages.length} Etappen sind vorhanden.` : "Plane passende Tagesetappen."}</CardDescription></CardHeader>
               <CardContent className="space-y-3">
               {inputMode === "direct" ? (
@@ -3356,6 +3356,10 @@ export function PlannerClient({
                   {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Grundroute noch nicht bewusst gespeichert."}
                 </p>
               </div>
+              <Button className="w-full sm:hidden" disabled={!route || isBusy} type="button" onClick={saveTour}>
+                <Save className="h-4 w-4" />
+                Speichern
+              </Button>
               {inputMode === "gpx" ? (
                 <Button className="w-full" type="button" onClick={() => setPlannerStep("trim")}>
                   <ArrowRight className="h-4 w-4" />
@@ -3393,6 +3397,7 @@ export function PlannerClient({
             <div className="rounded-[22px] border border-dashed border-emerald-200 bg-emerald-50/50 p-5 text-sm text-slate-600">Noch keine Etappen vorhanden. Die Route bleibt unverändert, bis du die Etappenplanung bewusst startest.</div>
           )}
         </section>
+        {routeConditionAnalysis && <RouteConditionOverview analysis={routeConditionAnalysis} />}
       </main>
     );
   }
@@ -4816,9 +4821,9 @@ export function PlannerClient({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium uppercase text-muted-foreground">{label}</div>
-      <div className="mt-2 text-xl font-semibold text-slate-950">{value}</div>
+    <div className="min-w-0 rounded-2xl border bg-white p-2.5 shadow-sm sm:p-4">
+      <div className="truncate text-[10px] font-medium uppercase tracking-tight text-muted-foreground sm:text-xs">{label}</div>
+      <div className="mt-1 truncate text-base font-semibold text-slate-950 sm:mt-2 sm:text-xl">{value}</div>
     </div>
   );
 }

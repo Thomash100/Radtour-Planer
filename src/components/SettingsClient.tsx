@@ -85,7 +85,7 @@ export function SettingsClient() {
           </nav>
         </aside>
 
-        <div className="grid min-w-0 gap-5">
+        <div className="grid min-w-0 gap-5 lg:grid-cols-2">
           <SettingsSection id="allgemein" icon={Settings2} title="Allgemein" description="Aktive Tour und grundlegende App-Einstellungen.">
             <InfoRow label="Aktuelle Tour" value={tourName} />
             <InfoRow label="Einheiten" value="Metrisch (km, m, Wh)" />
@@ -98,7 +98,7 @@ export function SettingsClient() {
             <LinkRow href="/planer/etappen?open=last" icon={SlidersHorizontal} label="Etappenplanung" detail="Tage, Schwierigkeit und Etappenpunkte" />
           </SettingsSection>
 
-          <SettingsSection id="darstellung" icon={Eye} title="Darstellung" description="Diese Optionen verändern die reale Karten- und Etappenansicht.">
+          <SettingsSection className="lg:col-span-2" id="darstellung" icon={Eye} title="Darstellung" description="Diese Optionen verändern die reale Karten- und Etappenansicht.">
             <ToggleRow checked={preferences.showStageColors} label="Etappenfarben anzeigen" detail="Gleiche Farbe in Karte, Legende und Etappenkarte" onChange={(value) => update("showStageColors", value)} />
             <ToggleRow checked={preferences.showMiniElevationProfiles} label="Mini-Höhenprofile anzeigen" detail="Aus den realen Höhenpunkten jeder Etappe" onChange={(value) => update("showMiniElevationProfiles", value)} />
             <ToggleRow checked={preferences.showStageNumbers} label="Etappennummern anzeigen" detail="Tag und Etappennummer in Karten und Legenden" onChange={(value) => update("showStageNumbers", value)} />
@@ -110,7 +110,7 @@ export function SettingsClient() {
             </div>
           </SettingsSection>
 
-          <SettingsSection id="karten" icon={Map} title="Karten & Navigation" description="Kartenstil und sichtbare Planungsinformationen.">
+          <SettingsSection className="lg:col-span-2" id="karten" icon={Map} title="Karten & Navigation" description="Kartenstil und sichtbare Planungsinformationen.">
             <div className="grid gap-3 sm:grid-cols-2">
               {(["standard", "cycle"] as const).map((style) => (
                 <button
@@ -144,9 +144,9 @@ export function SettingsClient() {
   );
 }
 
-function SettingsSection({ id, title, description, icon: Icon, children }: { id: string; title: string; description: string; icon: typeof Settings2; children: React.ReactNode }) {
+function SettingsSection({ id, title, description, icon: Icon, children, className = "" }: { id: string; title: string; description: string; icon: typeof Settings2; children: React.ReactNode; className?: string }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-[28px] border border-slate-200/90 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-6">
+    <section id={id} className={`scroll-mt-24 rounded-[28px] border border-slate-200/90 bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)] sm:p-6 ${className}`}>
       <div className="flex items-start gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-primary"><Icon className="h-5 w-5" /></span><div><h2 className="text-xl font-bold text-slate-950">{title}</h2><p className="mt-1 text-sm text-slate-500">{description}</p></div></div>
       <div className="mt-5 grid gap-3">{children}</div>
     </section>
