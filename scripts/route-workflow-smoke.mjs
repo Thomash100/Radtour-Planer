@@ -9,6 +9,7 @@ const baseUrl = process.env.ROUTE_WORKFLOW_BASE_URL || "http://127.0.0.1:3000";
 const browserExecutable = process.env.BROWSER_EXECUTABLE;
 const outputDirectory = path.resolve("artifacts/route-workflow-regression");
 const storageKey = "biketriphub.tourState.v1";
+const preferenceStorageKey = "biketriphub.uiPreferences.v1";
 
 const gpx = `<?xml version="1.0" encoding="UTF-8"?>
 <gpx version="1.1" creator="BikeTripHub Regression" xmlns="http://www.topografix.com/GPX/1/1">
@@ -28,7 +29,7 @@ const browser = await chromium.launch({
 });
 const report = [];
 
-async function runFlow(name, prepareRoute) {
+async function runFlow(name, mode, prepareRoute) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 1,
@@ -36,6 +37,25 @@ async function runFlow(name, prepareRoute) {
     timezoneId: "Europe/Berlin",
     reducedMotion: "reduce"
   });
+  await context.addInitScript(
+    ({ preferenceStorageKey, mode }) => {
+      window.localStorage.setItem(
+        preferenceStorageKey,
+        JSON.stringify({
+          version: 2,
+          routePlanningInteractionMode: mode,
+          showStageColors: true,
+          showMiniElevationProfiles: true,
+          showStageNumbers: true,
+          showElevationProfile: true,
+          showPois: true,
+          mapStyle: "standard",
+          compactStageCards: false
+        })
+      );
+    },
+    { preferenceStorageKey, mode }
+  );
   const page = await context.newPage();
   const diagnostics = {
     consoleErrors: [],
@@ -63,7 +83,10 @@ async function runFlow(name, prepareRoute) {
   const beforeUrl = `${baseUrl}/planer/route`;
   const initialResponse = await page.goto(beforeUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
   await page.getByRole("heading", { name: "Routenplanung" }).waitFor({ state: "visible", timeout: 30_000 });
-  await prepareRoute(page);
+  await page
+    .getByText(mode === "inline" ? "Variante A · Eingabe einblenden" : "Variante B · Geführter Assistent")
+    .waitFor({ state: "visible", timeout: 30_000 });
+  await prepareRoute(page, mode);
 
   const stateBeforeNavigation = await page.evaluate((key) => {
     const raw = window.localStorage.getItem(key);
@@ -76,7 +99,7 @@ async function runFlow(name, prepareRoute) {
     };
   }, storageKey);
   if (!stateBeforeNavigation.routeName || stateBeforeNavigation.routePoints < 2) {
-    throw new Error(`${name}: Route fehlt vor der Weiterverarbeitung im TourState.`);
+    throw new Error(`${mode}/${name}: Route fehlt vor der Weiterverarbeitung im TourState.`);
   }
 
   if (name === "gpx") {
@@ -102,7 +125,7 @@ async function runFlow(name, prepareRoute) {
   }, storageKey);
 
   await page.screenshot({
-    path: path.join(outputDirectory, `${name}-etappen.png`),
+    path: path.join(outputDirectory, `${mode}-${name}-etappen.png`),
     fullPage: true
   });
 
@@ -124,6 +147,7 @@ async function runFlow(name, prepareRoute) {
 
   const result = {
     name,
+    mode,
     beforeUrl,
     afterUrl,
     initialHttpStatus: initialResponse?.status() ?? null,
@@ -135,32 +159,43 @@ async function runFlow(name, prepareRoute) {
   };
   report.push(result);
   await context.close();
-  if (!result.ok) throw new Error(`${name}: ${blockingDiagnostics.join(" | ")}`);
+  if (!result.ok) throw new Error(`${mode}/${name}: ${blockingDiagnostics.join(" | ")}`);
 }
 
 try {
-  await runFlow("direct", async (page) => {
-    await page.getByRole("button", { name: "Direkte Eingabe" }).click();
-    await page.locator("#start").fill("Dresden");
-    await page.locator("#end").fill("Meißen");
-    await page.getByRole("button", { name: "Route berechnen" }).click();
-    await page.locator('[data-route-overview="true"]').waitFor({ state: "visible", timeout: 60_000 });
-  });
-
-  await runFlow("gpx", async (page) => {
-    await page.getByRole("button", { name: "GPX importieren" }).click();
-    await page.locator('input[type="file"]').setInputFiles({
-      name: "dresden-meissen.gpx",
-      mimeType: "application/gpx+xml",
-      buffer: Buffer.from(gpx, "utf8")
+  for (const mode of ["inline", "wizard"]) {
+    await runFlow("direct", mode, async (page, activeMode) => {
+      await page.getByRole("button", { name: "Direkte Route öffnen" }).click();
+      await page.locator('[data-route-planning-form="direct"]').waitFor({ state: "visible", timeout: 30_000 });
+      if (activeMode === "wizard") {
+        await page.waitForURL(/mode=direct&step=direct/, { timeout: 30_000 });
+        await page.goBack({ waitUntil: "domcontentloaded" });
+        await page.locator('[data-route-planning-layout="wizard-selection"]').waitFor({ state: "visible", timeout: 30_000 });
+        await page.getByRole("button", { name: "Direkte Route öffnen" }).click();
+        await page.locator('[data-route-planning-form="direct"]').waitFor({ state: "visible", timeout: 30_000 });
+      }
+      await page.locator("#start").fill("Dresden");
+      await page.locator("#end").fill("Meißen");
+      await page.getByRole("button", { name: "Route berechnen" }).click();
+      await page.locator('[data-route-overview="true"]').waitFor({ state: "visible", timeout: 60_000 });
     });
-    await page.getByRole("heading", { name: "Route kürzen" }).waitFor({ state: "visible", timeout: 60_000 });
-  });
 
-  await runFlow("demo", async (page) => {
-    await page.getByRole("button", { name: "Demo laden" }).click();
-    await page.locator('[data-route-overview="true"]').waitFor({ state: "visible", timeout: 90_000 });
-  });
+    await runFlow("gpx", mode, async (page) => {
+      await page.getByRole("button", { name: "GPX-Import öffnen" }).click();
+      await page.locator('input[type="file"]').setInputFiles({
+        name: "dresden-meissen.gpx",
+        mimeType: "application/gpx+xml",
+        buffer: Buffer.from(gpx, "utf8")
+      });
+      await page.getByRole("heading", { name: "Route kürzen" }).waitFor({ state: "visible", timeout: 60_000 });
+    });
+
+    await runFlow("demo", mode, async (page) => {
+      await page.getByRole("button", { name: "Demo-Tour öffnen" }).click();
+      await page.getByRole("button", { name: "Demo-Tour laden" }).click();
+      await page.locator('[data-route-overview="true"]').waitFor({ state: "visible", timeout: 90_000 });
+    });
+  }
 } finally {
   await writeFile(
     path.join(outputDirectory, "report.json"),
@@ -170,4 +205,4 @@ try {
   await browser.close();
 }
 
-process.stdout.write(`${JSON.stringify({ baseUrl, flows: report.map(({ name, ok, afterUrl, stateAfterNavigation }) => ({ name, ok, afterUrl, stateAfterNavigation })) }, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify({ baseUrl, flows: report.map(({ name, mode, ok, afterUrl, stateAfterNavigation }) => ({ name, mode, ok, afterUrl, stateAfterNavigation })) }, null, 2)}\n`);

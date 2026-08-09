@@ -79,9 +79,12 @@ import {
   OSM_SOURCE_MAX_ZOOM
 } from "../src/lib/map-zoom";
 import {
+  createRoutePlanningWorkflowState,
   isPlannerStepForWorkflow,
   normalizePlannerStep,
-  resolvePlannerStep
+  plannerStepFromRoutePlanningWorkflow,
+  resolvePlannerStep,
+  transitionRoutePlanningWorkflow
 } from "../src/lib/planner-workflow";
 import {
   DEFAULT_RIDER_BIKE_PROFILE,
@@ -1236,6 +1239,58 @@ test("Etappenplanung übernimmt die gemeinsame Route ohne Routenarbeitsschritt",
     }),
     "stage-edit"
   );
+});
+
+test("hält Inline-Auswahl auf der Methodenseite und markiert genau eine aktive Methode", () => {
+  const initial = createRoutePlanningWorkflowState("inline");
+  const direct = transitionRoutePlanningWorkflow(initial, { type: "select-method", method: "direct" });
+  const gpx = transitionRoutePlanningWorkflow(direct, { type: "select-method", method: "gpx" });
+
+  assert.deepEqual(direct, { mode: "inline", step: "select-method", activeMethod: "direct" });
+  assert.deepEqual(gpx, { mode: "inline", step: "select-method", activeMethod: "gpx" });
+  assert.equal(plannerStepFromRoutePlanningWorkflow(gpx), "mode");
+});
+
+test("führt den Assistenten deterministisch durch Direkteingabe, Zurück und Prüfung", () => {
+  const initial = createRoutePlanningWorkflowState("wizard");
+  const direct = transitionRoutePlanningWorkflow(initial, { type: "select-method", method: "direct" });
+  const back = transitionRoutePlanningWorkflow(direct, { type: "back" });
+  const selectedAgain = transitionRoutePlanningWorkflow(back, { type: "select-method", method: "direct" });
+  const complete = transitionRoutePlanningWorkflow(selectedAgain, { type: "complete" });
+
+  assert.equal(direct.step, "direct-input");
+  assert.equal(plannerStepFromRoutePlanningWorkflow(direct), "direct");
+  assert.deepEqual(back, { mode: "wizard", step: "select-method", activeMethod: "direct" });
+  assert.equal(complete.step, "route-review");
+  assert.equal(plannerStepFromRoutePlanningWorkflow(complete), "overview");
+});
+
+test("führt GPX und Demo über denselben Workflow-Core zur Routenprüfung", () => {
+  for (const method of ["gpx", "demo"] as const) {
+    const selected = transitionRoutePlanningWorkflow(createRoutePlanningWorkflowState("wizard"), {
+      type: "select-method",
+      method
+    });
+    const complete = transitionRoutePlanningWorkflow(selected, { type: "complete" });
+    assert.equal(selected.step, method === "gpx" ? "gpx-import" : "demo-tour");
+    assert.equal(complete.step, "route-review");
+  }
+});
+
+test("wechselt Bedienmodi ohne gewählte Methode oder externe Tourdaten zu verändern", () => {
+  const tourData = { routeId: "route-42", stageIds: ["stage-1", "stage-2"] };
+  const inline = transitionRoutePlanningWorkflow(
+    transitionRoutePlanningWorkflow(createRoutePlanningWorkflowState("wizard"), {
+      type: "select-method",
+      method: "direct"
+    }),
+    { type: "change-mode", mode: "inline" }
+  );
+  const wizard = transitionRoutePlanningWorkflow(inline, { type: "change-mode", mode: "wizard" });
+
+  assert.deepEqual(inline, { mode: "inline", step: "select-method", activeMethod: "direct" });
+  assert.deepEqual(wizard, { mode: "wizard", step: "direct-input", activeMethod: "direct" });
+  assert.deepEqual(tourData, { routeId: "route-42", stageIds: ["stage-1", "stage-2"] });
 });
 
 const routeGeometry: LineStringGeoJson = {
@@ -3321,6 +3376,9 @@ test("speichert Darstellungsoptionen versioniert und normalisiert alte oder defe
   const changed = { ...DEFAULT_UI_PREFERENCES, showMiniElevationProfiles: false, mapStyle: "cycle" as const };
   assert.deepEqual(parseUiPreferences(serializeUiPreferences(changed)), changed);
   assert.deepEqual(parseUiPreferences("kein-json"), DEFAULT_UI_PREFERENCES);
+  assert.equal(normalizeUiPreferences({ version: 1, showStageColors: false }).routePlanningInteractionMode, "wizard");
+  assert.equal(normalizeUiPreferences({ routePlanningInteractionMode: "inline" }).routePlanningInteractionMode, "inline");
+  assert.equal(DEFAULT_UI_PREFERENCES.version, 2);
   assert.deepEqual(normalizeUiPreferences({ showStageColors: false }), {
     ...DEFAULT_UI_PREFERENCES,
     showStageColors: false
@@ -3332,6 +3390,8 @@ test("verwendet eine gemeinsame responsive Navigation und funktionale Darstellun
   const settings = readFileSync("src/components/SettingsClient.tsx", "utf8");
   const planner = readFileSync("src/components/PlannerClient.tsx", "utf8");
   const miniProfile = readFileSync("src/components/StageMiniElevationProfile.tsx", "utf8");
+  const modeSelector = readFileSync("src/components/RoutePlanningModeSelector.tsx", "utf8");
+  const directFormOccurrences = planner.match(/data-route-planning-form="direct"/g) ?? [];
 
   assert.match(shell, /data-app-navigation="desktop"/);
   assert.match(shell, /data-app-navigation="bottom"/);
@@ -3341,6 +3401,11 @@ test("verwendet eine gemeinsame responsive Navigation und funktionale Darstellun
   assert.match(planner, /preferences\.showMiniElevationProfiles/);
   assert.match(planner, /preferences\.showPois/);
   assert.match(miniProfile, /data-mini-elevation-empty/);
+  assert.match(modeSelector, /Eingabe auf derselben Seite/);
+  assert.match(modeSelector, /Geführter Assistent/);
+  assert.match(planner, /data-route-planning-layout="inline"/);
+  assert.match(planner, /data-route-planning-layout="wizard-step"/);
+  assert.equal(directFormOccurrences.length, 1);
 });
 
 test("persistiert eine lange Demo-Route kompakt und ohne Quota-Absturz", () => {

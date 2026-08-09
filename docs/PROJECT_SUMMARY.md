@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-08-08
+Stand: 2026-08-09
 
 ## Produktstand
 
@@ -34,6 +34,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Deterministische Etappenfarben und echte Mini-Höhenprofile aus vorhandenen Etappen-Höhendaten in Karte, Übersicht und Reiseplan.
 - Versionierte Darstellungsoptionen für Etappenfarben, Mini-Höhenprofile, Etappennummern, großes Höhenprofil, POIs und Kartenstil ohne Änderung des TourState.
 - Große Routen werden browsergeeignet ohne reproduzierbare Analyse-Snapshots und exakte Originalrouten-Duplikate gespeichert; die Fachanalyse wird nach dem Laden deterministisch aus den erhaltenen Quelldaten neu berechnet.
+- Die Routenplanung bietet testweise eine Inline-Eingabe und einen geführten Assistenten über demselben reinen Workflow-Core; die App-Präferenz ist nicht Bestandteil der Tourdaten.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
 
@@ -87,6 +88,7 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Paket 22: Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell `biketriphub-route-condition-v1` wurde nach Freigabe über PR #75 mit Merge-Commit `24231ae` in `private` integriert.
 - Paket 23: Deterministische Mehrzielbewertung vorhandener Routenalternativen `biketriphub-route-optimizer-v1` wird auf `codex/multi-criteria-route-optimizer` additiv umgesetzt; PR bleibt bis zur ausdrücklichen Freigabe im Draft.
 - Responsive UI-Neugestaltung: wird auf `codex/responsive-ui-redesign` gestapelt auf dem noch nicht freigegebenen Paket-23-Stand umgesetzt; die sechs lokalen Mobil-, Pad- und Browser-Referenzen sind die visuelle Vorgabe. Die manuelle Abnahme bleibt bis zur erneuten Smartphone-Prüfung der korrigierten Testversion offen.
+- Bedienvergleich Routenplanung: Variante A (Inline) und Variante B (Assistent) werden auf `codex/route-planning-interaction-modes` parallel, fachlogisch gemeinsam und ohne Vorentscheidung für die manuelle Nutzerprüfung vorbereitet.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
 Aktuelle Integrationsbasis für Paket 23:
