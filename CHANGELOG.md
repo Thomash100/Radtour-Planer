@@ -1,5 +1,14 @@
 # Changelog
 
+## Alternative Bedienmodi Routenplanung - 2026-08-09
+
+- reinen, browserunabhängigen Workflow-Core für Planungsart, Bedienmodus, Schritte und deterministische Übergänge ergänzt
+- Variante A mit direkt eingeblendeter gemeinsamer Eingabe und automatischer Positionierung umgesetzt
+- Variante B als fokussierten Assistenten mit Fortschritt, Zurück-Aktion und Browser-History umgesetzt
+- Bedienpräferenz im bestehenden UI-Präferenzschema v2 gespeichert; bestehende Installationen verwenden den Assistenten als Default
+- gemeinsame Direktrouten-, GPX- und Demo-Eingaben für beide Layouts wiederverwendet und eine alte unerreichbare Duplikatform entfernt
+- keine Routing-, GPX-, TourState-, Karten-, Höhen-, Etappen-, Energie- oder Ladefachlogik dupliziert
+
 ## Fehlerkorrektur Routenworkflow - 2026-08-08
 
 - ungefangenen `QuotaExceededError` beim automatischen Speichern großer Routen behoben

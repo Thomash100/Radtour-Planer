@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { RouteMap } from "@/components/RouteMap";
+import { RoutePlanningModeSelector } from "@/components/RoutePlanningModeSelector";
 import { StageOverviewCard } from "@/components/StageOverviewCard";
 import { Button } from "@/components/ui/button";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
@@ -15,7 +16,16 @@ import { formatHours, formatKm } from "@/lib/utils";
 
 export function HomeDashboardClient() {
   const [state, setState] = useState<StoredTourState | null>(null);
-  const { preferences } = useUiPreferences();
+  const { preferences, setPreferences } = useUiPreferences();
+
+  const planningModeSelector = (
+    <RoutePlanningModeSelector
+      mode={preferences.routePlanningInteractionMode}
+      onChange={(routePlanningInteractionMode) =>
+        setPreferences((current) => ({ ...current, routePlanningInteractionMode }))
+      }
+    />
+  );
 
   useEffect(() => setState(parseStoredTourState(window.localStorage.getItem(TOUR_STATE_STORAGE_KEY))), []);
 
@@ -34,6 +44,7 @@ export function HomeDashboardClient() {
           <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-100">BikeTripHub</p><h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-6xl">Deine Radreise beginnt hier.</h1><p className="mt-5 max-w-2xl text-base leading-7 text-emerald-50 sm:text-lg">Plane eine reale Fahrradroute oder importiere deine GPX-Datei. Etappen, Unterkünfte, Energie und Reiseplan verwenden anschließend dieselbe Routengrundlage.</p></div>
           <div className="mt-8 grid gap-3 desktop:mt-0"><Action href="/planer/route?mode=direct" icon={Route} label="Neue Route planen" /><Action href="/planer/route?mode=gpx" icon={Upload} label="GPX importieren" /><Action href="/touren" icon={CalendarDays} label="Gespeicherte Touren" /></div>
         </section>
+        <section className="mt-5">{planningModeSelector}</section>
       </main>
     );
   }
@@ -42,6 +53,7 @@ export function HomeDashboardClient() {
   return (
     <main className="mx-auto w-full max-w-[1536px] px-4 py-6 sm:px-6 desktop:px-8 desktop:py-9" data-start-dashboard="true">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Willkommen zurück</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{route.name}</h1><p className="mt-2 text-slate-500">{route.startName} – {route.endName}</p></div><Button asChild><Link href="/planer/route?open=last">Tour fortsetzen<ArrowRight className="h-4 w-4" /></Link></Button></header>
+      <section className="mt-5">{planningModeSelector}</section>
       <section className="mt-6 grid gap-4 desktop:grid-cols-[minmax(0,1fr)_330px]">
         <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white p-2 shadow-[0_24px_65px_rgba(15,23,42,0.08)]"><RouteMap mapStyle={preferences.mapStyle} pois={preferences.showPois ? state.pois : []} route={route.geometryGeoJson} showStageColors={preferences.showStageColors} showStageNumbers={preferences.showStageNumbers} stages={state.stages} waypoints={route.waypoints} /></div>
         <div className="grid content-start gap-3 sm:grid-cols-3 desktop:grid-cols-1"><Metric label="Gesamtdistanz" value={formatKm(route.distanceKm)} /><Metric label="Fahrzeit" value={formatHours(route.durationHours)} /><Metric label="Etappen" value={String(state.stages.length)} /></div>

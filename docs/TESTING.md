@@ -72,7 +72,15 @@ BROWSER_EXECUTABLE=/pfad/zu/chrome \
 node scripts/route-workflow-smoke.mjs
 ```
 
-Der Lauf prüft Zielansicht, Page Errors, Konsolenfehler, fehlgeschlagene App-Requests sowie Route und Etappen im gemeinsamen TourState. Bericht und Screenshots liegen unter `artifacts/route-workflow-regression/`.
+Der Lauf prüft Direkte Route, GPX-Import und Demo-Tour in beiden Bedienmodi (`inline` und `wizard`). Beim Assistenten wird zusätzlich Browser-Zurück bis zur Methodenauswahl ausgeführt. Zielansicht, Page Errors, Konsolenfehler, fehlgeschlagene App-Requests sowie Route und Etappen im gemeinsamen TourState werden für jeden Lauf kontrolliert. Bericht und Screenshots liegen unter `artifacts/route-workflow-regression/`.
+
+Für den visuellen Variantenvergleich werden zusätzlich folgende responsive Abnahmebilder unter `artifacts/route-planning-modes/` erzeugt:
+
+- Mobil: Auswahl, Direkte Route und GPX-Import je Variante
+- Tablet: Direkte Route je Variante
+- Desktop: Direkte Route je Variante
+
+Die Auswahl des Bedienmodus wird über das sichtbare Startfenster geprüft. Sie muss ohne App-Neustart wirksam sein und beim Navigieren erhalten bleiben; der TourState darf sich allein durch den Moduswechsel nicht ändern.
 
 ## GPX-/Etappen-MVP
 

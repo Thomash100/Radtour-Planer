@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { StageMiniElevationProfile } from "@/components/StageMiniElevationProfile";
+import { RoutePlanningModeSelector } from "@/components/RoutePlanningModeSelector";
 import { Button } from "@/components/ui/button";
 import { useUiPreferences } from "@/hooks/useUiPreferences";
 import { routeBoundsForStage, sliceElevationProfile, type ElevationPoint } from "@/lib/geo";
@@ -94,6 +95,11 @@ export function SettingsClient() {
           </SettingsSection>
 
           <SettingsSection id="tourplanung" icon={Bike} title="Tourplanung" description="Zentrale Fahrer-, Fahrrad- und Etappeneinstellungen bleiben gemeinsam gekapselt.">
+            <RoutePlanningModeSelector
+              compact
+              mode={preferences.routePlanningInteractionMode}
+              onChange={(value) => update("routePlanningInteractionMode", value)}
+            />
             <LinkRow href="/einstellungen/fahrprofil" icon={UserRound} label="Fahrer- und Fahrradprofil" detail="Fitness, Fahrrad, E-Bike und Ladegerät" />
             <LinkRow href="/planer/etappen?open=last" icon={SlidersHorizontal} label="Etappenplanung" detail="Tage, Schwierigkeit und Etappenpunkte" />
           </SettingsSection>

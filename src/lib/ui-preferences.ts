@@ -1,8 +1,11 @@
+import type { RoutePlanningInteractionMode } from "@/lib/planner-workflow";
+
 export const UI_PREFERENCES_STORAGE_KEY = "biketriphub.uiPreferences.v1";
 export const UI_PREFERENCES_EVENT = "biketriphub:ui-preferences";
 
 export type UiPreferences = {
-  version: 1;
+  version: 2;
+  routePlanningInteractionMode: RoutePlanningInteractionMode;
   showStageColors: boolean;
   showMiniElevationProfiles: boolean;
   showStageNumbers: boolean;
@@ -13,7 +16,8 @@ export type UiPreferences = {
 };
 
 export const DEFAULT_UI_PREFERENCES: UiPreferences = {
-  version: 1,
+  version: 2,
+  routePlanningInteractionMode: "wizard",
   showStageColors: true,
   showMiniElevationProfiles: true,
   showStageNumbers: true,
@@ -30,7 +34,8 @@ export function normalizeUiPreferences(value: unknown): UiPreferences {
 
   const candidate = value as Partial<UiPreferences>;
   return {
-    version: 1,
+    version: 2,
+    routePlanningInteractionMode: candidate.routePlanningInteractionMode === "inline" ? "inline" : "wizard",
     showStageColors: candidate.showStageColors !== false,
     showMiniElevationProfiles: candidate.showMiniElevationProfiles !== false,
     showStageNumbers: candidate.showStageNumbers !== false,

@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Activity,
   ArrowDownToLine,
+  ArrowLeft,
   ArrowRight,
   BadgeEuro,
   BatteryCharging,
@@ -14,7 +15,6 @@ import {
   CheckCircle2,
   CirclePlus,
   FileText,
-  Filter,
   GripVertical,
   Map,
   MapPinned,
@@ -26,6 +26,7 @@ import {
   Trash2
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -131,12 +132,16 @@ import {
   type TourInputMode
 } from "@/lib/tour-state";
 import {
+  createRoutePlanningWorkflowState,
   isPlannerStepForWorkflow,
   normalizePlannerStep,
+  plannerStepFromRoutePlanningWorkflow,
   resolvePlannerStep,
-  routePlannerSteps,
+  transitionRoutePlanningWorkflow,
   stagePlannerSteps,
   type PlannerStep,
+  type RoutePlanningMethod,
+  type RoutePlanningStep,
   type PlannerWorkflowView
 } from "@/lib/planner-workflow";
 import {
@@ -390,6 +395,19 @@ function normalizeTourMode(value?: string): TourInputMode | null {
   return null;
 }
 
+function routePlanningMethodFromMode(value: TourInputMode | null): RoutePlanningMethod | null {
+  if (value === "direct" || value === "gpx" || value === "demo") return value;
+  return null;
+}
+
+function routePlanningStepFromPlannerStep(step: PlannerStep): RoutePlanningStep {
+  if (step === "direct") return "direct-input";
+  if (step === "gpx") return "gpx-import";
+  if (step === "demo") return "demo-tour";
+  if (step === "overview" || step === "trim") return "route-review";
+  return "select-method";
+}
+
 function routeWithOriginalGeometry<T extends RouteCalculation>(routeData: T): T {
   const originalGeometryGeoJson = routeData.originalGeometryGeoJson ?? routeData.geometryGeoJson;
   const originalDistanceKm = routeDistanceKm(originalGeometryGeoJson.coordinates);
@@ -504,6 +522,7 @@ export function PlannerClient({
   openLast?: boolean;
   workflowView?: PlannerWorkflowView;
 }) {
+  const router = useRouter();
   const normalizedInitialMode = normalizeTourMode(initialMode);
   const normalizedInitialStep = normalizePlannerStep(initialStep);
   const initialInputMode = normalizedInitialMode ?? "direct";
@@ -516,6 +535,18 @@ export function PlannerClient({
   });
   const [inputMode, setInputMode] = useState<TourInputMode>(initialInputMode);
   const [plannerStep, setPlannerStep] = useState<PlannerStep>(initialPlannerStep);
+  const initialRoutePlanningMethod =
+    routePlanningMethodFromMode(normalizedInitialMode) ??
+    (initialPlannerStep === "direct" || initialPlannerStep === "gpx" || initialPlannerStep === "demo"
+      ? initialPlannerStep
+      : null);
+  const [routePlanningWorkflow, setRoutePlanningWorkflow] = useState(() =>
+    createRoutePlanningWorkflowState(
+      "wizard",
+      initialRoutePlanningMethod,
+      routePlanningStepFromPlannerStep(initialPlannerStep)
+    )
+  );
   const [waypoints, setWaypoints] = useState<string[]>([]);
   const [draggedWaypointIndex, setDraggedWaypointIndex] = useState<number | null>(null);
   const [newWaypoint, setNewWaypoint] = useState("");
@@ -587,6 +618,55 @@ export function PlannerClient({
   const [pendingStageGeneration, setPendingStageGeneration] = useState<PendingStageGeneration | null>(null);
   const stageCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const stageGenerationConfirmationRef = useRef<HTMLDivElement | null>(null);
+  const inlinePlanningContentRef = useRef<HTMLDivElement | null>(null);
+
+  const pushWizardHistory = useCallback((method: RoutePlanningMethod, step: PlannerStep) => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("open");
+    url.searchParams.delete("tour");
+    url.searchParams.set("mode", method);
+    url.searchParams.set("step", step);
+    router.push(`${url.pathname}${url.search}`, { scroll: false });
+  }, [router]);
+
+  const showRoutePlanningSelection = useCallback(() => {
+    setRoutePlanningWorkflow((current) => transitionRoutePlanningWorkflow(current, { type: "back" }));
+    setPlannerStep("mode");
+  }, []);
+
+  const selectRoutePlanningMethod = useCallback(
+    (method: RoutePlanningMethod) => {
+      const currentMode = preferences.routePlanningInteractionMode;
+      const normalizedWorkflow = transitionRoutePlanningWorkflow(routePlanningWorkflow, {
+        type: "change-mode",
+        mode: currentMode
+      });
+      const nextWorkflow = transitionRoutePlanningWorkflow(normalizedWorkflow, { type: "select-method", method });
+      setRoutePlanningWorkflow(nextWorkflow);
+      setInputMode(method);
+      const nextPlannerStep = plannerStepFromRoutePlanningWorkflow(nextWorkflow);
+      setPlannerStep(nextPlannerStep);
+      if (currentMode === "wizard") {
+        pushWizardHistory(method, nextPlannerStep);
+      }
+    },
+    [preferences.routePlanningInteractionMode, pushWizardHistory, routePlanningWorkflow]
+  );
+
+  const returnToRoutePlanningSelection = useCallback(() => {
+    showRoutePlanningSelection();
+    router.push("/planer/route", { scroll: false });
+  }, [router, showRoutePlanningSelection]);
+
+  const editRouteFromReview = useCallback(() => {
+    const nextWorkflow = transitionRoutePlanningWorkflow(routePlanningWorkflow, { type: "back" });
+    setRoutePlanningWorkflow(nextWorkflow);
+    const nextPlannerStep = plannerStepFromRoutePlanningWorkflow(nextWorkflow);
+    setPlannerStep(nextPlannerStep);
+    if (nextWorkflow.mode === "wizard" && nextWorkflow.activeMethod) {
+      pushWizardHistory(nextWorkflow.activeMethod, nextPlannerStep);
+    }
+  }, [pushWizardHistory, routePlanningWorkflow]);
 
   const plannerForm = useForm<PlannerForm>({
     resolver: zodResolver(plannerSchema),
@@ -1274,6 +1354,11 @@ export function PlannerClient({
       });
       setRouteOptimization(normalizeRouteOptimizationStoredState(stored.routeOptimization));
       setLastTourSavedAt(stored.lastSavedAt ?? null);
+      setRoutePlanningWorkflow((current) => ({
+        ...current,
+        activeMethod: stored.inputMode,
+        step: "route-review"
+      }));
       setPlannerStep(
         resolvePlannerStep({
           workflowView,
@@ -1286,6 +1371,64 @@ export function PlannerClient({
     },
     [plannerForm, workflowView]
   );
+
+  useEffect(() => {
+    if (routePlanningWorkflow.mode === preferences.routePlanningInteractionMode) return;
+    const nextWorkflow = transitionRoutePlanningWorkflow(routePlanningWorkflow, {
+      type: "change-mode",
+      mode: preferences.routePlanningInteractionMode
+    });
+    setRoutePlanningWorkflow(nextWorkflow);
+    if (workflowView === "route" && plannerStep !== "overview" && plannerStep !== "trim") {
+      setPlannerStep(plannerStepFromRoutePlanningWorkflow(nextWorkflow));
+    }
+  }, [plannerStep, preferences.routePlanningInteractionMode, routePlanningWorkflow, workflowView]);
+
+  useEffect(() => {
+    if (
+      workflowView !== "route" ||
+      routePlanningWorkflow.mode !== "inline" ||
+      !routePlanningWorkflow.activeMethod
+    ) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      inlinePlanningContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [routePlanningWorkflow.activeMethod, routePlanningWorkflow.mode, workflowView]);
+
+  useEffect(() => {
+    if (workflowView !== "route") return;
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const step = normalizePlannerStep(params.get("step") ?? undefined);
+      const method = routePlanningMethodFromMode(normalizeTourMode(params.get("mode") ?? undefined));
+      if (route && (!method || step === "overview")) {
+        setRoutePlanningWorkflow((current) => {
+          const activeMethod = method ?? routePlanningMethodFromMode(inputMode);
+          return transitionRoutePlanningWorkflow(
+            activeMethod ? { ...current, activeMethod } : current,
+            { type: "complete" }
+          );
+        });
+        setPlannerStep("overview");
+        return;
+      }
+      if (method && (step === "direct" || step === "gpx" || step === "demo")) {
+        setInputMode(method);
+        setPlannerStep(step);
+        setRoutePlanningWorkflow(
+          createRoutePlanningWorkflowState("wizard", method, routePlanningStepFromPlannerStep(step))
+        );
+        return;
+      }
+      setPlannerStep("mode");
+      setRoutePlanningWorkflow((current) => ({ ...current, step: "select-method" }));
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [inputMode, route, workflowView]);
 
   useEffect(() => {
     const storedProfile = parseStoredRiderBikeProfile(window.localStorage.getItem(RIDER_BIKE_PROFILE_STORAGE_KEY));
@@ -1348,6 +1491,15 @@ export function PlannerClient({
 
     if (urlMode) {
       setInputMode(urlMode);
+      const method = routePlanningMethodFromMode(urlMode);
+      if (method) {
+        setRoutePlanningWorkflow((current) =>
+          transitionRoutePlanningWorkflow(
+            { ...current, activeMethod: method },
+            { type: "select-method", method }
+          )
+        );
+      }
       setPlannerStep(
         resolvePlannerStep({
           workflowView,
@@ -2162,6 +2314,15 @@ export function PlannerClient({
       setStatus(
         `${options.statusPrefix ?? "Route bereit"}: ${generatedStages.length} Etappen und ${poiPayload?.pois.length ?? 0} POI.${routingNotice}${poiNotice}`
       );
+      setRoutePlanningWorkflow((current) =>
+        transitionRoutePlanningWorkflow(
+          {
+            ...current,
+            activeMethod: options.tourKind === "demo" ? "demo" : "direct"
+          },
+          { type: "complete" }
+        )
+      );
       setPlannerStep(options.finalStep ?? "overview");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
@@ -2225,6 +2386,12 @@ export function PlannerClient({
         `GPX-Route importiert: ${imported.pointCount ?? savedData.geometryGeoJson.coordinates.length} Punkte, ${
           imported.elevationSource === "gpx" ? "Höhenprofil aus Datei" : "Höhenprofil geschätzt"
         }. Route kürzen oder Etappen erzeugen. ${poiPayload?.pois.length ?? 0} POI sind bereit.${correctionNotice}${poiNotice}`
+      );
+      setRoutePlanningWorkflow((current) =>
+        transitionRoutePlanningWorkflow(
+          { ...current, activeMethod: "gpx" },
+          { type: "complete" }
+        )
       );
       setPlannerStep("trim");
     } catch (error) {
@@ -2839,6 +3006,38 @@ export function PlannerClient({
     }
   }
 
+  const routeWorkflowIndicator = (
+    <div className="flex flex-wrap items-center gap-2" data-route-planning-workflow-mode={routePlanningWorkflow.mode}>
+      <Badge variant="outline">
+        {routePlanningWorkflow.mode === "inline" ? "Variante A · Eingabe einblenden" : "Variante B · Geführter Assistent"}
+      </Badge>
+      {routePlanningWorkflow.mode === "wizard" && (
+        <ol className="flex flex-wrap items-center gap-1 text-xs font-semibold text-slate-500" aria-label="Fortschritt Routenplanung">
+          {[
+            { step: 1, label: "Planungsart", active: routePlanningWorkflow.step === "select-method" },
+            {
+              step: 2,
+              label: "Eingabe",
+              active: ["direct-input", "gpx-import", "demo-tour"].includes(routePlanningWorkflow.step)
+            },
+            { step: 3, label: "Prüfen", active: routePlanningWorkflow.step === "route-review" }
+          ].map((item) => (
+            <li
+              key={item.step}
+              className={cn(
+                "rounded-full border px-3 py-1.5",
+                item.active ? "border-primary bg-emerald-50 text-primary" : "border-slate-200 bg-white"
+              )}
+              aria-current={item.active ? "step" : undefined}
+            >
+              {item.step}. {item.label}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+
   const workflowHeader = (
     <section className="rounded-[24px] border border-slate-200/80 bg-white p-4 shadow-[0_14px_40px_rgba(15,23,42,0.05)]">
       <div className="flex flex-col gap-4">
@@ -2855,26 +3054,20 @@ export function PlannerClient({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {(workflowView === "route" ? routePlannerSteps : stagePlannerSteps).map((step) => (
-              <Button
-                key={step}
-                disabled={(step === "overview" || step === "trim" || step === "stage-create" || step === "stage-edit") && !route}
-                size="sm"
-                type="button"
-                variant={plannerStep === step ? "default" : "outline"}
-                onClick={() => setPlannerStep(step)}
-              >
-                {{
-                  mode: "Eingabeart",
-                  direct: "Direkte Route",
-                  gpx: "GPX-Import",
-                  overview: "Routenübersicht",
-                  trim: "Route kürzen",
-                  "stage-create": "Etappen erzeugen",
-                  "stage-edit": "Etappen bearbeiten"
-                }[step]}
-              </Button>
-            ))}
+            {workflowView === "route"
+              ? routeWorkflowIndicator
+              : stagePlannerSteps.map((step) => (
+                  <Button
+                    key={step}
+                    disabled={!route}
+                    size="sm"
+                    type="button"
+                    variant={plannerStep === step ? "default" : "outline"}
+                    onClick={() => setPlannerStep(step)}
+                  >
+                    {step === "stage-create" ? "Etappen erzeugen" : "Etappen bearbeiten"}
+                  </Button>
+                ))}
           </div>
         </div>
       </div>
@@ -2882,7 +3075,7 @@ export function PlannerClient({
   );
 
   const routeInputForm = (
-    <Card>
+    <Card data-route-planning-form="direct">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Route className="h-5 w-5 text-primary" />
@@ -2977,6 +3170,53 @@ export function PlannerClient({
         </form>
       </CardContent>
     </Card>
+  );
+
+  const gpxImportForm = (
+    <Card data-route-planning-form="gpx">
+      <CardHeader>
+        <CardTitle>{route ? "Weitere GPX-Datei importieren" : "GPX-Datei importieren"}</CardTitle>
+        <CardDescription>
+          {route
+            ? "Eine neu ausgewählte GPX-Datei legt eine neue Arbeitsroute an. Die bestehende Tour wird erst nach erfolgreichem Import ersetzt."
+            : "Nach dem Import folgt die Prüfung und bei Bedarf das Kürzen der realen GPX-Routengrundlage."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Input
+          aria-label="GPX-Datei auswählen"
+          accept=".gpx,application/gpx+xml,text/xml"
+          type="file"
+          onChange={(event) => importGpx(event.target.files?.[0] ?? null)}
+        />
+        <p className="text-sm text-muted-foreground">{status}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const demoTourForm = (
+    <Card data-route-planning-form="demo">
+      <CardHeader>
+        <CardTitle>Demo-Tour bewusst laden</CardTitle>
+        <CardDescription>
+          Dresden bis Hamburg wird mit realer Routengeometrie, sechs Reisetagen und den vorhandenen Planungsmodulen geladen.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Button className="w-full sm:w-auto" disabled={isBusy} type="button" onClick={() => void startDemoTour()}>
+          <Map className="h-4 w-4" />
+          {isBusy ? "Demo wird geladen..." : "Demo-Tour laden"}
+        </Button>
+        <p className="text-sm text-muted-foreground">{status}</p>
+      </CardContent>
+    </Card>
+  );
+
+  const wizardBackControl = (
+    <Button className="w-fit" type="button" variant="ghost" onClick={returnToRoutePlanningSelection}>
+      <ArrowLeft className="h-4 w-4" />
+      Zurück zur Routenplanung
+    </Button>
   );
 
   const directRouteReplacementCard = pendingDirectPlan ? (
@@ -3106,6 +3346,66 @@ export function PlannerClient({
     </div>
   );
 
+  const routeMethodSelection = (
+    <section className="grid gap-4" data-route-planning-method-selection="true">
+      <div className="grid gap-4 md:grid-cols-3">
+        {[
+          {
+            method: "direct" as const,
+            title: "Direkte Route",
+            description: "Start, Ziel und Zwischenziele über reale Fahrradwege verbinden.",
+            icon: Route
+          },
+          {
+            method: "gpx" as const,
+            title: "GPX-Import",
+            description: "Eine vorhandene GPX-Datei als feste Routengrundlage verwenden.",
+            icon: ArrowDownToLine
+          },
+          {
+            method: "demo" as const,
+            title: "Demo-Tour",
+            description: "Den vollständigen Planungsworkflow mit einer bewussten Testtour prüfen.",
+            icon: Map
+          }
+        ].map((choice) => {
+          const Icon = choice.icon;
+          const active = routePlanningWorkflow.activeMethod === choice.method;
+          return (
+            <Card
+              key={choice.method}
+              className={cn(
+                "transition",
+                active && routePlanningWorkflow.mode === "inline" ? "border-primary bg-emerald-50 ring-2 ring-primary/15" : ""
+              )}
+              data-route-planning-method={choice.method}
+            >
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Icon className="h-5 w-5 text-primary" />{choice.title}</CardTitle>
+                <CardDescription>{choice.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button
+                  className="w-full"
+                  type="button"
+                  variant={active && routePlanningWorkflow.mode === "inline" ? "default" : "outline"}
+                  aria-pressed={active}
+                  onClick={() => selectRoutePlanningMethod(choice.method)}
+                >
+                  {active && routePlanningWorkflow.mode === "inline" ? `${choice.title} aktiv` : `${choice.title} öffnen`}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-slate-200 bg-white p-4">
+        <div><strong className="block text-sm text-slate-950">Gespeicherte Tour</strong><span className="text-xs text-slate-500">Letzten Browser-TourState unverändert wiederherstellen.</span></div>
+        <Button asChild variant="outline"><Link href="/planer/route?open=last"><FileText className="h-4 w-4" />Tour öffnen</Link></Button>
+      </div>
+    </section>
+  );
+
   if (workflowView === "stages" && !route) {
     return (
       <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6">
@@ -3131,135 +3431,45 @@ export function PlannerClient({
     );
   }
 
-  if (plannerStep === "mode") {
+  if (
+    workflowView === "route" &&
+    routePlanningWorkflow.mode === "inline" &&
+    (plannerStep === "mode" || plannerStep === "direct" || plannerStep === "gpx" || plannerStep === "demo")
+  ) {
     return (
-      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6" data-route-planning-layout="inline">
         {workflowHeader}
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Direkte Planung ansehen</CardTitle>
-              <CardDescription>Start, Ziel und Zwischenziele direkt eingeben und über reale Fahrradwege verbinden.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full" type="button" onClick={() => {
-                setInputMode("direct");
-                setPlannerStep("direct");
-              }}>
-                <Route className="h-4 w-4" />
-                Direkte Eingabe
-              </Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>GPX-Datei laden</CardTitle>
-              <CardDescription>Eine vorhandene GPX-Route als Grundlage importieren.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full" type="button" variant="outline" onClick={() => {
-                setInputMode("gpx");
-                setPlannerStep("gpx");
-              }}>
-                <ArrowDownToLine className="h-4 w-4" />
-                GPX importieren
-              </Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Demo-Tour öffnen</CardTitle>
-              <CardDescription>Dresden bis Hamburg mit Reisetagen, Orten und Unterkunftskandidaten bewusst laden.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className="w-full" disabled={isBusy} type="button" variant="secondary" onClick={() => void startDemoTour()}>
-                <Map className="h-4 w-4" />
-                Demo laden
-              </Button>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Gespeicherte Tour</CardTitle>
-              <CardDescription>Letzten Browser-TourState wiederherstellen, falls vorhanden.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild className="w-full" variant="outline">
-                <Link href="/planer/route?open=last">
-                  <FileText className="h-4 w-4" />
-                  Tour öffnen
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </section>
+        {routeMethodSelection}
+        {routePlanningWorkflow.activeMethod && (
+          <div ref={inlinePlanningContentRef} className="scroll-mt-24" data-inline-planning-content={routePlanningWorkflow.activeMethod}>
+            {routePlanningWorkflow.activeMethod === "direct" && <div className="grid gap-4">{directRouteReplacementCard}{routeInputForm}</div>}
+            {routePlanningWorkflow.activeMethod === "gpx" && gpxImportForm}
+            {routePlanningWorkflow.activeMethod === "demo" && demoTourForm}
+          </div>
+        )}
         <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">{status}</p>
       </main>
     );
   }
 
-  if (!route && plannerStep === "direct") {
+  if (plannerStep === "mode") {
     return (
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
+      <main className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6" data-route-planning-layout="wizard-selection">
         {workflowHeader}
-        {directRouteReplacementCard}
-        {routeInputForm}
+        {routeMethodSelection}
+        <p className="rounded-md border bg-white p-4 text-sm text-muted-foreground">{status}</p>
       </main>
     );
   }
 
-  if (!route && plannerStep === "gpx") {
+  if (plannerStep === "direct" || plannerStep === "gpx" || plannerStep === "demo") {
     return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6">
+      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6" data-route-planning-layout="wizard-step">
         {workflowHeader}
-        <Card>
-          <CardHeader>
-            <CardTitle>GPX-Datei importieren</CardTitle>
-            <CardDescription>Nach dem Import folgt der Schritt Route kürzen mit Karte zur Plausibilitätsprüfung.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input accept=".gpx,application/gpx+xml,text/xml" type="file" onChange={(event) => importGpx(event.target.files?.[0] ?? null)} />
-            <p className="text-sm text-muted-foreground">{status}</p>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
-
-  if (route && plannerStep === "direct") {
-    return (
-      <main className="mx-auto flex max-w-5xl flex-col gap-4 px-4 py-5 sm:px-6">
-        {workflowHeader}
-        {directRouteReplacementCard}
-        <Card className="border-sky-200 bg-sky-50">
-          <CardHeader>
-            <CardTitle>Direkte Route planen</CardTitle>
-            <CardDescription className="text-sky-950">
-              Die direkte Zieleingabe ist ein eigener Modus. Wenn eine GPX-Route geladen ist, bleibt sie erhalten, bis du das Ersetzen ausdrücklich bestätigst.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-        {routeInputForm}
-      </main>
-    );
-  }
-
-  if (route && plannerStep === "gpx") {
-    return (
-      <main className="mx-auto flex max-w-4xl flex-col gap-4 px-4 py-5 sm:px-6">
-        {workflowHeader}
-        <Card>
-          <CardHeader>
-            <CardTitle>Weitere GPX-Datei importieren</CardTitle>
-            <CardDescription>
-              Eine neu ausgewählte GPX-Datei legt eine neue Arbeitsroute an. Die geladene Grundlage kann anschließend gekürzt, gespeichert und an die Etappenplanung übergeben werden.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input accept=".gpx,application/gpx+xml,text/xml" type="file" onChange={(event) => importGpx(event.target.files?.[0] ?? null)} />
-            <p className="text-sm text-muted-foreground">{status}</p>
-          </CardContent>
-        </Card>
+        {wizardBackControl}
+        {plannerStep === "direct" && <div className="grid gap-4">{directRouteReplacementCard}{routeInputForm}</div>}
+        {plannerStep === "gpx" && gpxImportForm}
+        {plannerStep === "demo" && demoTourForm}
       </main>
     );
   }
@@ -3274,7 +3484,7 @@ export function PlannerClient({
             <p className="mt-1 text-sm text-slate-500 sm:mt-2 sm:text-base">{route.startName} – {route.endName}</p>
           </div>
           <div className="hidden flex-wrap gap-2 sm:flex">
-            <Button type="button" variant="outline" onClick={() => setPlannerStep("direct")}><Route className="h-4 w-4" />Route ändern</Button>
+            <Button type="button" variant="outline" onClick={editRouteFromReview}><Route className="h-4 w-4" />Route ändern</Button>
             <Button disabled={!route || isBusy} type="button" onClick={saveTour}><Save className="h-4 w-4" />Speichern</Button>
           </div>
         </header>
@@ -3366,6 +3576,10 @@ export function PlannerClient({
                   {lastTourSavedLabel ? `Zuletzt gespeichert: ${lastTourSavedLabel}` : "Grundroute noch nicht bewusst gespeichert."}
                 </p>
               </div>
+              <Button className="w-full sm:hidden" type="button" variant="outline" onClick={editRouteFromReview}>
+                <Route className="h-4 w-4" />
+                Route ändern
+              </Button>
               <Button className="w-full sm:hidden" disabled={!route || isBusy} type="button" onClick={saveTour}>
                 <Save className="h-4 w-4" />
                 Speichern
@@ -3417,179 +3631,6 @@ export function PlannerClient({
       {workflowHeader}
       {directRouteReplacementCard}
       <section className={cn("grid gap-4", workflowView === "stages" && "xl:grid-cols-[minmax(0,1fr)_320px]")}>
-        {workflowView === "route" && plannerStep === "direct" && inputMode !== "gpx" && (
-        <aside className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Route className="h-5 w-5 text-primary" />
-                Routenplanung
-              </CardTitle>
-              <CardDescription>Start, Ziel, Profil und Etappenlänge festlegen.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={plannerForm.handleSubmit((values) => requestDirectRoutePlan(values))}>
-                <div className="grid gap-2">
-                  <Label htmlFor="start">Startort oder Strecke</Label>
-                  <Input id="start" placeholder="z. B. Hamburg-Berlin oder Hamburg" {...plannerForm.register("start")} />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="end">Zielort</Label>
-                  <Input id="end" placeholder="z. B. Berlin" {...plannerForm.register("end")} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Zwischenziele</Label>
-                  <div className="space-y-2">
-                    {waypoints.map((waypoint, index) => (
-                      <div
-                        key={`${waypoint}-${index}`}
-                        className="flex gap-2"
-                        draggable
-                        onDragEnd={() => setDraggedWaypointIndex(null)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDragStart={() => setDraggedWaypointIndex(index)}
-                        onDrop={() => moveWaypoint(index)}
-                      >
-                        <Button aria-label="Zwischenziel verschieben" size="icon" type="button" variant="ghost">
-                          <GripVertical className="h-4 w-4" />
-                        </Button>
-                        <Input
-                          value={waypoint}
-                          onChange={(event) =>
-                            setWaypoints((current) =>
-                              current.map((item, waypointIndex) => (waypointIndex === index ? event.target.value : item))
-                            )
-                          }
-                        />
-                        <Button aria-label="Zwischenziel entfernen" size="icon" type="button" variant="outline" onClick={() => removeWaypoint(index)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <Input
-                        disabled={waypointLimitReached}
-                        placeholder="z. B. Traunstein"
-                        value={newWaypoint}
-                        onChange={(event) => setNewWaypoint(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            addWaypoint();
-                          }
-                        }}
-                      />
-                      <Button
-                        aria-label="Zwischenziel hinzufügen"
-                        disabled={waypointLimitReached}
-                        size="icon"
-                        title={waypointLimitReached ? routeWaypointLimitMessage() : undefined}
-                        type="button"
-                        variant="secondary"
-                        onClick={addWaypoint}
-                      >
-                        <CirclePlus className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {waypointLimitReached
-                        ? routeWaypointLimitMessage()
-                        : `${waypoints.length} von ${MAX_ROUTE_WAYPOINTS} Zwischenzielen verwendet.`}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="profile">Profil</Label>
-                    <Select id="profile" {...plannerForm.register("profile")}>
-                      {Object.entries(profileLabels).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </Select>
-                    <p className="text-xs text-muted-foreground">{profileDescriptions[profileValue]}</p>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="targetKm">Tages-km</Label>
-                    <Input id="targetKm" type="number" {...plannerForm.register("targetKm")} />
-                  </div>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="corridorKm">Routenkorridor km</Label>
-                  <Input id="corridorKm" step="0.5" type="number" {...plannerForm.register("corridorKm")} />
-                </div>
-                <Button className="w-full" disabled={isBusy} type="submit">
-                  <MapPinned className="h-4 w-4" />
-                  {isBusy ? "Plant..." : "Route planen"}
-                </Button>
-                <div className="grid gap-2">
-                  <Label htmlFor="gpx">GPX-Datei hochladen</Label>
-                  <Input
-                    accept=".gpx,application/gpx+xml,text/xml"
-                    id="gpx"
-                    type="file"
-                    onChange={(event) => importGpx(event.target.files?.[0] ?? null)}
-                  />
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="h-5 w-5 text-primary" />
-                Suche entlang der Route
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {categoryOptions.map((category) => (
-                  <Button
-                    key={category.value}
-                    size="sm"
-                    type="button"
-                    variant={selectedCategories.includes(category.value) ? "default" : "outline"}
-                    onClick={() => toggleCategory(category.value)}
-                  >
-                    {categoryIcon(category.value)}
-                    {category.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {quickFilters.map((filter) => (
-                  <Button
-                    key={filter.label}
-                    size="sm"
-                    type="button"
-                    variant={filter.active ? "secondary" : "outline"}
-                    onClick={() => filter.setActive(!filter.active)}
-                  >
-                    <SlidersHorizontal className="h-4 w-4" />
-                    {filter.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="minRating">Mindestbewertung</Label>
-                <Select id="minRating" value={minRating} onChange={(event) => setMinRating(event.target.value)}>
-                  <option value="0">alle Treffer</option>
-                  <option value="3.5">ab 3,5</option>
-                  <option value="4">ab 4,0</option>
-                  <option value="4.5">ab 4,5</option>
-                </Select>
-              </div>
-              <Button className="w-full" type="button" variant="outline" onClick={() => loadPois()}>
-                <Search className="h-4 w-4" />
-                POI aktualisieren
-              </Button>
-            </CardContent>
-          </Card>
-        </aside>
-        )}
-
         <section className="min-w-0 space-y-4">
           <div className="grid gap-3 md:grid-cols-4">
             <Metric label="Distanz" value={route ? formatKm(route.distanceKm) : "-"} />
