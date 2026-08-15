@@ -1,0 +1,70 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Thomash100/Global/main/docs/development/CODEX-PROJECTS.schema.json",
+  "schemaVersion": 1,
+  "registryVersion": "1.0.0",
+  "generatedAt": "2026-08-15T14:00:00+02:00",
+  "identityStandard": "global.development.identity@1.0.0",
+  "sourcePolicy": {
+    "scope": "project-local",
+    "localRepository": "Thomash100/Radtour-Planer",
+    "globalRegistry": "https://github.com/Thomash100/Global/blob/main/docs/development/CODEX-PROJECTS.json",
+    "localStateWins": true,
+    "historyRewriteAllowed": false
+  },
+  "statusValues": [
+    "PLANNED",
+    "ACTIVE",
+    "TECHNICALLY_COMPLETE",
+    "MANUAL_REVIEW_REQUIRED",
+    "BLOCKED",
+    "READY_FOR_NEXT",
+    "INTEGRATED",
+    "RELEASED",
+    "SUPERSEDED"
+  ],
+  "projects": [
+    {
+      "projectCode": "RTP",
+      "projectName": "Radtour-Planer",
+      "repositories": [
+        {
+          "repository": "Thomash100/Radtour-Planer",
+          "role": "primary-product",
+          "defaultBranch": "main",
+          "status": "ACTIVE",
+          "note": "Historische Paketsequenz bleibt als Alias erhalten."
+        }
+      ],
+      "workstreams": [
+        {
+          "workstreamId": "RTP-MVP",
+          "workstreamName": "Tour-, Etappen- und Routenplanung",
+          "chatTitle": "RTP-MVP – Radtour-Planer – Tour- und Routenplanung",
+          "repository": "Thomash100/Radtour-Planer",
+          "identityState": "CONFLICT",
+          "phasePolicy": "legacy-gaps",
+          "currentPhase": null,
+          "lastCompletedPhase": null,
+          "nextPlannedPhase": null,
+          "status": "BLOCKED",
+          "branch": "codex/fix-route-list-performance",
+          "pullRequest": "https://github.com/Thomash100/Radtour-Planer/pull/78",
+          "manualGate": null,
+          "phases": [],
+          "historicalIds": [
+            "Paket 1-23",
+            "Paket 24",
+            "Paket 30"
+          ],
+          "legacyReferences": [
+            "Draft-PR #76 Paket 23",
+            "Draft-PR #77",
+            "Draft-PR #78",
+            "private branch"
+          ],
+          "blockedReason": "Die projektweite Paketsequenz, gestapelte PRs und ältere offene PRs sind noch nicht auf stabile fachliche Workstreams verteilt. Keine RTP-Pxx-ID wird geraten."
+        }
+      ]
+    }
+  ]
+}
