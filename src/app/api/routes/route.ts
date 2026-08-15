@@ -3,19 +3,25 @@ import { NextResponse } from "next/server";
 import { apiError, readJson } from "@/lib/api";
 import { getDemoUser } from "@/lib/demo-user";
 import { prisma } from "@/lib/prisma";
+import { createRouteListPage, parseRouteListQuery, routeListSelect } from "@/lib/route-list";
 import { saveRouteSchema } from "@/lib/validators";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const user = await getDemoUser();
+    const { cursor, limit } = parseRouteListQuery(request.url);
     const routes = await prisma.route.findMany({
       where: { userId: user.id },
-      orderBy: { updatedAt: "desc" },
-      include: {
-        stages: { orderBy: { dayNumber: "asc" } }
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: routeListSelect
+    });
+    return NextResponse.json(createRouteListPage(routes, limit), {
+      headers: {
+        "Cache-Control": "private, no-store"
       }
     });
-    return NextResponse.json({ routes });
   } catch (error) {
     return apiError(error, 500);
   }

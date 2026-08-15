@@ -148,6 +148,59 @@ import {
   parseUiPreferences,
   serializeUiPreferences
 } from "../src/lib/ui-preferences";
+import {
+  DEFAULT_ROUTE_LIST_LIMIT,
+  MAX_ROUTE_LIST_LIMIT,
+  createRouteListPage,
+  parseRouteListQuery,
+  routeListSelect,
+  type RouteListDatabaseRow
+} from "../src/lib/route-list";
+
+test("route list query uses bounded cursor pagination", () => {
+  assert.deepEqual(parseRouteListQuery("http://localhost/api/routes"), {
+    cursor: null,
+    limit: DEFAULT_ROUTE_LIST_LIMIT
+  });
+  assert.deepEqual(parseRouteListQuery("http://localhost/api/routes?limit=10&cursor=route-10"), {
+    cursor: "route-10",
+    limit: 10
+  });
+  assert.equal(parseRouteListQuery("http://localhost/api/routes?limit=1000").limit, MAX_ROUTE_LIST_LIMIT);
+  assert.equal(parseRouteListQuery("http://localhost/api/routes?limit=0").limit, DEFAULT_ROUTE_LIST_LIMIT);
+  assert.equal(parseRouteListQuery("http://localhost/api/routes?limit=abc").limit, DEFAULT_ROUTE_LIST_LIMIT);
+});
+
+test("route list contract excludes heavy route and stage geometries", () => {
+  assert.equal("geometryGeoJson" in routeListSelect, false);
+  assert.equal("stages" in routeListSelect, false);
+  assert.equal("waypoints" in routeListSelect, false);
+
+  const rows = [1, 2, 3].map((index) => ({
+    id: `route-${index}`,
+    name: `Route ${index}`,
+    startName: "Start",
+    endName: "Ziel",
+    distanceKm: 25 * index,
+    elevationUp: 100 * index,
+    elevationDown: 90 * index,
+    createdAt: new Date(`2026-08-0${index}T10:00:00.000Z`),
+    updatedAt: new Date(`2026-08-0${index}T11:00:00.000Z`),
+    _count: { stages: index },
+    geometryGeoJson: { type: "LineString", coordinates: Array.from({ length: 10_000 }, () => [13, 51]) },
+    stages: [{ geometryGeoJson: { type: "LineString", coordinates: [[13, 51], [14, 52]] } }]
+  })) as unknown as RouteListDatabaseRow[];
+
+  const page = createRouteListPage(rows, 2);
+  const serialized = JSON.stringify(page);
+
+  assert.equal(page.routes.length, 2);
+  assert.equal(page.routes[0].stageCount, 1);
+  assert.equal(page.pagination.nextCursor, "route-2");
+  assert.equal(serialized.includes("geometryGeoJson"), false);
+  assert.equal(serialized.includes("coordinates"), false);
+  assert.ok(serialized.length < 1_000);
+});
 
 const riderBikeProfile = {
   ...DEFAULT_RIDER_BIKE_PROFILE,

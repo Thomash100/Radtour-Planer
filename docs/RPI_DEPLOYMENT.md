@@ -419,6 +419,36 @@ Danach prüfen und dokumentieren:
 
 Ohne ausdrückliche Freigabe bleibt der Konzept-PR im Draft. Kein Tag und kein Release.
 
+### Performancefix Routenlisten
+
+Nach dem Deployment des Branches `codex/fix-route-list-performance`:
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/fix-route-list-performance
+git rev-parse --short HEAD
+
+ROUTE_LIST_RESULT="$(mktemp)"
+curl -fsS http://localhost:3000/api/routes -o "$ROUTE_LIST_RESULT"
+wc -c < "$ROUTE_LIST_RESULT"
+if grep -q 'geometryGeoJson' "$ROUTE_LIST_RESULT"; then
+  echo "FEHLER: Die Routenliste enthält Geometrien."
+else
+  echo "OK: Die Routenliste ist kompakt."
+fi
+rm -f "$ROUTE_LIST_RESULT"
+```
+
+Anschließend manuell prüfen:
+
+- Tour- und Routenübersichten öffnen ohne lange Blockierung.
+- Etappenanzahlen stimmen mit den gespeicherten Touren überein.
+- Eine Route öffnen; Karte, vollständige Geometrie und Etappen sind weiterhin vorhanden.
+- Bei mehr als 25 gespeicherten Routen liefert die API einen `nextCursor`.
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+
+Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Merge, kein Tag und kein Release.
+
 ## 8. Updates einspielen
 
 Empfohlen:
