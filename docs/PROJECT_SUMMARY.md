@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-08-09
+Stand: 2026-08-15
 
 ## Produktstand
 
@@ -34,6 +34,7 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Deterministische Etappenfarben und echte Mini-Höhenprofile aus vorhandenen Etappen-Höhendaten in Karte, Übersicht und Reiseplan.
 - Versionierte Darstellungsoptionen für Etappenfarben, Mini-Höhenprofile, Etappennummern, großes Höhenprofil, POIs und Kartenstil ohne Änderung des TourState.
 - Große Routen werden browsergeeignet ohne reproduzierbare Analyse-Snapshots und exakte Originalrouten-Duplikate gespeichert; die Fachanalyse wird nach dem Laden deterministisch aus den erhaltenen Quelldaten neu berechnet.
+- Gespeicherte Routen werden in Listen nur als cursor-paginierte Metadaten mit Etappenanzahl geladen; vollständige Routen- und Etappengeometrien folgen ausschließlich beim Detailabruf.
 - Die Routenplanung bietet testweise eine Inline-Eingabe und einen geführten Assistenten über demselben reinen Workflow-Core; die App-Präferenz ist nicht Bestandteil der Tourdaten.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
@@ -64,6 +65,8 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - Rechtliche Seiten sind vorbereitete Platzhalter und müssen vor produktiver Veröffentlichung final geprüft werden.
 
 ## Paketstatus
+
+- Performancefix Routenlisten: kompakter Listenvertrag und Detailabruftrennung umgesetzt; Raspberry-Pi-Abnahme und Merge-Freigabe stehen aus.
 
 - Paket 1: GPX-Grundbedienung abgeschlossen.
 - Paket 2: Planung nach Reisetagen und Städte/Orte entlang der Route abgeschlossen.

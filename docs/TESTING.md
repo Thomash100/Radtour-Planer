@@ -476,6 +476,26 @@ Der Konzeptabschnitt verändert ausschließlich Dokumentation. Verbindlich prüf
 
 Da keine Laufzeitdatei geändert wird, ist kein neuer UI-Smoke-Funktionsumfang zu testen. Die Raspberry-Pi-Abnahme bestätigt den unveränderten Produktivstand und die fachliche Verständlichkeit des Konzepts.
 
+## Performancefix Routenlisten
+
+Automatisiert prüfen:
+
+- der Prisma-Select der Routenliste enthält weder `geometryGeoJson` noch `stages` oder `waypoints`,
+- zusätzliche, unerwartete Geometriefelder werden nicht in die API-Zusammenfassung übernommen,
+- Standardlimit, maximales Limit und Cursor werden deterministisch normalisiert,
+- bei mehr Ergebnissen als dem Limit wird ein stabiler `nextCursor` geliefert,
+- der Detailabruf `/api/routes/[id]` bleibt unverändert für vollständige Routen verfügbar.
+
+Auf dem Raspberry Pi zusätzlich mit vorhandener großer Datenbank prüfen:
+
+- `GET /api/routes` liefert HTTP 200,
+- die Standardseite enthält höchstens 25 Einträge,
+- die Antwort enthält keine Routen- oder Etappengeometrien,
+- die Antwortgröße liegt bei normalen Namen und Metadaten deutlich unter 100 KB,
+- ein vorhandener `nextCursor` lädt die nächste Seite ohne Duplikat,
+- `/dashboard/routen` bleibt erreichbar und zeigt die richtige Etappenanzahl,
+- ein Routendetail zeigt weiterhin Karte, Geometrie und Etappen.
+
 ## Docker/RPi-Prüfung
 
 Bei Docker-, Deployment- oder Raspberry-Pi-Änderungen:

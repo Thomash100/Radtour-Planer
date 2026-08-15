@@ -1,5 +1,13 @@
 # Changelog
 
+## Performancefix Routenlisten - 2026-08-15
+
+- `GET /api/routes` auf einen kompakten, cursor-paginierten Metadatenvertrag umgestellt
+- vollständige Routen- und Etappengeometrien aus Listenabfragen entfernt; Detaildaten bleiben über `/api/routes/[id]` verfügbar
+- maximale Seitengröße auf 100 Routen begrenzt und private Listenantworten gegen Zwischenspeicherung geschützt
+- serverseitige Übersicht gespeicherter Routen ebenfalls auf Metadaten und Etappenanzahl begrenzt
+- Regressionstests gegen erneute Übertragung großer Geometrien ergänzt
+
 ## Alternative Bedienmodi Routenplanung - 2026-08-09
 
 - reinen, browserunabhängigen Workflow-Core für Planungsart, Bedienmodus, Schritte und deterministische Übergänge ergänzt

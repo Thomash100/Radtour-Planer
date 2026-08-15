@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getDemoUser } from "@/lib/demo-user";
 import { prisma } from "@/lib/prisma";
+import { routeListSelect } from "@/lib/route-list";
 import { formatKm } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -12,8 +13,9 @@ export default async function DashboardRoutesPage() {
   const user = await getDemoUser();
   const routes = await prisma.route.findMany({
     where: { userId: user.id },
-    include: { stages: true },
-    orderBy: { updatedAt: "desc" }
+    orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+    take: 100,
+    select: routeListSelect
   });
 
   return (
@@ -28,7 +30,7 @@ export default async function DashboardRoutesPage() {
               <div>
                 <strong>{route.name}</strong>
                 <p className="text-sm text-muted-foreground">
-                  {formatKm(route.distanceKm)} · {route.stages.length} Etappen
+                  {formatKm(route.distanceKm)} · {route._count.stages} Etappen
                 </p>
               </div>
               <div className="flex gap-2">
