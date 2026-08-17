@@ -1,6 +1,6 @@
 # Projektzusammenfassung
 
-Stand: 2026-08-03
+Stand: 2026-08-08
 
 ## Produktstand
 
@@ -30,6 +30,10 @@ BikeTripHub / Radtour-Planer ist ein MVP für mehrtägige Radtourplanung auf Bas
 - Adaptive Fahrstrategie tourweit aus Energie-, Lade- und Unterstützungsergebnissen ableiten; Modi, Ladehalte, Reserve und manuelle Etappenvorgaben werden deterministisch berücksichtigt.
 - Höhenprofil und vorhandene Streckenbeschaffenheit deterministisch analysieren; Roh-/Glättungsprofil, Steigungen, Oberflächen, Wegtypen, Qualität und Warnungen werden für Tour, Etappe und Segment angezeigt.
 - Gesamte Tour speichern und erneut öffnen.
+- Gemeinsame responsive Hauptnavigation für Start, Route, Etappen, Unterkünfte und Reiseplan; mobil und auf Tablets als Bottom-Navigation, im Browser horizontal im Kopfbereich.
+- Deterministische Etappenfarben und echte Mini-Höhenprofile aus vorhandenen Etappen-Höhendaten in Karte, Übersicht und Reiseplan.
+- Versionierte Darstellungsoptionen für Etappenfarben, Mini-Höhenprofile, Etappennummern, großes Höhenprofil, POIs und Kartenstil ohne Änderung des TourState.
+- Große Routen werden browsergeeignet ohne reproduzierbare Analyse-Snapshots und exakte Originalrouten-Duplikate gespeichert; die Fachanalyse wird nach dem Laden deterministisch aus den erhaltenen Quelldaten neu berechnet.
 
 Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etappen, Etappengeometrien, Reisetage-/Etappenlängen-/Schwierigkeits-Einstellung, gesetzte Orte/Etappenpunkte, Unterkunftszuordnungen, Ladepunkte, manuelle Ladehalte, adaptive Fahrstrategie mit Etappen-Overrides und einen validierten Snapshot des zentralen Fahrer- und Fahrradprofils.
 
@@ -80,12 +84,14 @@ Der vollständige Browser-TourState umfasst Route, gekürzte Arbeitsroute, Etapp
 - BikeTripHub Intelligence INT-00: Architektur- und Fachkonzept für die Pakete 20 bis 32 wurde über PR #71 mit Merge-Commit `5d8d15f` in `private` integriert; es verändert keine Produktivlogik.
 - Paket 20: Kontinuierliches Unterstützungsmodell `biketriphub-assistance-v1` wurde nach Freigabe über PR #73 mit Merge-Commit `731d8da` in `private` integriert.
 - Paket 21: Adaptive E-Bike-Fahrstrategie `biketriphub-riding-strategy-v1` wurde nach Freigabe über PR #74 mit Merge-Commit `0724b3e` in `private` integriert.
-- Paket 22: Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell `biketriphub-route-condition-v1` wird auf `codex/route-elevation-surface-model` additiv umgesetzt.
+- Paket 22: Deterministisches Höhenprofil- und Streckenbeschaffenheitsmodell `biketriphub-route-condition-v1` wurde nach Freigabe über PR #75 mit Merge-Commit `24231ae` in `private` integriert.
+- Paket 23: Deterministische Mehrzielbewertung vorhandener Routenalternativen `biketriphub-route-optimizer-v1` wird auf `codex/multi-criteria-route-optimizer` additiv umgesetzt; PR bleibt bis zur ausdrücklichen Freigabe im Draft.
+- Responsive UI-Neugestaltung: wird auf `codex/responsive-ui-redesign` gestapelt auf dem noch nicht freigegebenen Paket-23-Stand umgesetzt; die sechs lokalen Mobil-, Pad- und Browser-Referenzen sind die visuelle Vorgabe. Die manuelle Abnahme bleibt bis zur erneuten Smartphone-Prüfung der korrigierten Testversion offen.
 - Reiseauftrag: PR #61 wird erst nach Abschluss der Profil- und Rechenpakete fortgeführt.
 
-Aktuelle Integrationsbasis für Paket 22:
+Aktuelle Integrationsbasis für Paket 23:
 
-- `private`: `0724b3e989161d89d3575d4c8826a43650063399` (Merge von PR #74; Basis für Paket 22)
+- `private`: `24231ae02de0e1ee2470f95f06699961378aa894` (Merge von PR #75; exakte Basis für Paket 23)
 - deterministischer, referenzkalibrierter Energie- und Reichweiten-Rechenkern mit separatem Höhenmeterzuschlag
 - bestehender TourState enthält Fahrer-, Fahrrad-, E-Bike- und Ladeprofil
 - Energie-Core bleibt als separates Modul unverändert; die Ladeplanung übernimmt ausschließlich dessen finalen kalibrierten Segmentbedarf
@@ -164,6 +170,24 @@ Paket 22 ergänzt die gemeinsame Routengrundlage als additive, reproduzierbare A
 Energie-, Lade-, Assistance-, Fahrstrategie- und Zeitmodelle bleiben unverändert. Es gibt keine neue Live-Abfrage und keine automatische Routenänderung.
 
 Modell: [docs/ROUTE_ELEVATION_SURFACE_MODEL.md](ROUTE_ELEVATION_SURFACE_MODEL.md).
+
+## Paket 23: Deterministische Mehrzielbewertung vorhandener Routenalternativen
+
+Paket 23 verbindet die vorhandenen Fachwerte zu einer erklärbaren Entscheidungshilfe, ohne eine Route zu erzeugen oder zu verändern:
+
+- reiner Core `biketriphub-route-optimizer-v1` mit Pareto-Modell `biketriphub-route-optimizer-pareto-v1`,
+- vorhandene GPX-, BRouter- und gespeicherte Tourgeometrien als Kandidaten,
+- harte Grenzen für Reserve, Ladezeit, Ladehalte, Steigung, Oberfläche und Datenqualität,
+- normierte Gewichtung von Fahrzeit, Energie, Komfort, Asphalt, Steigung, Reserve und Laden,
+- robuste Ausreißerbehandlung, explizite Datenlücken und gewichtete Zielabdeckung,
+- Pareto-Front, Zielkonflikte, Gleichwertigkeit und zentrale stabile Tie-Breaker,
+- Quellen-, Qualitäts-, Modellversions- und Offline-Hinweise,
+- responsive Übersicht, Detailvergleich und gemeinsame Karte mit unveränderten Geometrien,
+- versionierter, rückwärtskompatibler TourState für Einstellungen und Vergleichsreferenzen.
+
+Die Bewertung ist offline ausführbar, sobald Kandidaten lokal vorhanden sind. Neue BRouter-Routen benötigen weiterhin den separat konfigurierten Routingpfad; der Optimizer selbst ruft keinen Router auf. Landschaft, Verkehr, Wetter, Wind, Live-Daten, KI und automatische Routenübernahme sind nicht enthalten.
+
+Modell: [docs/MULTI_CRITERIA_ROUTE_OPTIMIZER.md](MULTI_CRITERIA_ROUTE_OPTIMIZER.md).
 
 ## Paket 19: Intelligente Ladeplanung
 

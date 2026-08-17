@@ -419,13 +419,22 @@ Das ursprünglich im Fachkonzept unter Paket 22 vorgesehene Telemetrie-Datenmode
 
 ### Phase 2: Simulation
 
-#### Paket 23 – Telemetrie-Rechenkern
+#### Paket 23 – Deterministische Mehrzielbewertung vorhandener Routenalternativen
 
-Branch: `codex/telemetry-core`
+Branch: `codex/multi-criteria-route-optimizer`
 
-- deterministische Segmentierung und Soll/Ist-Auswertung,
-- Verbrauchs-, Fahrer- und Motorbeitraege,
-- keine Aenderung am produktiven Modell.
+Der konkrete Paket-23-Auftrag priorisiert die Touroptimierung vor dem ursprünglich hier vorgesehenen Telemetrie-Rechenkern. Telemetrie bleibt ein späteres, separat zu nummerierendes Paket.
+
+- vorhandene GPX-, BRouter- und gespeicherte Geometrien als versionierte Kandidaten,
+- harte Grenzen für Reserve, Laden, Steigung, Oberfläche und Datenqualität,
+- Gewichtung von Fahrzeit, Energie, Komfort, Asphalt, Steigung, Reserve und Laden,
+- deterministische robuste Normalisierung, Pareto-Front und stabile Tie-Breaker,
+- erklärbare Empfehlungen und sichtbare Datenlücken,
+- gemeinsame Karte, Übersicht, Detailvergleich und rückwärtskompatibler TourState,
+- vollständig offline bewertbar, wenn Kandidaten lokal vorhanden sind,
+- keine Routenerzeugung, Geometrieänderung, Live-Daten, KI oder Änderung vorhandener Fachkerne.
+
+Verbindliche Modelldokumentation: [MULTI_CRITERIA_ROUTE_OPTIMIZER.md](MULTI_CRITERIA_ROUTE_OPTIMIZER.md).
 
 #### Paket 24 – Shadow Mode
 

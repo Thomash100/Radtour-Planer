@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPinned, Route } from "lucide-react";
+import { MapPinned, Route, Scale } from "lucide-react";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -8,14 +8,15 @@ import type { PlannerWorkflowView } from "@/lib/planner-workflow";
 
 const items = [
   { id: "route" as const, href: "/planer/route?open=last", label: "Routenplanung", icon: Route },
-  { id: "stages" as const, href: "/planer/etappen?open=last", label: "Etappenplanung", icon: MapPinned }
+  { id: "stages" as const, href: "/planer/etappen?open=last", label: "Etappenplanung", icon: MapPinned },
+  { id: "optimization" as const, href: "/planer/optimierung", label: "Routenvergleich", icon: Scale }
 ];
 
 export function PlannerWorkflowNavigation({
   activeView,
   hasRoute
 }: {
-  activeView: PlannerWorkflowView;
+  activeView: PlannerWorkflowView | "optimization";
   hasRoute: boolean;
 }) {
   return (

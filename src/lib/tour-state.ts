@@ -21,9 +21,16 @@ import {
   type RouteConditionSourceSegment,
   type RouteConditionStoredState
 } from "@/lib/route-elevation-surface";
+import {
+  normalizeRouteOptimizationStoredState,
+  type RouteOptimizationStoredState
+} from "@/lib/route-optimizer";
 import type { StageDifficultyLevel } from "@/lib/stage-difficulty";
 
 export const TOUR_STATE_STORAGE_KEY = "biketriphub.tourState.v1";
+
+export const TOUR_STATE_STORAGE_ERROR_MESSAGE =
+  "Die Route konnte im Browser nicht gespeichert werden. Bitte eine vorhandene Tour löschen oder die Tour exportieren.";
 
 export type TourInputMode = "direct" | "gpx" | "demo";
 
@@ -115,10 +122,97 @@ export type StoredTourState = {
   chargingPlanning?: ChargingPlanningState;
   ridingStrategy?: RidingStrategyState;
   routeCondition?: RouteConditionStoredState;
+  routeOptimization?: RouteOptimizationStoredState;
   status?: string;
   lastSavedAt?: string | null;
   updatedAt: string;
 };
+
+export type StoreTourStateResult =
+  | { ok: true; serializedLength: number }
+  | { ok: false; reason: "quota" | "storage"; message: string };
+
+function jsonValuesEqual(left: unknown, right: unknown) {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function compactStoredRoute(route: StoredRoute, fallbackSourceSegments: RouteConditionSourceSegment[]) {
+  const compactRoute: StoredRoute = {
+    ...route,
+    routeConditionSourceSegments: normalizeRouteConditionSourceSegments(
+      route.routeConditionSourceSegments ?? fallbackSourceSegments,
+      route.distanceKm
+    )
+  };
+
+  if (jsonValuesEqual(compactRoute.originalGeometryGeoJson, compactRoute.geometryGeoJson)) {
+    delete compactRoute.originalGeometryGeoJson;
+  }
+  if (compactRoute.originalDistanceKm === compactRoute.distanceKm) delete compactRoute.originalDistanceKm;
+  if (compactRoute.originalElevationUp === compactRoute.elevationUp) delete compactRoute.originalElevationUp;
+  if (compactRoute.originalElevationDown === compactRoute.elevationDown) delete compactRoute.originalElevationDown;
+  if (compactRoute.originalDurationHours === compactRoute.durationHours) delete compactRoute.originalDurationHours;
+  if (jsonValuesEqual(compactRoute.originalElevationProfile, compactRoute.elevationProfile)) {
+    delete compactRoute.originalElevationProfile;
+  }
+  if (
+    jsonValuesEqual(
+      compactRoute.originalRouteConditionSourceSegments,
+      compactRoute.routeConditionSourceSegments
+    )
+  ) {
+    delete compactRoute.originalRouteConditionSourceSegments;
+  }
+  if (compactRoute.trimStartKmOriginal === 0) delete compactRoute.trimStartKmOriginal;
+  if (
+    compactRoute.trimEndKmOriginal === compactRoute.distanceKm ||
+    compactRoute.trimEndKmOriginal === compactRoute.originalDistanceKm
+  ) {
+    delete compactRoute.trimEndKmOriginal;
+  }
+
+  return compactRoute;
+}
+
+/**
+ * Removes deterministic calculation results and exact original-route duplicates
+ * before browser persistence. The source data remains available, so the current
+ * model can reproduce the analysis after loading. Older, uncompressed states
+ * remain supported by parseStoredTourState.
+ */
+export function compactStoredTourState(state: StoredTourState): StoredTourState {
+  const fallbackSourceSegments = normalizeRouteConditionSourceSegments(state.routeCondition?.sourceSegments);
+  return {
+    ...state,
+    route: state.route ? compactStoredRoute(state.route, fallbackSourceSegments) : null,
+    routeCondition: undefined
+  };
+}
+
+export function serializeStoredTourState(state: StoredTourState) {
+  return JSON.stringify(compactStoredTourState(state));
+}
+
+export function storeCurrentTourState(
+  storage: Pick<Storage, "setItem">,
+  state: StoredTourState
+): StoreTourStateResult {
+  try {
+    const serialized = serializeStoredTourState(state);
+    storage.setItem(TOUR_STATE_STORAGE_KEY, serialized);
+    return { ok: true, serializedLength: serialized.length };
+  } catch (error) {
+    const errorName =
+      error && typeof error === "object" && "name" in error ? String(error.name) : "";
+    const reason =
+      errorName === "QuotaExceededError" || errorName === "NS_ERROR_DOM_QUOTA_REACHED"
+        ? "quota"
+        : "storage";
+    return { ok: false, reason, message: TOUR_STATE_STORAGE_ERROR_MESSAGE };
+  }
+}
 
 function normalizeStageAccommodation(value: unknown): StageAccommodation | null {
   if (!value || typeof value !== "object") return null;
@@ -196,6 +290,7 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
     const chargingPlanning = normalizeChargingPlanningState(parsed.chargingPlanning);
     const ridingStrategy = normalizeRidingStrategyState(parsed.ridingStrategy);
     const routeCondition = normalizeRouteConditionStoredState(parsed.routeCondition);
+    const routeOptimization = normalizeRouteOptimizationStoredState(parsed.routeOptimization);
     const routeConditionSourceSegments = normalizeRouteConditionSourceSegments(
       parsed.route.routeConditionSourceSegments ?? routeCondition.sourceSegments
     );
@@ -213,6 +308,7 @@ export function parseStoredTourState(raw: string | null): StoredTourState | null
       stageAccommodations,
       chargingPlanning,
       ridingStrategy,
+      routeOptimization,
       routeCondition: {
         ...routeCondition,
         sourceSegments: routeConditionSourceSegments

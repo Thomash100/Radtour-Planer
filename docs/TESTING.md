@@ -41,6 +41,39 @@ Nicht akzeptabel:
 
 Manuelle RPi-/Browser-Prüfungen werden für fachlich zusammenhängende Pakete gebündelt. Kleine UI-/UX-Zwischenschritte werden lokal geprüft und erst am Paketende gemeinsam manuell abgenommen, sofern kein harter Blocker auftritt.
 
+## Responsive UI-Abnahme
+
+Für Änderungen am globalen Bedienkonzept werden Route und Konfiguration mindestens in diesen Breiten geprüft:
+
+- Smartphone: 390 px (zusätzlich Grenzbereich 360 bis 480 px)
+- Tablet: 768 px (zusätzlich Zwischenbreiten bis 1180 px)
+- Desktop: 1440 px beziehungsweise mindestens 1180 px
+
+Je Geräteklasse prüfen:
+
+- aktiver Navigationspunkt, Deep Links sowie Browser Zurück/Vorwärts
+- keine permanente linke Hauptnavigation und keine verdeckten Inhalte durch die Bottom-Navigation
+- gleiche deterministische Etappenfarbe in Karte, Legende, Etappenkarte und Mini-Höhenprofil
+- Mini-Höhenprofil aus realen Etappen-Höhenpunkten sowie stabiler Leerzustand ohne Höhenwerte
+- Darstellungsoptionen wirken nach Änderung und Reload tatsächlich in Route, Etappen und Reiseplan
+- TourState, Save/Load, Tour-JSON und bestehende Fachmodule bleiben unverändert funktionsfähig
+- keine horizontale Seitenscrollbar und keine Browserkonsolenfehler
+
+Die sechs Vergleichsscreenshots werden als `01-mobile-route.png` bis `06-desktop-settings.png` dokumentiert und direkt mit den lokalen Referenzbildern verglichen.
+
+### Routenworkflow-Regression
+
+Nach Änderungen an Navigation, TourState oder Browser-Persistenz werden Direkte Route, GPX-Import und Demo-Tour in einem echten mobilen Browser bis zur Etappenansicht durchlaufen:
+
+```bash
+ROUTE_WORKFLOW_BASE_URL=http://raspberrypi.local:3000 \
+PLAYWRIGHT_PACKAGE=/pfad/zu/playwright \
+BROWSER_EXECUTABLE=/pfad/zu/chrome \
+node scripts/route-workflow-smoke.mjs
+```
+
+Der Lauf prüft Zielansicht, Page Errors, Konsolenfehler, fehlgeschlagene App-Requests sowie Route und Etappen im gemeinsamen TourState. Bericht und Screenshots liegen unter `artifacts/route-workflow-regression/`.
+
 ## GPX-/Etappen-MVP
 
 Je nach Paket prüfen:
@@ -385,6 +418,35 @@ Nicht ausgelöst werden dürfen:
 - neue Live-Abfrage oder produktive Overpass-/Nominatim-Abhängigkeit,
 - automatische Route-, Etappen- oder Profiländerung,
 - Rekuperation, Wetter, Bodenfeuchte oder Verkehrsmodellierung.
+
+## Paket 23
+
+Deterministische Mehrzielbewertung vorhandener Routenalternativen prüfen:
+
+- ein, zwei und mehrere vorhandene Kandidaten werden ohne Geometrieänderung bewertet,
+- identische Eingaben und eine andere Eingabereihenfolge liefern dasselbe Ergebnis und denselben Fingerprint,
+- fachlich identische Kandidaten bleiben gleichwertig; nur ein stabiler technischer Tie-Breaker bestimmt die Anzeige,
+- jede harte Grenze einzeln sowie mehrere gleichzeitige Verletzungen schließen nachvollziehbar aus,
+- bei fehlendem Pflichtwert wird nicht geschätzt; die fehlende Prüfbarkeit wird genannt,
+- wenn alle Kandidaten ausgeschlossen sind, erscheint keine Empfehlung,
+- alle Presets und benutzerdefinierte Gewichte werden korrekt normiert,
+- Nullsumme, negative und ungültige Gewichte werden abgewiesen,
+- identische Werte, Ausreißer und fehlende Werte erzeugen keine Division durch null,
+- Dominanz, Zielkonflikt, mehrere Pareto-Kandidaten und unvollständige Vergleichbarkeit werden getrennt ausgewiesen,
+- geringe Datenqualität und unbekannte Oberflächen begrenzen sichtbar die Empfehlung,
+- Save/Load und JSON-Reload erhalten Einstellungen, Fingerprint und Bewertung,
+- alte TourStates ohne Optimierungsfeld laden mit der ausgewogenen Standardkonfiguration,
+- gemeinsame Karte kann vorhandene Kandidaten ein- und ausblenden,
+- Übersicht und Detailvergleich sind bei 390, 768 und 1280 px ohne horizontalen Seiten-Overflow bedienbar,
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+
+Nicht ausgelöst werden dürfen:
+
+- Erzeugung oder Änderung einer Routen- oder Etappengeometrie,
+- Änderung von Energie-, Lade-, Assistance-, Fahrstrategie- oder Strecken-Core,
+- Router-, Overpass-, Nominatim-, Wetter-, Verkehrs- oder andere Live-Abfragen,
+- erfundene Landschafts-, Verkehrs- oder Oberflächenwerte,
+- automatische Übernahme einer Empfehlung.
 
 ## BikeTripHub Intelligence INT-00
 

@@ -368,6 +368,35 @@ Verbindlich prüfen:
 
 Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Tag und kein Release. Paket 23 wird nicht begonnen.
 
+### Paket 23 – Mehrzielbewertung vorhandener Routenalternativen
+
+```bash
+cd ~/Radtour-Planer
+bash ./scripts/rpi-update.sh codex/multi-criteria-route-optimizer
+git rev-parse --short HEAD
+curl -fsS http://localhost:3000/api/health
+```
+
+Verbindlich prüfen:
+
+- Mindestens zwei unterschiedliche reale Alternativen derselben Reise in der Tourverwaltung speichern, beispielsweise vorhandene GPX- und BRouter-Varianten.
+- `/planer/optimierung` öffnen; keine neue Route wird automatisch erzeugt.
+- Kandidaten auswählen und auf der gemeinsamen Karte einzeln ein- und ausblenden; ihre Geometrien bleiben unverändert.
+- Presets Ausgewogen, Schnell, Energiesparend, Komfortorientiert, Asphalt bevorzugt und Hohe Akkureserve vergleichen.
+- Benutzerdefinierte Gewichte ändern; normierte Prozentwerte, Rangfolge, Gründe und Fingerprint reagieren nachvollziehbar.
+- Jede harte Grenze mindestens einmal aktivieren; verletzte oder wegen fehlender Daten nicht prüfbare Kandidaten werden ausgeschlossen.
+- Einen Fall mit mehreren Pareto-Alternativen sowie einen fachlichen Gleichstand prüfen.
+- Übersicht zeigt Distanz, Fahrzeit, Höhenmeter, Energie, Ladehalte, Restakku, Oberfläche und Datenqualität.
+- Detailvergleich zeigt Absolutwert, normierten Nutzen und gewichteten Beitrag je Ziel.
+- Vergleichsfavorit setzen und zurücksetzen; absolute Werte und Scores bleiben unverändert.
+- Tour speichern, Seite neu laden und Fingerprint, Einstellungen sowie Ergebnis vergleichen.
+- Desktop 1280 px, Tablet 768 px und Smartphone 390 px ohne horizontalen Seiten-Overflow prüfen.
+- Browserkonsole bleibt ohne Fehler oder Warnungen.
+- Energie-, Lade-, Assistance-, Fahrstrategie- und Streckenwerte bleiben gegenüber demselben gespeicherten Ausgangsstand unverändert.
+- Kein Router, Live-Dienst, keine automatische Routenänderung und keine erfundene Landschafts- oder Verkehrsbewertung wird ausgelöst.
+
+Der PR bleibt bis zur dokumentierten Raspberry-Pi- und fachlichen Abnahme sowie ausdrücklichen Freigabe im Draft. Kein Merge, kein Tag und kein Release. Paket 24 wird nicht begonnen.
+
 ### BikeTripHub Intelligence INT-00 – Dokumentationsabnahme
 
 Dieser Konzeptabschnitt ändert keine App-, Datenbank-, Docker- oder Rechenlogik. Für die verbindliche Raspberry-Pi-Abnahme genügt nach dem Update des Konzept-Branches:

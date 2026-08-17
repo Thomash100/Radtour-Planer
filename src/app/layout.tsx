@@ -35,10 +35,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de">
-      <body>
+      <body className="overflow-x-hidden pb-24 desktop:pb-0">
         <ShellNav />
         {children}
-        <footer className="border-t bg-white px-4 py-5 text-sm text-slate-500">
+        <footer className="border-t border-slate-200/80 bg-white px-4 py-5 text-sm text-slate-500">
           <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>{APP_MVP_STATUS}</span>

@@ -1,5 +1,38 @@
 # Changelog
 
+## Fehlerkorrektur Routenworkflow - 2026-08-08
+
+- ungefangenen `QuotaExceededError` beim automatischen Speichern großer Routen behoben
+- reproduzierbare Streckenanalyse-Snapshots und exakte Duplikate der unveränderten Originalroute vor der Browser-Persistenz entfernt; reale Geometrie, Höhenpunkte und Quellsegmente bleiben erhalten
+- alte unkomprimierte TourStates weiterhin abwärtskompatibel lesbar gehalten
+- Browser-Speicherfehler in eine verständliche Statusmeldung überführt und eine Planer-Error-Boundary mit Wiederholungs- und Rücksprungaktion ergänzt
+- mobilen End-to-End-Smoke-Test für Direkte Route, GPX-Import und Demo-Tour bis zur Etappenansicht ergänzt
+- keine Routing-, Etappen-, Energie-, Lade- oder Kartenlogik verändert
+
+## Responsive UI-Neugestaltung - 2026-08-08
+
+- globale Hauptnavigation auf eine gemeinsame responsive Struktur mit mobiler/Tablet-Bottom-Navigation und horizontaler Desktop-Navigation ab 1180 px umgestellt
+- Tourauswahl in den Kopfbereich integriert und Route, Etappen, Unterkünfte sowie Reiseplan als eigenständige Hauptbereiche erreichbar gemacht
+- Routenübersicht, Start-Dashboard und lokaler Reiseplan mit realen Daten des aktuellen TourState neu aufgebaut
+- deterministische Etappenpalette zentralisiert und konsistent an Kartenlinien, Legenden, Etappenkarten und Mini-Höhenprofile angebunden
+- echte SVG-Mini-Höhenprofile aus den vorhandenen Höhenpunkten der jeweiligen Etappe ergänzt; fehlende Daten bleiben ausdrücklich leer
+- responsive Konfiguration für Allgemein, Tourplanung, Darstellung, Karten & Navigation, Benachrichtigungen sowie Daten & Sync ergänzt
+- versionierte, tourunabhängige UI-Präferenzen eingeführt, ohne bestehende TourState- oder Tour-JSON-Verträge zu verändern
+- keine Routing-, Etappen-, Unterkunfts-, Energie- oder Ladeberechnung dupliziert oder fachlich verändert
+
+## Paket 23 - 2026-08-04
+
+- separaten, reinen Mehrziel-Core `biketriphub-route-optimizer-v1` und Pareto-Vertrag `biketriphub-route-optimizer-pareto-v1` ergänzt
+- ausschließlich vorhandene GPX-, BRouter- und gespeicherte Routengeometrien als unveränderte Kandidaten angebunden
+- harte Grenzen für Reserve, Laden, Steigung, Oberfläche und Datenqualität vor der Empfehlung eingeführt
+- deterministische Gewichtsnormierung, robuste Ausreißerbehandlung, Pareto-Front, Gleichwertigkeit und stabile Tie-Breaker umgesetzt
+- fehlende Werte ohne Schätzung behandelt und gewichtete Zielabdeckung sowie eingeschränkte Empfehlungen transparent ausgewiesen
+- responsive Übersicht, Detailvergleich und gemeinsame Kartenumschaltung unter `/planer/optimierung` ergänzt
+- TourState rückwärtskompatibel um versionierte Vergleichseinstellungen und Kandidatenreferenzen erweitert
+- 145 automatisierte Tests einschließlich Paket-23-Regressionen erfolgreich ausgeführt
+- vorhandene Energie-, Lade-, Assistance-, Fahrstrategie-, Strecken- und Geometrie-Logik bewusst unverändert gelassen
+- kein Router, keine Live-Daten, KI, automatische Routenübernahme, kein Tag und kein Release eingeführt
+
 ## Paket 22 - 2026-08-03
 
 - PR #74 nach ausdrücklicher Freigabe mit Merge-Commit `0724b3e` nach `private` integriert
