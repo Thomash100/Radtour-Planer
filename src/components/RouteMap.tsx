@@ -33,6 +33,7 @@ import {
   MAP_MIN_ZOOM,
   OSM_SOURCE_MAX_ZOOM
 } from "@/lib/map-zoom";
+import { stageColorForDay } from "@/lib/stage-visuals";
 import { cn, formatHours, formatKm } from "@/lib/utils";
 
 export type MapPoi = {
@@ -78,8 +79,16 @@ export type MapWaypoint = {
   lon: number;
 };
 
+export type MapComparisonRoute = {
+  id: string;
+  name: string;
+  geometryGeoJson: LineStringGeoJson;
+  color: string;
+};
+
 type RouteMapProps = {
   route?: LineStringGeoJson | null;
+  comparisonRoutes?: MapComparisonRoute[];
   accommodationDetours?: LineStringGeoJson[];
   pois?: MapPoi[];
   stages?: Stage[];
@@ -87,7 +96,10 @@ type RouteMapProps = {
   waypoints?: MapWaypoint[];
   selectedPoiId?: string | null;
   selectedStageId?: string | null;
-  variant?: "embedded" | "workspace";
+  mapStyle?: "standard" | "cycle";
+  showStageColors?: boolean;
+  showStageNumbers?: boolean;
+  variant?: "embedded" | "overview" | "workspace";
   routePointSelection?: {
     enabled: boolean;
     label?: string;
@@ -102,7 +114,6 @@ type RouteMapTestWindow = Window & {
   __routePlannerMap?: maplibregl.Map;
 };
 
-const stageColors = ["#2563eb", "#dc2626", "#d97706", "#7c3aed", "#0891b2", "#16a34a"];
 const selectedStageCasingWidth = 16;
 const selectedStageLineWidth = 12;
 const stageHitAreaWidth = 36;
@@ -114,6 +125,7 @@ const emptyStages: Stage[] = [];
 const emptyStageBreakpoints: Array<{ name: string; distanceKm: number }> = [];
 const emptyWaypoints: MapWaypoint[] = [];
 const emptyAccommodationDetours: LineStringGeoJson[] = [];
+const emptyComparisonRoutes: MapComparisonRoute[] = [];
 const maxFitJumpKm = 120;
 const maxWarningWidthDeg = 25;
 const maxWarningHeightDeg = 20;
@@ -388,11 +400,27 @@ function routeFeature(line: LineStringGeoJson) {
   };
 }
 
+function comparisonRouteFeatureCollection(routes: MapComparisonRoute[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: routes.flatMap((route) => {
+      const line = validateRoute(route.geometryGeoJson).line;
+      return line
+        ? [{
+            type: "Feature" as const,
+            properties: { id: route.id, name: route.name, color: route.color },
+            geometry: line
+          }]
+        : [];
+    })
+  };
+}
+
 function stageKey(stage: Stage) {
   return stage.id ?? `day-${stage.dayNumber}`;
 }
 
-function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null) {
+function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null, showStageColors = true) {
   return {
     type: "FeatureCollection" as const,
     features: stages.flatMap((stage, index) => {
@@ -407,7 +435,7 @@ function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null
           properties: {
             stageId: stageKey(stage),
             stageIndex: index,
-            color: stageColors[index % stageColors.length],
+            color: showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e",
             dayNumber: stage.dayNumber,
             selected: stageKey(stage) === selectedStageId
           },
@@ -418,9 +446,9 @@ function stageFeatureCollection(stages: Stage[], selectedStageId?: string | null
   };
 }
 
-function stageColorForId(stages: Stage[], stageId?: string | null) {
+function stageColorForId(stages: Stage[], stageId?: string | null, showStageColors = true) {
   const stageIndex = stages.findIndex((stage) => stageKey(stage) === stageId);
-  return stageIndex >= 0 ? stageColors[stageIndex % stageColors.length] : stageColors[0];
+  return stageIndex >= 0 && showStageColors ? stageColorForDay(stages[stageIndex].dayNumber || stageIndex + 1) : "#0f766e";
 }
 
 function stageIdFromProperties(properties?: Record<string, unknown> | null) {
@@ -557,6 +585,8 @@ function enforceRouteLayerOrder(map: maplibregl.Map) {
   [
     "route-shadow",
     "route-line",
+    "comparison-routes-casing",
+    "comparison-routes",
     "stage-lines-casing",
     "stage-lines",
     "accommodation-detours",
@@ -581,6 +611,8 @@ function routeLayerDebug(map: maplibregl.Map) {
   const orderedLayerIds = [
     "route-shadow",
     "route-line",
+    "comparison-routes-casing",
+    "comparison-routes",
     "stage-lines-casing",
     "stage-lines",
     "accommodation-detours",
@@ -643,6 +675,13 @@ function ensureRouteLayers(map: maplibregl.Map) {
     });
   }
 
+  if (!map.getSource("comparison-routes")) {
+    map.addSource("comparison-routes", {
+      type: "geojson",
+      data: emptyFeatureCollection()
+    });
+  }
+
   if (!map.getSource("accommodation-detours")) {
     map.addSource("accommodation-detours", {
       type: "geojson",
@@ -677,6 +716,26 @@ function ensureRouteLayers(map: maplibregl.Map) {
         "line-opacity": 0.28,
         "line-width": 3
       }
+    });
+  }
+
+  if (!map.getLayer("comparison-routes-casing")) {
+    map.addLayer({
+      id: "comparison-routes-casing",
+      type: "line",
+      source: "comparison-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#ffffff", "line-opacity": 0.88, "line-width": 8 }
+    });
+  }
+
+  if (!map.getLayer("comparison-routes")) {
+    map.addLayer({
+      id: "comparison-routes",
+      type: "line",
+      source: "comparison-routes",
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": ["get", "color"], "line-opacity": 0.86, "line-width": 5 }
     });
   }
 
@@ -868,6 +927,7 @@ function waypointEndpointsMatchLine(waypoints: MapWaypoint[], line: LineStringGe
 
 export function RouteMap({
   route,
+  comparisonRoutes = emptyComparisonRoutes,
   accommodationDetours = emptyAccommodationDetours,
   pois = emptyPois,
   stages = emptyStages,
@@ -875,6 +935,9 @@ export function RouteMap({
   waypoints = emptyWaypoints,
   selectedPoiId,
   selectedStageId,
+  mapStyle = "standard",
+  showStageColors = true,
+  showStageNumbers = true,
   variant = "embedded",
   routePointSelection,
   onSelectPoi,
@@ -893,7 +956,7 @@ export function RouteMap({
   const stageClickSuppressRef = useRef(false);
   const fittedRouteSignatureRef = useRef<string | null>(null);
   const [mapError, setMapError] = useState("");
-  const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">("standard");
+  const [baseLayer, setBaseLayer] = useState<"standard" | "cycle">(mapStyle);
   const [autoFitRoute, setAutoFitRoute] = useState(true);
   const [isFullscreenMap, setIsFullscreenMap] = useState(false);
   const [layerDebug, setLayerDebug] = useState({
@@ -914,9 +977,11 @@ export function RouteMap({
   }, []);
   const routeValidation = useMemo(() => validateRoute(route), [route]);
   const selectedStage = useMemo(() => stages.find((stage) => stageKey(stage) === selectedStageId) ?? null, [selectedStageId, stages]);
-  const selectedStageColor = useMemo(() => stageColorForId(stages, selectedStageId), [selectedStageId, stages]);
-  const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages, selectedStageId).features.length, [selectedStageId, stages]);
+  const selectedStageColor = useMemo(() => stageColorForId(stages, selectedStageId, showStageColors), [selectedStageId, showStageColors, stages]);
+  const stageLayerFeatureCount = useMemo(() => stageFeatureCollection(stages, selectedStageId, showStageColors).features.length, [selectedStageId, showStageColors, stages]);
   const routePointSelectionEnabled = Boolean(routePointSelection?.enabled && routeValidation.line && onRoutePointSelect);
+
+  useEffect(() => setBaseLayer(mapStyle), [mapStyle]);
 
   const fitRouteToBounds = useCallback(
     (force = false) => {
@@ -1195,12 +1260,23 @@ export function RouteMap({
 
     const update = () => {
       const source = map.getSource("stages") as GeoJSONSource | undefined;
-      source?.setData(stageFeatureCollection(stages, selectedStageId));
+      source?.setData(stageFeatureCollection(stages, selectedStageId, showStageColors));
       updateLayerDebug(map);
     };
 
     return runWhenMapReady(map, update);
-  }, [selectedStageId, stages, updateLayerDebug]);
+  }, [selectedStageId, showStageColors, stages, updateLayerDebug]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const update = () => {
+      const source = map.getSource("comparison-routes") as GeoJSONSource | undefined;
+      source?.setData(comparisonRouteFeatureCollection(comparisonRoutes));
+      updateLayerDebug(map);
+    };
+    return runWhenMapReady(map, update);
+  }, [comparisonRoutes, updateLayerDebug]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1390,7 +1466,7 @@ export function RouteMap({
 
   return (
     <div className={cn("space-y-2", isFullscreenMap && "fixed inset-0 z-50 flex flex-col bg-white p-2")}>
-      <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-2 shadow-sm">
+      {(variant !== "overview" || isFullscreenMap) && <div className="flex flex-wrap gap-2 rounded-lg border bg-white p-2 shadow-sm">
         <div className="inline-flex rounded-md border bg-white p-1">
           {[
             { value: "standard", label: "Standardkarte" },
@@ -1449,7 +1525,7 @@ export function RouteMap({
           {isFullscreenMap ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           <span>{isFullscreenMap ? "Verkleinern" : "Vollbild"}</span>
         </button>
-      </div>
+      </div>}
       {(mapError || routeValidation.warning) && (
         <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950 shadow-sm">
           <div className="flex items-start gap-2">
@@ -1460,6 +1536,7 @@ export function RouteMap({
       )}
       <div
         data-stage-layer-features={stageLayerFeatureCount}
+        data-comparison-route-features={comparisonRoutes.length}
         data-route-layer-order={layerDebug.order}
         data-route-line-width={layerDebug.routeWidth}
         data-route-line-opacity={layerDebug.routeOpacity}
@@ -1471,8 +1548,9 @@ export function RouteMap({
         data-selected-stage-casing-width={layerDebug.selectedCasingWidth}
         data-selected-stage-line-width={layerDebug.selectedStageWidth}
         data-stage-hit-area-width={layerDebug.hitAreaWidth}
+        data-map-variant={variant}
         className={cn(
-          "relative overflow-hidden rounded-lg border bg-slate-100",
+          "route-map-canvas relative overflow-hidden rounded-lg border bg-slate-100",
           isFullscreenMap && "min-h-0 flex-1 rounded-md",
           routePointSelectionEnabled && "cursor-crosshair"
         )}
@@ -1485,6 +1563,8 @@ export function RouteMap({
                   maxHeight: "none",
                   overscrollBehavior: "contain"
                 }
+              : variant === "overview"
+                ? { overscrollBehavior: "contain" }
               : {
                   height: "clamp(300px, 60dvh, 560px)",
                   maxHeight: "calc(100dvh - 12rem)",
@@ -1510,7 +1590,7 @@ export function RouteMap({
           <div className="min-w-0">
             <div className="flex items-center gap-2 font-semibold text-slate-950">
               <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: selectedStageColor }} />
-              Etappe {selectedStage.dayNumber}
+              {showStageNumbers ? `Etappe ${selectedStage.dayNumber}` : "Etappe"}
             </div>
             <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{typeof selectedStage.distanceKm === "number" ? formatKm(selectedStage.distanceKm) : "Distanz offen"}</span>
@@ -1528,7 +1608,10 @@ export function RouteMap({
         </div>
       )}
       {stages.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto rounded-md border bg-white p-2 shadow-sm">
+        <div className={cn(
+          "flex gap-2 overflow-x-auto rounded-2xl border bg-white p-2 shadow-sm",
+          !selectedStage && "relative z-10 mx-3 -mt-16 bg-white/95 backdrop-blur"
+        )}>
           {stages.map((stage, index) => {
             const currentStageId = stageKey(stage);
             const isSelected = currentStageId === selectedStageId;
@@ -1549,10 +1632,10 @@ export function RouteMap({
                   <span
                     aria-hidden="true"
                     className="route-stage-swatch h-2.5 w-2.5 rounded-full"
-                    data-stage-color={stageColors[index % stageColors.length]}
-                    style={{ background: stageColors[index % stageColors.length] }}
+                    data-stage-color={showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e"}
+                    style={{ background: showStageColors ? stageColorForDay(stage.dayNumber || index + 1) : "#0f766e" }}
                   />
-                  Tag {stage.dayNumber}
+                  {showStageNumbers ? `Tag ${stage.dayNumber}` : "Etappe"}
                 </div>
                 <div className="text-xs text-muted-foreground">{stage.geometryGeoJson.coordinates.length} Punkte</div>
               </button>
