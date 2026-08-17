@@ -459,6 +459,22 @@ export async function calculateBRouterCoordinateRoute(
   });
 }
 
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await fn(items[index]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 async function fetchRoutedSections(
   start: Position,
   end: Position,
@@ -498,21 +514,22 @@ async function fetchRoutedSections(
 
   const routedCoordinates = routedCorridor.coordinates.map(([lon, lat]) => [lon, lat] satisfies Position);
   const anchors = createRoutingAnchorsFromRoutedPath(routedCoordinates, maxSegmentKm);
-  const sections: RoutedSegment[] = [];
 
-  for (let index = 1; index < anchors.length; index += 1) {
-    try {
-      sections.push(await fetchBRouterSegment(anchors[index - 1], anchors[index], profile, options));
-    } catch (error) {
-      throw new RoutingProviderError(
-        `Die Segmentierung entlang des zuvor berechneten routbaren Korridors ist in Teil ${index}/${anchors.length - 1} fehlgeschlagen. Es wurde keine Luftlinie ergänzt: ${
-          error instanceof Error ? error.message : "Routing fehlgeschlagen."
-        }`
-      );
+  return mapWithConcurrency(
+    Array.from({ length: anchors.length - 1 }, (_, offset) => offset + 1),
+    4,
+    async (index) => {
+      try {
+        return await fetchBRouterSegment(anchors[index - 1], anchors[index], profile, options);
+      } catch (error) {
+        throw new RoutingProviderError(
+          `Die Segmentierung entlang des zuvor berechneten routbaren Korridors ist in Teil ${index}/${anchors.length - 1} fehlgeschlagen. Es wurde keine Luftlinie ergänzt: ${
+            error instanceof Error ? error.message : "Routing fehlgeschlagen."
+          }`
+        );
+      }
     }
-  }
-
-  return sections;
+  );
 }
 
 function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints = 480) {
@@ -555,26 +572,29 @@ export async function calculateRoadRoute(input: RouteCalculationInput, options: 
       options.maxSegmentKm ?? (Number.isFinite(configuredMaxSegmentKm) && configuredMaxSegmentKm >= 10 ? configuredMaxSegmentKm : 80),
     fetcher: options.fetcher ?? fetch
   };
-  const segments: RoutedSegment[] = [];
-  const snappedControlPoints: RoutedCoordinate[] = [];
-
-  for (let index = 1; index < controlPoints.length; index += 1) {
-    let sectionSegments: RoutedSegment[];
-    try {
-      sectionSegments = await fetchRoutedSections(
-        controlPoints[index - 1],
-        controlPoints[index],
-        profile,
-        routingOptions,
-        routingOptions.maxSegmentKm
-      );
-      segments.push(...sectionSegments);
-    } catch (error) {
-      const section = `${orderedNames[index - 1]} - ${orderedNames[index]}`;
-      throw new RoutingProviderError(`${section}: ${error instanceof Error ? error.message : "Routing fehlgeschlagen."}`);
+  const legs = await mapWithConcurrency(
+    Array.from({ length: controlPoints.length - 1 }, (_, offset) => offset + 1),
+    2,
+    async (index) => {
+      try {
+        return await fetchRoutedSections(
+          controlPoints[index - 1],
+          controlPoints[index],
+          profile,
+          routingOptions,
+          routingOptions.maxSegmentKm
+        );
+      } catch (error) {
+        const section = `${orderedNames[index - 1]} - ${orderedNames[index]}`;
+        throw new RoutingProviderError(`${section}: ${error instanceof Error ? error.message : "Routing fehlgeschlagen."}`);
+      }
     }
+  );
 
-    if (index === 1) {
+  const segments: RoutedSegment[] = legs.flat();
+  const snappedControlPoints: RoutedCoordinate[] = [];
+  for (const [legIndex, sectionSegments] of legs.entries()) {
+    if (legIndex === 0) {
       snappedControlPoints.push(sectionSegments[0].coordinates[0]);
     }
     const lastSection = sectionSegments[sectionSegments.length - 1];
