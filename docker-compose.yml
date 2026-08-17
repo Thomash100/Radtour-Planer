@@ -36,6 +36,8 @@ services:
       BROUTER_BASE_URL: ${BROUTER_BASE_URL:-https://brouter.de/brouter}
       ROUTING_TIMEOUT_MS: ${ROUTING_TIMEOUT_MS:-60000}
       ROUTING_MAX_SEGMENT_KM: ${ROUTING_MAX_SEGMENT_KM:-80}
+      NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org/search}
+      GEOCODING_TIMEOUT_MS: ${GEOCODING_TIMEOUT_MS:-5000}
     ports:
       - "3000:3000"
     volumes:

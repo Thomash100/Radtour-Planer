@@ -9,12 +9,12 @@ import {
   type ElevationPoint,
   type Position
 } from "@/lib/geo";
+import { resolveGeocodedControlPoints } from "@/lib/geocoding";
 import {
   parseBRouterConditionSegments,
   type RouteConditionSourceSegment
 } from "@/lib/route-elevation-surface";
 import {
-  resolveRouteControlPoints,
   type CycleRouteCoverage,
   type CycleRouteNetwork,
   type RouteCalculation,
@@ -562,7 +562,7 @@ function createRoutedElevationProfile(coordinates: RoutedCoordinate[], maxPoints
 }
 
 export async function calculateRoadRoute(input: RouteCalculationInput, options: RoadRoutingOptions = {}): Promise<RouteCalculation> {
-  const { profile, orderedNames, controlPoints } = resolveRouteControlPoints(input);
+  const { profile, orderedNames, controlPoints } = await resolveGeocodedControlPoints(input);
   const configuredTimeoutMs = Number(process.env.ROUTING_TIMEOUT_MS ?? 60_000);
   const configuredMaxSegmentKm = Number(process.env.ROUTING_MAX_SEGMENT_KM ?? 80);
   const routingOptions = {
