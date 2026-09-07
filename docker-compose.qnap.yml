@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: imresamu/postgis:16-3.4-alpine3.21
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-radreise}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment .env}
+      POSTGRES_DB: ${POSTGRES_DB:-radreiseplaner}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-radreise} -d ${POSTGRES_DB:-radreiseplaner}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  app:
+    command: ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+    image: radtour-planer-qnap:76fbece
+    build:
+      context: ./source
+      dockerfile: Dockerfile.rpi
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://192.168.178.105:3000}"
+        NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-09-07}"
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment .env}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://192.168.178.105:3000}"
+      NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-09-07}"
+      ROUTING_PROVIDER: "${ROUTING_PROVIDER:-brouter}"
+      BROUTER_BASE_URL: "${BROUTER_BASE_URL:-https://brouter.de/brouter}"
+      ROUTING_TIMEOUT_MS: "${ROUTING_TIMEOUT_MS:-60000}"
+      ROUTING_MAX_SEGMENT_KM: "${ROUTING_MAX_SEGMENT_KM:-80}"
+      NOMINATIM_BASE_URL: "${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org/search}"
+      GEOCODING_TIMEOUT_MS: "${GEOCODING_TIMEOUT_MS:-5000}"
+      ACCOMMODATION_PROVIDER: "${ACCOMMODATION_PROVIDER:-production}"
+      ACCOMMODATION_API_URL: "${ACCOMMODATION_API_URL:-}"
+      ACCOMMODATION_TIMEOUT_MS: "${ACCOMMODATION_TIMEOUT_MS:-4000}"
+      ACCOMMODATION_CACHE_TTL_MS: "${ACCOMMODATION_CACHE_TTL_MS:-900000}"
+      NODE_ENV: "production"
+    ports:
+      - "192.168.178.105:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  worker:
+    image: radtour-planer-qnap:76fbece
+    build:
+      context: ./source
+      dockerfile: Dockerfile.rpi
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:-http://192.168.178.105:3000}"
+        NEXT_PUBLIC_BUILD_DATE: "${NEXT_PUBLIC_BUILD_DATE:-2026-09-07}"
+    restart: unless-stopped
+    command: ["npm", "run", "worker"]
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-radreise}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the deployment .env}@postgres:5432/${POSTGRES_DB:-radreiseplaner}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: "production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const Redis=require('ioredis'); const redis=new Redis(process.env.REDIS_URL); const timeout=setTimeout(()=>{redis.disconnect();process.exit(1)},5000); redis.ping().then(()=>{clearTimeout(timeout); redis.disconnect(); process.exit(0)}).catch(()=>{clearTimeout(timeout); redis.disconnect(); process.exit(1)})\""]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  postgres-data:
+  redis-data:
